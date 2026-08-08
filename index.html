@@ -37,10 +37,11 @@
         </div>
       </header>
 
-      <nav class="nav" aria-label="Pages">
-        <a href="#faders" data-page="faders" class="nav-link is-active">Faders</a>
-        <a href="#channels" data-page="channels" class="nav-link">Channels</a>
-        <a href="#patch" data-page="patch" class="nav-link">Patch</a>
+      <nav id="nav" class="nav" aria-label="Pages">
+        <a href="#faders" data-page="faders" class="nav-link is-active" draggable="true">Faders</a>
+        <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
+        <a href="#instruments" data-page="instruments" class="nav-link" draggable="true">Instruments</a>
+        <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
       </nav>
 
       <section id="page-faders" class="page is-active">
@@ -170,6 +171,64 @@
         </section>
       </section>
 
+      <section id="page-instruments" class="page" hidden>
+        <div class="page-intro">
+          <div>
+            <h2>Instruments</h2>
+          </div>
+          <div class="patch-actions">
+            <button id="addInstrumentGroupBtn" type="button" class="btn-quiet">+ Group</button>
+          </div>
+        </div>
+
+        <form id="instrumentForm" class="instrument-form" autocomplete="off">
+          <label class="instrument-field">
+            Name
+            <input
+              id="instrumentNameInput"
+              type="text"
+              maxlength="40"
+              placeholder="e.g. Wash 1"
+              required
+              spellcheck="false"
+            />
+          </label>
+          <label class="instrument-field instrument-field-ch">
+            Start
+            <span id="instrumentStartPicker" class="channel-picker-host"></span>
+          </label>
+          <label class="instrument-field instrument-field-ch">
+            Channels
+            <span id="instrumentCountPicker" class="channel-picker-host"></span>
+          </label>
+          <label class="instrument-field instrument-field-ch">
+            Qty
+            <span id="instrumentQtyPicker" class="channel-picker-host"></span>
+          </label>
+          <label class="instrument-field">
+            Group
+            <span id="instrumentFormGroupPicker" class="channel-picker-host"></span>
+          </label>
+          <fieldset class="instrument-fieldset">
+            <legend>Mount</legend>
+            <label><input type="radio" name="instrumentMount" value="fixed" checked /> Fixed</label>
+            <label><input type="radio" name="instrumentMount" value="movable" /> Movable</label>
+          </fieldset>
+          <fieldset class="instrument-fieldset">
+            <legend>Color</legend>
+            <label><input type="radio" name="instrumentColor" value="single" checked /> Single</label>
+            <label><input type="radio" name="instrumentColor" value="multi" /> Multi</label>
+          </fieldset>
+          <button id="addInstrumentBtn" type="submit">+ Instrument</button>
+        </form>
+
+        <div id="instrumentConflicts" class="instrument-conflicts" hidden></div>
+        <div id="instrumentScroll" class="instrument-scroll">
+          <div id="instrumentEmpty" class="instrument-empty" hidden>No instruments registered yet.</div>
+          <div id="instrumentList" class="instrument-list" role="list" aria-label="Registered instruments"></div>
+        </div>
+      </section>
+
       <section id="page-patch" class="page" hidden>
         <div class="page-intro">
           <div>
@@ -266,10 +325,28 @@
       </div>
     </div>
 
+    <div id="countMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel count-menu-panel">
+        <div class="popup-menu-bar">
+          <span class="popup-menu-label">Channels</span>
+        </div>
+        <div id="countMenuList" class="popup-menu-list" role="menu" aria-label="Channel count"></div>
+      </div>
+    </div>
+
+    <div id="instrumentGroupMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel instrument-group-menu-panel">
+        <div class="popup-menu-bar">
+          <span class="popup-menu-label">Group</span>
+        </div>
+        <div id="instrumentGroupMenuList" class="popup-menu-list" role="menu" aria-label="Instrument groups"></div>
+      </div>
+    </div>
+
     <div id="channelMenu" class="popup-menu popup-menu-flyout" hidden>
       <div class="popup-menu-panel" id="channelMenuRoot">
         <div class="popup-menu-bar">
-          <span class="popup-menu-label">Groups</span>
+          <span class="popup-menu-label">Ranges</span>
         </div>
         <input
           id="channelMenuFilter"

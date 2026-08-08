@@ -5,12 +5,32 @@ import {
   defaultPatch,
   normalizeFaderPatch,
 } from "./patch.js";
+import {
+  normalizeInstrumentGroups,
+  normalizeInstruments,
+} from "./instruments.js";
 
 export const SHOW_VERSION = 1;
 export const SHOW_APP = "UnnaturalLight";
 export const FADE_TIMES = [2, 4, 6, 8, 10];
+export const DEFAULT_NAV_ORDER = ["faders", "channels", "instruments", "patch"];
 const SESSION_KEY = "unnaturallight.session.v1";
 const LEGACY_SESSION_KEYS = ["naturallight.session.v1", "sunlight.session.v1"];
+
+/** @param {unknown} order @returns {string[]} */
+export function normalizeNavOrder(order) {
+  const allowed = new Set(DEFAULT_NAV_ORDER);
+  const source = Array.isArray(order) ? order : [];
+  const next = [];
+  for (const item of source) {
+    if (typeof item !== "string" || !allowed.has(item) || next.includes(item)) continue;
+    next.push(item);
+  }
+  for (const page of DEFAULT_NAV_ORDER) {
+    if (!next.includes(page)) next.push(page);
+  }
+  return next;
+}
 
 export function defaultShowName() {
   return "Untitled";
@@ -68,6 +88,7 @@ export function normalizeFaderNames(names) {
 /**
  * @param {{
  *   showName?: string,
+ *   navOrder?: string[],
  *   master: number,
  *   cross: number,
  *   fromSub?: number,
@@ -79,6 +100,8 @@ export function normalizeFaderNames(names) {
  *   rows: number[][],
  *   names?: string[],
  *   faderNames?: string[],
+ *   instrumentGroups?: import("./instruments.js").InstrumentGroup[],
+ *   instruments?: import("./instruments.js").Instrument[],
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
@@ -86,12 +109,14 @@ export function serializeShow(state) {
   const rows = state.rows.map((row) =>
     Array.from({ length: FADER_COUNT }, (_, i) => clampByte(row[i] ?? 0)),
   );
+  const instrumentGroups = normalizeInstrumentGroups(state.instrumentGroups);
   return {
     version: SHOW_VERSION,
     app: SHOW_APP,
     kind: "show",
     savedAt: new Date().toISOString(),
     showName: normalizeShowName(state.showName),
+    navOrder: normalizeNavOrder(state.navOrder),
     master: clamp(state.master, 0, 100),
     cross: clamp(state.cross, 0, 100),
     fromSub: clamp(state.fromSub ?? 100, 0, 100),
@@ -105,6 +130,8 @@ export function serializeShow(state) {
     rows,
     names: normalizeSceneNames(state.names, rows.length),
     faderNames: normalizeFaderNames(state.faderNames),
+    instrumentGroups,
+    instruments: normalizeInstruments(state.instruments, instrumentGroups),
     patch: state.patch.map(normalizeFaderPatch),
   };
 }
@@ -123,6 +150,7 @@ export function showToJson(state) {
  * @param {unknown} data
  * @returns {{
  *   showName: string,
+ *   navOrder: string[],
  *   master: number,
  *   cross: number,
  *   fromSub: number,
@@ -134,6 +162,8 @@ export function showToJson(state) {
  *   rows: number[][],
  *   names: string[],
  *   faderNames: string[],
+ *   instrumentGroups: import("./instruments.js").InstrumentGroup[],
+ *   instruments: import("./instruments.js").Instrument[],
  *   patch: import("./patch.js").FaderPatch[],
  * }}
  */
@@ -172,8 +202,11 @@ export function parseShow(data) {
   }
 
   const showName = normalizeShowName(obj.showName);
+  const navOrder = normalizeNavOrder(obj.navOrder);
   const names = normalizeSceneNames(obj.names, rows.length);
   const faderNames = normalizeFaderNames(obj.faderNames);
+  const instrumentGroups = normalizeInstrumentGroups(obj.instrumentGroups);
+  const instruments = normalizeInstruments(obj.instruments, instrumentGroups);
   const master = clamp(Number(obj.master ?? 100), 0, 100);
   const cross = clamp(Number(obj.cross ?? 0), 0, 100);
   const fromSub = clamp(Number(obj.fromSub ?? 100), 0, 100);
@@ -190,6 +223,7 @@ export function parseShow(data) {
 
   return {
     showName,
+    navOrder,
     master,
     cross,
     fromSub,
@@ -201,6 +235,8 @@ export function parseShow(data) {
     rows,
     names,
     faderNames,
+    instrumentGroups,
+    instruments,
     patch,
   };
 }
