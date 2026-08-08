@@ -6,11 +6,21 @@ import {
   normalizeFaderPatch,
 } from "./patch.js";
 
-export const CONFIG_VERSION = 1;
-export const CONFIG_APP = "UnnaturalLight";
+export const SHOW_VERSION = 1;
+export const SHOW_APP = "UnnaturalLight";
 export const FADE_TIMES = [2, 4, 6, 8, 10];
 const SESSION_KEY = "unnaturallight.session.v1";
 const LEGACY_SESSION_KEYS = ["naturallight.session.v1", "sunlight.session.v1"];
+
+export function defaultShowName() {
+  return "Untitled";
+}
+
+/** @param {unknown} name */
+export function normalizeShowName(name) {
+  const text = typeof name === "string" ? name.trim() : "";
+  return text || defaultShowName();
+}
 
 /** @param {number} index */
 export function defaultSceneName(index) {
@@ -57,8 +67,11 @@ export function normalizeFaderNames(names) {
 
 /**
  * @param {{
+ *   showName?: string,
  *   master: number,
  *   cross: number,
+ *   fromSub?: number,
+ *   toSub?: number,
  *   fadeTime?: number,
  *   fromRow: number,
  *   toRow: number,
@@ -69,16 +82,20 @@ export function normalizeFaderNames(names) {
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
-export function serializeConfig(state) {
+export function serializeShow(state) {
   const rows = state.rows.map((row) =>
     Array.from({ length: FADER_COUNT }, (_, i) => clampByte(row[i] ?? 0)),
   );
   return {
-    version: CONFIG_VERSION,
-    app: CONFIG_APP,
+    version: SHOW_VERSION,
+    app: SHOW_APP,
+    kind: "show",
     savedAt: new Date().toISOString(),
+    showName: normalizeShowName(state.showName),
     master: clamp(state.master, 0, 100),
     cross: clamp(state.cross, 0, 100),
+    fromSub: clamp(state.fromSub ?? 100, 0, 100),
+    toSub: clamp(state.toSub ?? 100, 0, 100),
     fadeTime: FADE_TIMES.includes(Number(state.fadeTime))
       ? Number(state.fadeTime)
       : 4,
@@ -93,20 +110,23 @@ export function serializeConfig(state) {
 }
 
 /** Stable snapshot for dirty checks (ignores savedAt / selectedRow). */
-export function configSnapshot(state) {
-  const { savedAt: _savedAt, selectedRow: _selectedRow, ...rest } = serializeConfig(state);
+export function showSnapshot(state) {
+  const { savedAt: _savedAt, selectedRow: _selectedRow, ...rest } = serializeShow(state);
   return JSON.stringify(rest);
 }
 
-export function configToJson(state) {
-  return `${JSON.stringify(serializeConfig(state), null, 2)}\n`;
+export function showToJson(state) {
+  return `${JSON.stringify(serializeShow(state), null, 2)}\n`;
 }
 
 /**
  * @param {unknown} data
  * @returns {{
+ *   showName: string,
  *   master: number,
  *   cross: number,
+ *   fromSub: number,
+ *   toSub: number,
  *   fadeTime: number,
  *   fromRow: number,
  *   toRow: number,
@@ -117,22 +137,25 @@ export function configToJson(state) {
  *   patch: import("./patch.js").FaderPatch[],
  * }}
  */
-export function parseConfig(data) {
+export function parseShow(data) {
   if (!data || typeof data !== "object") {
-    throw new Error("Invalid config file.");
+    throw new Error("Invalid show file.");
   }
 
   const obj = /** @type {Record<string, unknown>} */ (data);
   if (
     obj.app != null &&
-    obj.app !== CONFIG_APP &&
+    obj.app !== SHOW_APP &&
     obj.app !== "NaturalLight" &&
     obj.app !== "SunLight"
   ) {
-    throw new Error("This file is not an UnnaturalLight config.");
+    throw new Error("This file is not an UnnaturalLight show.");
   }
-  if (obj.version != null && Number(obj.version) !== CONFIG_VERSION) {
-    throw new Error(`Unsupported config version: ${obj.version}`);
+  if (obj.kind != null && obj.kind !== "show") {
+    throw new Error("This file is not an UnnaturalLight show.");
+  }
+  if (obj.version != null && Number(obj.version) !== SHOW_VERSION) {
+    throw new Error(`Unsupported show version: ${obj.version}`);
   }
 
   const patchSource = Array.isArray(obj.patch) ? obj.patch : [];
@@ -148,10 +171,13 @@ export function parseConfig(data) {
     rows.push(Array.from({ length: FADER_COUNT }, () => 0));
   }
 
+  const showName = normalizeShowName(obj.showName);
   const names = normalizeSceneNames(obj.names, rows.length);
   const faderNames = normalizeFaderNames(obj.faderNames);
   const master = clamp(Number(obj.master ?? 100), 0, 100);
   const cross = clamp(Number(obj.cross ?? 0), 0, 100);
+  const fromSub = clamp(Number(obj.fromSub ?? 100), 0, 100);
+  const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
   const fadeTime = FADE_TIMES.includes(Number(obj.fadeTime))
     ? Number(obj.fadeTime)
     : 4;
@@ -162,36 +188,56 @@ export function parseConfig(data) {
   }
   const selectedRow = clampInt(Number(obj.selectedRow ?? 0), 0, rows.length - 1);
 
-  return { master, cross, fadeTime, fromRow, toRow, selectedRow, rows, names, faderNames, patch };
+  return {
+    showName,
+    master,
+    cross,
+    fromSub,
+    toSub,
+    fadeTime,
+    fromRow,
+    toRow,
+    selectedRow,
+    rows,
+    names,
+    faderNames,
+    patch,
+  };
 }
 
-export function downloadConfig(state, filename) {
-  const blob = new Blob([configToJson(state)], { type: "application/json" });
+export function downloadShow(state, filename) {
+  const blob = new Blob([showToJson(state)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename || defaultFilename();
+  a.download = filename || defaultFilename(state.showName);
   document.body.append(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-export function defaultFilename() {
+/** @param {unknown} [showName] */
+export function defaultFilename(showName) {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  return `unnaturallight-${stamp}.json`;
+  const base = normalizeShowName(showName)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `${base || "show"}-${stamp}.json`;
 }
 
 /** Autosave full show state for refresh restore (no explicit Save needed). */
 export function saveSession(state) {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeConfig(state)));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeShow(state)));
   } catch (err) {
     console.warn("Could not autosave session", err);
   }
 }
 
-/** @returns {ReturnType<typeof parseConfig> | null} */
+/** @returns {ReturnType<typeof parseShow> | null} */
 export function loadSession() {
   try {
     let raw = localStorage.getItem(SESSION_KEY);
@@ -200,7 +246,7 @@ export function loadSession() {
       raw = localStorage.getItem(key);
     }
     if (!raw) return null;
-    return parseConfig(JSON.parse(raw));
+    return parseShow(JSON.parse(raw));
   } catch (err) {
     console.warn("Could not load session", err);
     return null;

@@ -10,9 +10,12 @@ const BAUD = 57600;
 const CHANNEL_COUNT = 512;
 
 export class EnttecDmxPro {
+  /** @type {SerialPort | null} */
   #port = null;
+  /** @type {WritableStreamDefaultWriter<Uint8Array> | null} */
   #writer = null;
   #universe = new Uint8Array(CHANNEL_COUNT);
+  /** @type {ReturnType<typeof setInterval> | null} */
   #timer = null;
   #fps = 40;
 
@@ -37,6 +40,11 @@ export class EnttecDmxPro {
       parity: "none",
       flowControl: "none",
     });
+
+    if (!port.writable) {
+      await port.close();
+      throw new Error("Serial port is not writable.");
+    }
 
     this.#port = port;
     this.#writer = port.writable.getWriter();

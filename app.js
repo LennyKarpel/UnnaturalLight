@@ -5,7 +5,6 @@ import {
   MIN_ROWS,
   MAX_ROWS,
   identityPatch,
-  loadPatch,
   savePatch,
   defaultPatch,
   formatChannelLabel,
@@ -14,30 +13,47 @@ import {
   scaledLevel,
 } from "./patch.js";
 import {
-  configSnapshot,
   defaultFaderName,
   defaultSceneName,
-  downloadConfig,
+  defaultShowName,
+  downloadShow,
   FADE_TIMES,
   loadSession,
   normalizeFaderNames,
   normalizeSceneNames,
-  parseConfig,
+  normalizeShowName,
+  parseShow,
   saveSession,
-} from "./config.js";
+  showSnapshot,
+} from "./show.js";
 
 const dmx = new EnttecDmxPro();
+
+/**
+ * @template {typeof Element} C
+ * @param {string} id
+ * @param {C} type
+ * @returns {InstanceType<C>}
+ */
+function requireEl(id, type) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing #${id}`);
+  if (!(el instanceof type)) throw new Error(`#${id} is not ${type.name}`);
+  return /** @type {InstanceType<C>} */ (el);
+}
 
 function zeros() {
   return new Array(FADER_COUNT).fill(0);
 }
 
-function initialState() {
-  const session = loadSession();
-  if (session) return session;
+/** @param {string} [showName] */
+function blankShowState(showName = defaultShowName()) {
   return {
+    showName: normalizeShowName(showName),
     master: 100,
     cross: 0,
+    fromSub: 100,
+    toSub: 100,
     fadeTime: 4,
     fromRow: 0,
     toRow: 1,
@@ -45,11 +61,19 @@ function initialState() {
     rows: [zeros(), zeros()],
     names: [defaultSceneName(0), defaultSceneName(1)],
     faderNames: normalizeFaderNames(null),
-    patch: loadPatch(),
+    patch: defaultPatch(),
   };
 }
 
+function initialState() {
+  const session = loadSession();
+  if (session) return session;
+  return blankShowState();
+}
+
 const boot = initialState();
+/** @type {string} */
+let showName = normalizeShowName(boot.showName);
 /** @type {number[][]} */
 let rows = boot.rows;
 /** @type {string[]} */
@@ -59,6 +83,8 @@ let faderNames = normalizeFaderNames(boot.faderNames);
 let patch = boot.patch;
 let master = boot.master;
 let cross = boot.cross; // 0 = full From, 100 = full To
+let fromSub = boot.fromSub ?? 100;
+let toSub = boot.toSub ?? 100;
 let fadeTime = FADE_TIMES.includes(boot.fadeTime) ? boot.fadeTime : 4;
 let fromRow = boot.fromRow;
 let toRow = boot.toRow;
@@ -69,71 +95,93 @@ let selectedFader = 0;
 let fadeRaf = null;
 /** @type {null | { start: number, target: number, durationMs: number, startedAt: number, pausedAt: number | null }} */
 let fadeState = null;
+/** @type {number | null} */
+let masterBlackoutSnapshot = null;
+/** @type {number | null} */
+let fromSubBlackoutSnapshot = null;
+/** @type {number | null} */
+let toSubBlackoutSnapshot = null;
 
-const rowsEl = document.getElementById("rows");
-const liveFadersEl = document.getElementById("liveFaders");
-const channelLevelsEl = document.getElementById("channelLevels");
-const selectedGroupFadersEl = document.getElementById("selectedGroupFaders");
+const showNameDisplay = requireEl("showNameDisplay", HTMLElement);
+const showMenuBtn = requireEl("showMenuBtn", HTMLButtonElement);
+const showMenu = requireEl("showMenu", HTMLElement);
+const showMenuList = requireEl("showMenuList", HTMLElement);
+const rowsEl = requireEl("rows", HTMLElement);
+const liveFadersEl = requireEl("liveFaders", HTMLElement);
+const channelLevelsEl = requireEl("channelLevels", HTMLElement);
+const selectedGroupFadersEl = requireEl("selectedGroupFaders", HTMLElement);
 /** @type {HTMLElement} */
-let currentSceneTitle = document.getElementById("currentSceneTitle");
-const scenesBtn = document.getElementById("scenesBtn");
-const sceneMenu = document.getElementById("sceneMenu");
-const sceneMenuList = document.getElementById("sceneMenuList");
-const sceneRowMenu = document.getElementById("sceneRowMenu");
-const sceneRowMenuList = document.getElementById("sceneRowMenuList");
-const faderNameMenu = document.getElementById("faderNameMenu");
-const faderNameMenuList = document.getElementById("faderNameMenuList");
-const patchTableEl = document.getElementById("patchTable");
-const patchConflictsEl = document.getElementById("patchConflicts");
-const connectBtn = document.getElementById("connectBtn");
-const blackoutBtn = document.getElementById("blackoutBtn");
-const statusEl = document.getElementById("status");
-const masterInput = document.getElementById("master");
-const masterValue = document.getElementById("masterValue");
-const crossfader = document.getElementById("crossfader");
-const crossValue = document.getElementById("crossValue");
-const crossFrom = document.getElementById("crossFrom");
-const crossTo = document.getElementById("crossTo");
-const crossFromLabel = document.getElementById("crossFromLabel");
-const crossToLabel = document.getElementById("crossToLabel");
-const fadeTimeBtns = document.getElementById("fadeTimeBtns");
-const fadePauseBtn = document.getElementById("fadePauseBtn");
-const addRowBtn = document.getElementById("addRowBtn");
-const removeRowBtn = document.getElementById("removeRowBtn");
-const identityBtn = document.getElementById("identityBtn");
-const clearPatchBtn = document.getElementById("clearPatchBtn");
-const saveBtn = document.getElementById("saveBtn");
-const loadBtn = document.getElementById("loadBtn");
-const loadFile = document.getElementById("loadFile");
-const dirtyDialog = document.getElementById("dirtyDialog");
-const confirmDialog = document.getElementById("confirmDialog");
-const confirmTitle = document.getElementById("confirmTitle");
-const confirmMessage = document.getElementById("confirmMessage");
-const confirmConfirmBtn = document.getElementById("confirmConfirmBtn");
-const sceneNameDialog = document.getElementById("sceneNameDialog");
-const sceneNameForm = document.getElementById("sceneNameForm");
-const sceneNameDialogTitle = document.getElementById("sceneNameDialogTitle");
-const sceneNameInput = document.getElementById("sceneNameInput");
-const sceneNameConfirmBtn = document.getElementById("sceneNameConfirmBtn");
-const channelMenu = document.getElementById("channelMenu");
-const channelMenuFilter = document.getElementById("channelMenuFilter");
-const channelMenuList = document.getElementById("channelMenuList");
-const channelMenuSub = document.getElementById("channelMenuSub");
-const channelMenuSubList = document.getElementById("channelMenuSubList");
-const channelMenuSubLabel = document.getElementById("channelMenuSubLabel");
+let currentSceneTitle = requireEl("currentSceneTitle", HTMLElement);
+const sceneMenu = requireEl("sceneMenu", HTMLElement);
+const sceneMenuList = requireEl("sceneMenuList", HTMLElement);
+const channelsSceneMenuBtn = requireEl("channelsSceneMenuBtn", HTMLButtonElement);
+const channelsSceneMenu = requireEl("channelsSceneMenu", HTMLElement);
+const channelsSceneMenuList = requireEl("channelsSceneMenuList", HTMLElement);
+const sceneRowMenu = requireEl("sceneRowMenu", HTMLElement);
+const sceneRowMenuList = requireEl("sceneRowMenuList", HTMLElement);
+const faderNameMenu = requireEl("faderNameMenu", HTMLElement);
+const faderNameMenuList = requireEl("faderNameMenuList", HTMLElement);
+const patchTableEl = requireEl("patchTable", HTMLElement);
+const patchConflictsEl = requireEl("patchConflicts", HTMLElement);
+const connectBtn = requireEl("connectBtn", HTMLButtonElement);
+const blackoutBtn = requireEl("blackoutBtn", HTMLButtonElement);
+const statusEl = requireEl("status", HTMLElement);
+const masterInput = requireEl("master", HTMLInputElement);
+const masterValue = requireEl("masterValue", HTMLOutputElement);
+const fromSubInput = requireEl("fromSub", HTMLInputElement);
+const fromSubValue = requireEl("fromSubValue", HTMLOutputElement);
+const fromSubLabel = requireEl("fromSubLabel", HTMLElement);
+const fromSubBlackoutBtn = requireEl("fromSubBlackoutBtn", HTMLButtonElement);
+const toSubInput = requireEl("toSub", HTMLInputElement);
+const toSubValue = requireEl("toSubValue", HTMLOutputElement);
+const toSubLabel = requireEl("toSubLabel", HTMLElement);
+const toSubBlackoutBtn = requireEl("toSubBlackoutBtn", HTMLButtonElement);
+const crossfader = requireEl("crossfader", HTMLInputElement);
+const crossValue = requireEl("crossValue", HTMLOutputElement);
+const crossFrom = requireEl("crossFrom", HTMLSelectElement);
+const crossTo = requireEl("crossTo", HTMLSelectElement);
+const crossFromLabel = requireEl("crossFromLabel", HTMLElement);
+const crossToLabel = requireEl("crossToLabel", HTMLElement);
+const fadeTimeBtns = requireEl("fadeTimeBtns", HTMLElement);
+const fadePauseBtn = requireEl("fadePauseBtn", HTMLButtonElement);
+const addRowBtn = requireEl("addRowBtn", HTMLButtonElement);
+const removeRowBtn = requireEl("removeRowBtn", HTMLButtonElement);
+const identityBtn = requireEl("identityBtn", HTMLButtonElement);
+const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
+const newShowBtn = requireEl("newShowBtn", HTMLButtonElement);
+const saveBtn = requireEl("saveBtn", HTMLButtonElement);
+const loadBtn = requireEl("loadBtn", HTMLButtonElement);
+const loadFile = requireEl("loadFile", HTMLInputElement);
+const dirtyDialog = requireEl("dirtyDialog", HTMLDialogElement);
+const confirmDialog = requireEl("confirmDialog", HTMLDialogElement);
+const confirmTitle = requireEl("confirmTitle", HTMLElement);
+const confirmMessage = requireEl("confirmMessage", HTMLElement);
+const confirmConfirmBtn = requireEl("confirmConfirmBtn", HTMLButtonElement);
+const sceneNameDialog = requireEl("sceneNameDialog", HTMLDialogElement);
+const sceneNameForm = requireEl("sceneNameForm", HTMLFormElement);
+const sceneNameDialogTitle = requireEl("sceneNameDialogTitle", HTMLElement);
+const sceneNameInput = requireEl("sceneNameInput", HTMLInputElement);
+const sceneNameConfirmBtn = requireEl("sceneNameConfirmBtn", HTMLButtonElement);
+const channelMenu = requireEl("channelMenu", HTMLElement);
+const channelMenuFilter = requireEl("channelMenuFilter", HTMLInputElement);
+const channelMenuList = requireEl("channelMenuList", HTMLElement);
+const channelMenuSub = requireEl("channelMenuSub", HTMLElement);
+const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
+const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
 const CHANNEL_GROUP_SIZE = 32;
 const CHANNEL_GROUP_COUNT = Math.ceil(512 / CHANNEL_GROUP_SIZE);
-const pageFaders = document.getElementById("page-faders");
-const pageChannels = document.getElementById("page-channels");
-const pagePatch = document.getElementById("page-patch");
+const pageFaders = requireEl("page-faders", HTMLElement);
+const pageChannels = requireEl("page-channels", HTMLElement);
+const pagePatch = requireEl("page-patch", HTMLElement);
 const navLinks = document.querySelectorAll(".nav-link");
+/** @type {Record<string, HTMLElement>} */
 const pages = {
   faders: pageFaders,
   channels: pageChannels,
   patch: pagePatch,
 };
 
-/** Snapshot of last explicitly saved/loaded config (or boot state). */
+/** Snapshot of last explicitly saved/loaded show (or boot state). */
 let cleanSnapshot = "";
 
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }[]} */
@@ -204,6 +252,11 @@ function makeFaderNameLabel(index) {
 function abortInlineEdits() {
   endInlineFaderRename?.();
   endInlineRename?.();
+  closeShowMenu?.();
+  closeChannelsSceneMenu?.();
+  closeScenePicker?.();
+  closeSceneRowMenu?.();
+  closeFaderNameMenu?.();
 }
 
 async function renameFader(index, { preferInline = false } = {}) {
@@ -334,6 +387,8 @@ function beginInlineFaderRename(index, target) {
 
 /** @type {null | (() => void)} */
 let closeFaderNameMenu = null;
+/** @type {null | (() => void)} */
+let closeShowMenu = null;
 
 /**
  * @param {HTMLElement} anchor
@@ -344,6 +399,9 @@ let closeFaderNameMenu = null;
 function openFaderNameMenu(anchor, index, clientX, clientY) {
   closeFaderNameMenu?.();
   closeSceneRowMenu?.();
+  closeShowMenu?.();
+  closeChannelsSceneMenu?.();
+  closeScenePicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -453,10 +511,22 @@ function isUnpatched(targets) {
   return !targets || targets.length === 0;
 }
 
-/** Live fader level after crossfade + master (0–255), before per-channel max */
+/** @param {HTMLElement} wrap @param {HTMLInputElement} slider @param {import("./patch.js").FaderPatch} targets */
+function applyFaderPatchState(wrap, slider, targets) {
+  const unpatched = isUnpatched(targets);
+  wrap.classList.toggle("is-unpatched-fader", unpatched);
+  slider.disabled = unpatched;
+  if (unpatched) {
+    slider.title = "No channels patched";
+  } else {
+    slider.removeAttribute("title");
+  }
+}
+
+/** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
 function liveLevel(faderIndex) {
-  const a = rows[fromRow][faderIndex];
-  const b = rows[toRow][faderIndex];
+  const a = (rows[fromRow][faderIndex] * fromSub) / 100;
+  const b = (rows[toRow][faderIndex] * toSub) / 100;
   const t = cross / 100;
   const mixed = a * (1 - t) + b * t;
   return Math.round((mixed * master) / 100);
@@ -573,7 +643,7 @@ function ensureChannelRow() {
 }
 
 function persistSession() {
-  saveSession(currentConfigState());
+  saveSession(currentShowState());
   savePatch(patch);
 }
 
@@ -653,6 +723,7 @@ function refreshRowSelects() {
   toRow = Number(crossTo.value);
   crossFromLabel.textContent = sceneName(fromRow);
   crossToLabel.textContent = sceneName(toRow);
+  syncSubmasterLabels();
   removeRowBtn.disabled = rows.length <= MIN_ROWS;
   removeRowBtn.setAttribute("aria-label", `Remove scene ${sceneName(selectedRow)}`);
   removeRowBtn.title = `Remove scene ${sceneName(selectedRow)}`;
@@ -661,7 +732,14 @@ function refreshRowSelects() {
 }
 
 function updateScenesButton() {
-  if (currentSceneTitle) currentSceneTitle.textContent = sceneName(selectedRow);
+  if (!currentSceneTitle) return;
+  currentSceneTitle.textContent = sceneName(selectedRow);
+  currentSceneTitle.title = "Click to rename";
+  channelsSceneMenuBtn.setAttribute(
+    "aria-label",
+    `Options for scene ${sceneName(selectedRow)}`,
+  );
+  channelsSceneMenuBtn.title = `Options for ${sceneName(selectedRow)}`;
 }
 
 function setSelectedRow(index) {
@@ -681,11 +759,22 @@ function setSelectedRow(index) {
   persistSession();
 }
 
+/** @type {null | (() => void)} */
+let closeScenePicker = null;
+/** @type {null | (() => void)} */
+let closeChannelsSceneMenu = null;
+
 /**
- * @param {{ anchor: HTMLElement }} opts
+ * @param {{ anchor: HTMLElement, clientX?: number, clientY?: number }} opts
  * @returns {Promise<number | null>}
  */
-function pickScene({ anchor }) {
+function pickScene({ anchor, clientX, clientY }) {
+  closeScenePicker?.();
+  closeChannelsSceneMenu?.();
+  closeShowMenu?.();
+  closeSceneRowMenu?.();
+  closeFaderNameMenu?.();
+
   return new Promise((resolve) => {
     let settled = false;
 
@@ -728,9 +817,13 @@ function pickScene({ anchor }) {
 
     const cleanup = () => {
       sceneMenu.hidden = true;
+      if (closeScenePicker === finishNull) closeScenePicker = null;
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onDocKeydown, true);
     };
+
+    const finishNull = () => finish(null);
+    closeScenePicker = finishNull;
 
     renderList();
     sceneMenu.hidden = false;
@@ -738,13 +831,13 @@ function pickScene({ anchor }) {
     const anchorRect = anchor.getBoundingClientRect();
     const menuWidth = 168;
     const menuHeight = 280;
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
+    let left = clientX ?? anchorRect.left;
+    let top = clientY ?? anchorRect.bottom + 6;
     if (left + menuWidth > window.innerWidth - 8) {
       left = Math.max(8, window.innerWidth - menuWidth - 8);
     }
     if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
+      top = Math.max(8, (clientY ?? anchorRect.top) - menuHeight - 6);
     }
     sceneMenu.style.left = `${left}px`;
     sceneMenu.style.top = `${top}px`;
@@ -791,6 +884,7 @@ function renderSelectedGroup() {
     slider.max = "255";
     slider.value = String(row[i]);
     slider.setAttribute("aria-label", `${sceneName(selectedRow)} ${faderName(i)}`);
+    applyFaderPatchState(wrap, slider, patch[i]);
     slider.addEventListener("input", () => {
       setSelectedFader(i);
       rows[selectedRow][i] = Number(slider.value);
@@ -822,6 +916,10 @@ function refreshSelectedGroup() {
     selectedGroupUi.patchLabelEls[i].textContent = formatChannelLabel(patch[i]);
     selectedGroupUi.patchLabelEls[i].title = formatChannelTooltip(patch[i]);
     selectedGroupUi.patchLabelEls[i].classList.toggle("is-unpatched", isUnpatched(patch[i]));
+    const wrap = selectedGroupUi.sliders[i].closest(".fader");
+    if (wrap instanceof HTMLElement) {
+      applyFaderPatchState(wrap, selectedGroupUi.sliders[i], patch[i]);
+    }
   }
 }
 
@@ -933,6 +1031,7 @@ function renderRows() {
       slider.max = "255";
       slider.value = String(rows[r][i]);
       slider.setAttribute("aria-label", `${sceneName(r)} ${faderName(i)}`);
+      applyFaderPatchState(wrap, slider, patch[i]);
       slider.addEventListener("input", () => {
         setSelectedFader(i);
         rows[r][i] = Number(slider.value);
@@ -960,6 +1059,10 @@ function refreshFaderPatchLabels() {
       el.textContent = formatChannelLabel(patch[i]);
       el.title = formatChannelTooltip(patch[i]);
       el.classList.toggle("is-unpatched", isUnpatched(patch[i]));
+      const wrap = ui.sliders[i].closest(".fader");
+      if (wrap instanceof HTMLElement) {
+        applyFaderPatchState(wrap, ui.sliders[i], patch[i]);
+      }
     }
   }
   refreshLiveRow();
@@ -1356,9 +1459,99 @@ function syncCrossUi() {
   crossValue.textContent = `${pct}%`;
 }
 
+function syncBlackoutButtons() {
+  const masterLatched = masterBlackoutSnapshot != null;
+  blackoutBtn.classList.toggle("is-blackout", masterLatched);
+  blackoutBtn.title = masterLatched ? "Restore" : "Blackout";
+  blackoutBtn.setAttribute("aria-label", masterLatched ? "Restore" : "Blackout");
+
+  const fromLatched = fromSubBlackoutSnapshot != null;
+  fromSubBlackoutBtn.classList.toggle("is-blackout", fromLatched);
+  fromSubBlackoutBtn.title = fromLatched
+    ? `Restore ${sceneName(fromRow)}`
+    : `Blackout ${sceneName(fromRow)}`;
+  fromSubBlackoutBtn.setAttribute("aria-label", fromSubBlackoutBtn.title);
+
+  const toLatched = toSubBlackoutSnapshot != null;
+  toSubBlackoutBtn.classList.toggle("is-blackout", toLatched);
+  toSubBlackoutBtn.title = toLatched
+    ? `Restore ${sceneName(toRow)}`
+    : `Blackout ${sceneName(toRow)}`;
+  toSubBlackoutBtn.setAttribute("aria-label", toSubBlackoutBtn.title);
+}
+
+function clearBlackoutSnapshots() {
+  masterBlackoutSnapshot = null;
+  fromSubBlackoutSnapshot = null;
+  toSubBlackoutSnapshot = null;
+  syncBlackoutButtons();
+}
+
+function syncSubmasterLabels() {
+  fromSubLabel.textContent = sceneName(fromRow);
+  toSubLabel.textContent = sceneName(toRow);
+  fromSubInput.setAttribute("aria-label", `${sceneName(fromRow)} submaster`);
+  toSubInput.setAttribute("aria-label", `${sceneName(toRow)} submaster`);
+  syncBlackoutButtons();
+}
+
+function fromCrossWeight() {
+  return 1 - cross / 100;
+}
+
+function toCrossWeight() {
+  return cross / 100;
+}
+
+function masterWeight() {
+  return master / 100;
+}
+
+/** Live contribution = setting × crossfade × master (drives fader thumbs). */
+function syncSubmasterLive() {
+  const m = masterWeight();
+  const fromPct = Math.round(fromSub * fromCrossWeight() * m);
+  const toPct = Math.round(toSub * toCrossWeight() * m);
+
+  fromSubInput.value = String(fromPct);
+  toSubInput.value = String(toPct);
+  fromSubValue.textContent = `${fromPct}%`;
+  toSubValue.textContent = `${toPct}%`;
+  fromSubValue.title =
+    fromPct === Math.round(fromSub) ? "" : `Set ${Math.round(fromSub)}%`;
+  toSubValue.title = toPct === Math.round(toSub) ? "" : `Set ${Math.round(toSub)}%`;
+}
+
+function syncSubmasterUi() {
+  syncSubmasterLive();
+  syncSubmasterLabels();
+}
+
+function setSubmasterFromLive(which, live) {
+  const level = Math.max(0, Math.min(100, Number(live)));
+  const weight =
+    (which === "from" ? fromCrossWeight() : toCrossWeight()) * masterWeight();
+  const setting = weight > 0.001 ? Math.min(100, level / weight) : level;
+  if (which === "from") {
+    fromSub = setting;
+    if (fromSubBlackoutSnapshot != null) {
+      fromSubBlackoutSnapshot = null;
+      syncBlackoutButtons();
+    }
+  } else {
+    toSub = setting;
+    if (toSubBlackoutSnapshot != null) {
+      toSubBlackoutSnapshot = null;
+      syncBlackoutButtons();
+    }
+  }
+  syncSubmasterLive();
+}
+
 function setCross(value, { fromUser = false, persist = true } = {}) {
   cross = Math.max(0, Math.min(100, value));
   syncCrossUi();
+  syncSubmasterLive();
   if (fromUser) stopTimedFade();
   pushToDmx({ persist });
 }
@@ -1453,16 +1646,132 @@ function toggleFadePause() {
   fadeRaf = requestAnimationFrame(tickTimedFade);
 }
 
-function currentConfigState() {
-  return { master, cross, fadeTime, fromRow, toRow, selectedRow, rows, names, faderNames, patch };
+function syncShowNameUi() {
+  const label = normalizeShowName(showName);
+  showName = label;
+  showNameDisplay.hidden = false;
+  showNameDisplay.textContent = label;
+  showMenuBtn.hidden = false;
+  showMenuBtn.setAttribute("aria-label", `Options for show ${label}`);
+  document.title = `${label} · UnnaturalLight`;
+}
+
+async function renameShow() {
+  const name = await promptName({
+    title: "Rename show",
+    confirmLabel: "Rename",
+    initial: showName,
+  });
+  if (!name || name === showName) return;
+  showName = normalizeShowName(name);
+  syncShowNameUi();
+  persistSession();
+}
+
+/**
+ * @param {HTMLElement} anchor
+ * @returns {Promise<"rename" | null>}
+ */
+function openShowMenu(anchor) {
+  closeShowMenu?.();
+  closeChannelsSceneMenu?.();
+  closeScenePicker?.();
+  closeSceneRowMenu?.();
+  closeFaderNameMenu?.();
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const onDocPointer = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (showMenu.contains(target) || anchor.contains(target)) return;
+      finish(null);
+    };
+
+    const onDocKeydown = (event) => {
+      if (event.key === "Escape") finish(null);
+    };
+
+    const cleanup = () => {
+      showMenu.hidden = true;
+      anchor.setAttribute("aria-expanded", "false");
+      if (closeShowMenu === finishNull) closeShowMenu = null;
+      document.removeEventListener("pointerdown", onDocPointer, true);
+      document.removeEventListener("keydown", onDocKeydown, true);
+    };
+
+    const finishNull = () => finish(null);
+    closeShowMenu = finishNull;
+
+    showMenuList.replaceChildren();
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "popup-menu-item";
+    item.setAttribute("role", "menuitem");
+    item.textContent = "Rename";
+    item.addEventListener("click", (event) => {
+      event.stopPropagation();
+      finish("rename");
+    });
+    showMenuList.append(item);
+
+    showMenu.hidden = false;
+    anchor.setAttribute("aria-expanded", "true");
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const menuWidth = 140;
+    const menuHeight = 48;
+    let left = anchorRect.left;
+    let top = anchorRect.bottom + 6;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - menuWidth - 8);
+    }
+    if (top + menuHeight > window.innerHeight - 8) {
+      top = Math.max(8, anchorRect.top - menuHeight - 6);
+    }
+    showMenu.style.left = `${left}px`;
+    showMenu.style.top = `${top}px`;
+
+    document.addEventListener("pointerdown", onDocPointer, true);
+    document.addEventListener("keydown", onDocKeydown, true);
+  }).then(async (action) => {
+    if (action === "rename") await renameShow();
+    return action;
+  });
+}
+
+function currentShowState() {
+  return {
+    showName,
+    master,
+    cross,
+    fromSub,
+    toSub,
+    fadeTime,
+    fromRow,
+    toRow,
+    selectedRow,
+    rows,
+    names,
+    faderNames,
+    patch,
+  };
 }
 
 function markClean() {
-  cleanSnapshot = configSnapshot(currentConfigState());
+  cleanSnapshot = showSnapshot(currentShowState());
 }
 
 function isDirty() {
-  return configSnapshot(currentConfigState()) !== cleanSnapshot;
+  return showSnapshot(currentShowState()) !== cleanSnapshot;
 }
 
 function confirmDiscardLoad() {
@@ -1683,6 +1992,89 @@ function wireCurrentSceneTitle(el) {
   });
 }
 
+/**
+ * @param {HTMLElement} anchor
+ * @returns {Promise<"select" | null>}
+ */
+function openChannelsSceneMenu(anchor) {
+  closeChannelsSceneMenu?.();
+  closeScenePicker?.();
+  closeShowMenu?.();
+  closeSceneRowMenu?.();
+  closeFaderNameMenu?.();
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const onDocPointer = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (channelsSceneMenu.contains(target) || anchor.contains(target)) return;
+      finish(null);
+    };
+
+    const onDocKeydown = (event) => {
+      if (event.key === "Escape") finish(null);
+    };
+
+    const cleanup = () => {
+      channelsSceneMenu.hidden = true;
+      anchor.setAttribute("aria-expanded", "false");
+      if (closeChannelsSceneMenu === finishNull) closeChannelsSceneMenu = null;
+      document.removeEventListener("pointerdown", onDocPointer, true);
+      document.removeEventListener("keydown", onDocKeydown, true);
+    };
+
+    const finishNull = () => finish(null);
+    closeChannelsSceneMenu = finishNull;
+
+    channelsSceneMenuList.replaceChildren();
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "popup-menu-item";
+    item.setAttribute("role", "menuitem");
+    item.textContent = "Select scene";
+    item.addEventListener("click", (event) => {
+      event.stopPropagation();
+      finish("select");
+    });
+    channelsSceneMenuList.append(item);
+
+    channelsSceneMenu.hidden = false;
+    anchor.setAttribute("aria-expanded", "true");
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const menuWidth = 150;
+    const menuHeight = 48;
+    let left = anchorRect.right - menuWidth;
+    let top = anchorRect.bottom + 6;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - menuWidth - 8);
+    }
+    if (top + menuHeight > window.innerHeight - 8) {
+      top = Math.max(8, anchorRect.top - menuHeight - 6);
+    }
+    channelsSceneMenu.style.left = `${left}px`;
+    channelsSceneMenu.style.top = `${top}px`;
+
+    document.addEventListener("pointerdown", onDocPointer, true);
+    document.addEventListener("keydown", onDocKeydown, true);
+  }).then(async (action) => {
+    if (action !== "select") return action;
+    const index = await pickScene({ anchor });
+    if (index != null) setSelectedRow(index);
+    return action;
+  });
+}
+
 async function removeSceneAt(index) {
   if (rows.length <= MIN_ROWS) return false;
   if (index < 0 || index >= rows.length) return false;
@@ -1711,6 +2103,9 @@ let closeSceneRowMenu = null;
 function openSceneRowMenu(anchor, index) {
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
+  closeShowMenu?.();
+  closeChannelsSceneMenu?.();
+  closeScenePicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -1795,7 +2190,6 @@ function openSceneRowMenu(anchor, index) {
 function setUiConnected(connected) {
   connectBtn.textContent = connected ? "Disconnect" : "Connect DMX Pro";
   connectBtn.classList.toggle("connected", connected);
-  blackoutBtn.disabled = !connected;
 }
 
 function showPage(name) {
@@ -1847,18 +2241,65 @@ connectBtn.addEventListener("click", async () => {
   }
 });
 
+function syncMasterUi() {
+  masterInput.value = String(Math.round(master));
+  masterValue.textContent = `${Math.round(master)}%`;
+  syncSubmasterLive();
+  syncBlackoutButtons();
+}
+
 blackoutBtn.addEventListener("click", () => {
-  for (const row of rows) row.fill(0);
-  syncSlidersFromState();
-  dmx.blackout();
-  refreshLiveRow();
-  refreshChannelRow();
-  persistSession();
+  if (masterBlackoutSnapshot != null) {
+    master = masterBlackoutSnapshot;
+    masterBlackoutSnapshot = null;
+  } else {
+    masterBlackoutSnapshot = master;
+    master = 0;
+  }
+  syncMasterUi();
+  pushToDmx();
 });
 
 masterInput.addEventListener("input", () => {
   master = Number(masterInput.value);
-  masterValue.textContent = `${master}%`;
+  if (masterBlackoutSnapshot != null) {
+    masterBlackoutSnapshot = null;
+  }
+  syncMasterUi();
+  pushToDmx();
+});
+
+fromSubInput.addEventListener("input", () => {
+  setSubmasterFromLive("from", fromSubInput.value);
+  pushToDmx();
+});
+
+toSubInput.addEventListener("input", () => {
+  setSubmasterFromLive("to", toSubInput.value);
+  pushToDmx();
+});
+
+fromSubBlackoutBtn.addEventListener("click", () => {
+  if (fromSubBlackoutSnapshot != null) {
+    fromSub = fromSubBlackoutSnapshot;
+    fromSubBlackoutSnapshot = null;
+  } else {
+    fromSubBlackoutSnapshot = fromSub;
+    fromSub = 0;
+  }
+  syncSubmasterUi();
+  pushToDmx();
+});
+
+toSubBlackoutBtn.addEventListener("click", () => {
+  if (toSubBlackoutSnapshot != null) {
+    toSub = toSubBlackoutSnapshot;
+    toSubBlackoutSnapshot = null;
+  } else {
+    toSubBlackoutSnapshot = toSub;
+    toSub = 0;
+  }
+  syncSubmasterUi();
   pushToDmx();
 });
 
@@ -1885,6 +2326,7 @@ crossFrom.addEventListener("change", () => {
   }
   crossFromLabel.textContent = sceneName(fromRow);
   crossToLabel.textContent = sceneName(toRow);
+  syncSubmasterLabels();
   pushToDmx();
 });
 
@@ -1897,17 +2339,20 @@ crossTo.addEventListener("change", () => {
   }
   crossFromLabel.textContent = sceneName(fromRow);
   crossToLabel.textContent = sceneName(toRow);
+  syncSubmasterLabels();
   pushToDmx();
 });
 
-scenesBtn.addEventListener("click", async (event) => {
-  event.stopPropagation();
-  const index = await pickScene({ anchor: scenesBtn });
-  if (index == null) return;
-  setSelectedRow(index);
-});
-
 wireCurrentSceneTitle(currentSceneTitle);
+
+channelsSceneMenuBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (channelsSceneMenuBtn.getAttribute("aria-expanded") === "true") {
+    closeChannelsSceneMenu?.();
+    return;
+  }
+  void openChannelsSceneMenu(channelsSceneMenuBtn);
+});
 
 addRowBtn.addEventListener("click", async () => {
   if (rows.length >= MAX_ROWS) return;
@@ -1948,10 +2393,14 @@ clearPatchBtn.addEventListener("click", async () => {
   renderPatchTable();
 });
 
-function applyConfig(state) {
+function applyShow(state) {
   stopTimedFade();
+  clearBlackoutSnapshots();
+  showName = normalizeShowName(state.showName);
   master = state.master;
   cross = state.cross;
+  fromSub = state.fromSub ?? 100;
+  toSub = state.toSub ?? 100;
   fadeTime = FADE_TIMES.includes(state.fadeTime) ? state.fadeTime : 4;
   fromRow = state.fromRow;
   toRow = state.toRow;
@@ -1961,8 +2410,9 @@ function applyConfig(state) {
   faderNames = normalizeFaderNames(state.faderNames);
   patch = state.patch;
 
-  masterInput.value = String(master);
-  masterValue.textContent = `${master}%`;
+  syncShowNameUi();
+  syncMasterUi();
+  syncSubmasterUi();
   syncCrossUi();
   updateFadeTimeButtons();
   updateFadePauseButton();
@@ -1976,17 +2426,49 @@ function applyConfig(state) {
 }
 
 function syncTransportFromState() {
-  masterInput.value = String(master);
-  masterValue.textContent = `${master}%`;
+  syncMasterUi();
+  syncSubmasterUi();
   syncCrossUi();
   updateFadeTimeButtons();
   updateFadePauseButton();
 }
 
-saveBtn.addEventListener("click", () => {
-  downloadConfig(currentConfigState());
+showMenuBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (showMenuBtn.getAttribute("aria-expanded") === "true") {
+    closeShowMenu?.();
+    return;
+  }
+  void openShowMenu(showMenuBtn);
+});
+
+newShowBtn.addEventListener("click", async () => {
+  if (isDirty()) {
+    const ok = await confirmAction({
+      title: "New show?",
+      message: "Discard unsaved changes and start a blank show?",
+      confirmLabel: "Continue",
+    });
+    if (!ok) return;
+  }
+
+  const name = await promptName({
+    title: "New show",
+    confirmLabel: "Create",
+    initial: "",
+  });
+  if (!name) return;
+
+  applyShow(blankShowState(name));
   markClean();
-  setStatus("Config saved", dmx.connected ? "connected" : "idle");
+  persistSession();
+  setStatus(`New show · ${showName}`, dmx.connected ? "connected" : "idle");
+});
+
+saveBtn.addEventListener("click", () => {
+  downloadShow(currentShowState());
+  markClean();
+  setStatus("Show saved", dmx.connected ? "connected" : "idle");
 });
 
 loadBtn.addEventListener("click", () => {
@@ -2006,11 +2488,11 @@ loadFile.addEventListener("change", async () => {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    applyConfig(parseConfig(data));
+    applyShow(parseShow(data));
     markClean();
-    setStatus(`Loaded ${file.name}`, dmx.connected ? "connected" : "idle");
+    setStatus(`Show loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load config";
+    const message = err instanceof Error ? err.message : "Failed to load show";
     setStatus(message, "error");
     console.error(err);
   }
@@ -2018,6 +2500,7 @@ loadFile.addEventListener("change", async () => {
 
 window.addEventListener("hashchange", routeFromHash);
 
+syncShowNameUi();
 syncTransportFromState();
 renderLiveRow();
 renderChannelRow();

@@ -11,14 +11,28 @@
       <header class="header">
         <div class="brand">
           <h1>UnnaturalLight</h1>
-          <p>DMX USB Pro · faders wired to dimmer channels</p>
+          <div class="show-name-group">
+            <p id="showNameDisplay" class="show-name" hidden></p>
+            <button
+              id="showMenuBtn"
+              type="button"
+              class="scene-menu-btn show-menu-btn"
+              title="Show options"
+              aria-label="Show options"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              hidden
+            >
+              <span class="scene-menu-dots" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
         <div class="controls">
-          <button id="saveBtn" type="button">Save config</button>
-          <button id="loadBtn" type="button">Load config</button>
+          <button id="newShowBtn" type="button">New show</button>
+          <button id="saveBtn" type="button">Save show</button>
+          <button id="loadBtn" type="button">Load show</button>
           <input id="loadFile" type="file" accept="application/json,.json" hidden />
           <button id="connectBtn" type="button">Connect DMX Pro</button>
-          <button id="blackoutBtn" type="button" disabled>Blackout</button>
           <span id="status" class="status" data-state="idle">Disconnected</span>
         </div>
       </header>
@@ -74,11 +88,37 @@
             <section class="fader-row live-row" aria-label="Live fader levels">
               <div class="fader-row-head">
                 <h3>Live</h3>
-                <span class="fader-row-hint">Fader levels after crossfade + master</span>
+                <span class="fader-row-hint">Fader levels after submasters + crossfade + master</span>
               </div>
               <div id="liveFaders" class="faders live-faders"></div>
             </section>
           </div>
+
+          <aside class="submasters" aria-label="Scene submasters">
+            <div class="submasters-title">Submaster</div>
+            <div class="submasters-sliders">
+              <div class="submaster submaster-from">
+                <label for="fromSub">
+                  <span id="fromSubLabel" class="submaster-name">A</span>
+                  <output id="fromSubValue" for="fromSub">100%</output>
+                </label>
+                <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Current scene submaster" />
+                <button id="fromSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+              <div class="submaster submaster-to">
+                <label for="toSub">
+                  <span id="toSubLabel" class="submaster-name">B</span>
+                  <output id="toSubValue" for="toSub">100%</output>
+                </label>
+                <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Next scene submaster" />
+                <button id="toSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            </div>
+          </aside>
 
           <aside class="master" aria-label="Master">
             <label for="master">
@@ -86,6 +126,9 @@
               <output id="masterValue" for="master">100%</output>
             </label>
             <input id="master" type="range" min="0" max="100" value="100" />
+            <button id="blackoutBtn" type="button" title="Blackout" aria-label="Blackout">
+              <span aria-hidden="true">×</span>
+            </button>
           </aside>
         </div>
 
@@ -109,9 +152,19 @@
           <div class="selected-group-head">
             <div>
               <h3 id="currentSceneTitle">A</h3>
-              <p class="selected-group-hint">Current scene faders · click name to edit</p>
+              <p class="selected-group-hint">Current scene faders · click name to rename</p>
             </div>
-            <button id="scenesBtn" type="button">Choose scene</button>
+            <button
+              id="channelsSceneMenuBtn"
+              type="button"
+              class="scene-menu-btn"
+              title="Scene options"
+              aria-label="Scene options"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <span class="scene-menu-dots" aria-hidden="true"></span>
+            </button>
           </div>
           <div id="selectedGroupFaders" class="faders selected-group-faders"></div>
         </section>
@@ -138,8 +191,8 @@
       <form method="dialog" class="dialog-body">
         <h2>Unsaved changes</h2>
         <p>
-          The current settings have changed since the last saved config.
-          Load a file anyway and discard those changes?
+          The current show has changed since it was last saved.
+          Load another show anyway and discard those changes?
         </p>
         <div class="dialog-actions">
           <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
@@ -192,6 +245,18 @@
     <div id="sceneRowMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
         <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Scene actions"></div>
+      </div>
+    </div>
+
+    <div id="showMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel scene-row-menu-panel">
+        <div id="showMenuList" class="popup-menu-list" role="menu" aria-label="Show actions"></div>
+      </div>
+    </div>
+
+    <div id="channelsSceneMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel scene-row-menu-panel">
+        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Scene options"></div>
       </div>
     </div>
 
