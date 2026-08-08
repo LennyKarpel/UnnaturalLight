@@ -14,27 +14,29 @@ Open [http://localhost:8080](http://localhost:8080), plug in the DMX Pro, click 
 
 `server.sh` disables caching so **⌘R** reloads HTML/JS/CSS. Restart the server after updating `server.sh`. If an old tab still looks stale, use **⌘⇧R** once (hard reload).
 
-## Save / Load show
+## Save / Load setlist
 
-**New show** asks for a show name, then starts blank (two empty scenes, default masters, empty patch). The name appears beside the title — click it or **⋮** → Rename to edit inline. Saved with the show.
-**Save show** downloads a JSON file with patch, scenes, master, crossfade, and names.
-**Load show** restores from a previously saved show file. New/Load ask first if the current show changed since the last save/load.
+**New setlist** asks for a setlist name, then starts blank (one tune with two empty transitions, default masters, empty patch). The name appears beside the title — click it or **⋮** → Rename to edit inline. Saved with the setlist.
+**Save setlist** downloads a JSON file with patch, tunes/transitions, master, crossfade, and names.
+**Load setlist** restores from a previously saved setlist file. New/Load ask first if the current setlist changed since the last save/load. Older v1 files (flat scenes) migrate into a single tune.
 
-The full show also autosaves to `localStorage`, so a refresh restores your last settings without an explicit Save.
+The full setlist also autosaves to `localStorage`, so a refresh restores your last settings without an explicit Save.
 
 ## Pages
 
-Drag tabs to reorder; order is saved with the show.
+Drag tabs to reorder; order is saved with the setlist.
 
-- **Faders** (`#faders`) — **Live** output after submasters + crossfade + master; scene presets below. Crossfade From (cyan) → To (amber), **Submaster** sliders for current/next scenes, timed **2 / 4 / 6 / 8 / 10** s with **Pause** / **Resume**. Scene **⋮** menu: rename / remove. Double-click a scene name to edit inline.
-- **Channels** (`#channels`) — DMX meters for channels 1–256. Bottom strip is the current scene’s faders; click the scene name to rename, or **⋮ → Select scene** to switch.
-- **Instruments** (`#instruments`) — register fixtures with a non-overlapping DMX block (**start** + **channel count**), plus **Fixed / Movable** and **Single / Multi-color**. Saved with the show.
-- **Patch** (`#patch`) — wire each fader to DMX channels with per-channel **max** (`fader × max / 255`). Shared across scenes. Click a fader elsewhere to highlight it here; right-click a fader for **Rename** / **Show in Patch**. On Patch, **Rename** or double-click the title edits inline; **Clear** and **Unpatch all** ask for confirmation.
+- **Setlist** (`#setlist`) — tunes in the setlist: add / rename / remove / drag-reorder; click a tune to open it on Tunes.
+- **Tunes** (`#tunes`) — transitions for the active tune. **GO** fades Current → Next (Next’s fade-in time), then advances. Manual blend fader + **Pause** / **Resume**. Each transition has its own **In** time (2–10s). Transition **⋮** menu: rename / remove. Drag **⋮⋮** to reorder. Click a row to set Current.
+- **Channels** (`#channels`) — DMX meters for channels 1–256. Bottom strip is the current transition’s faders; click the name to rename, or **⋮ → Select transition** to switch.
+- **Instruments** (`#instruments`) — register fixtures with a non-overlapping DMX block (**start** + **channel count**), optional **groups**, plus **Fixed / Movable** and **Single / Multi-color**. Saved with the setlist.
+- **Patch** (`#patch`) — wire each fader to DMX channels with per-channel **max** (`fader × max / 255`). Shared across all transitions. Click a fader elsewhere to highlight it here; right-click a fader for **Rename** / **Show in Patch**. On Patch, **Rename** or double-click the title edits inline; **Clear** and **Unpatch all** ask for confirmation.
 
-## Scenes & fader names
+## Tunes, transitions & fader names
 
-- Scenes: 2–24; **+** asks for a name. Names are saved in the show.
-- Faders: default **F1–F32**; rename via right-click or Patch. Names are shared across scenes and saved in the show.
+- **Tunes:** up to 32; each has its own reorderable transitions. GO Current/Next stay within the active tune.
+- **Transitions:** 2–24 per tune; each has a fade-in time (2–10s) used when GO arrives at it. **+** asks for a name.
+- **Faders:** default **F1–F32**; rename via right-click or Patch. Names are shared across transitions and saved in the setlist.
 
 Faders start unpatched and are disabled until they have channels. Use **1:1 (Fader → Ch)** for a quick default. Shared channels use **HTP** (highest takes precedence).
 
@@ -48,5 +50,5 @@ Use the built-in preview or run `server.sh` from the terminal.
 
 ## Notes
 
-- Scene submasters scale From/To before crossfade; Master scales the mixed result.
+- Transition submasters scale Current/Next before the blend; Master scales the mixed result. GO uses each transition’s fade-in time to arrive at it.
 - Keep the tab visible while outputting for the most stable refresh.

@@ -3,8 +3,6 @@ import {
   FADER_COUNT,
   CHANNEL_METER_COUNT,
   DMX_CHANNEL_MAX,
-  MIN_ROWS,
-  MAX_ROWS,
   identityPatch,
   savePatch,
   defaultPatch,
@@ -34,19 +32,31 @@ import {
 import {
   DEFAULT_NAV_ORDER,
   defaultFaderName,
-  defaultSceneName,
-  defaultShowName,
-  downloadShow,
+  defaultSetlistName,
+  defaultTuneName,
+  defaultTransitionName,
+  downloadSetlist,
   FADE_TIMES,
+  createTune,
+  createTransition,
   loadSession,
+  MAX_TUNES,
+  MAX_TRANSITIONS,
+  MIN_TRANSITIONS,
+  moveTune,
+  moveTransition,
   normalizeFaderNames,
   normalizeNavOrder,
-  normalizeSceneNames,
-  normalizeShowName,
-  parseShow,
+  normalizeTunes,
+  normalizeTuneName,
+  normalizeSetlistName,
+  normalizeTransitionFadeTime,
+  parseSetlist,
+  resolveActiveTune,
   saveSession,
-  showSnapshot,
-} from "./show.js";
+  setlistSnapshot,
+  TRANSITION_FADE_TIMES,
+} from "./setlist.js";
 
 const dmx = new EnttecDmxPro();
 
@@ -67,10 +77,11 @@ function zeros() {
   return new Array(FADER_COUNT).fill(0);
 }
 
-/** @param {string} [showName] */
-function blankShowState(showName = defaultShowName()) {
+/** @param {string} [setlistName] */
+function blankSetlistState(setlistName = defaultSetlistName()) {
+  const tune = createTune({ name: defaultTuneName(0) });
   return {
-    showName: normalizeShowName(showName),
+    setlistName: normalizeSetlistName(setlistName),
     navOrder: [...DEFAULT_NAV_ORDER],
     master: 100,
     cross: 0,
@@ -80,8 +91,8 @@ function blankShowState(showName = defaultShowName()) {
     fromRow: 0,
     toRow: 1,
     selectedRow: 0,
-    rows: [zeros(), zeros()],
-    names: [defaultSceneName(0), defaultSceneName(1)],
+    tunes: [tune],
+    activeTuneId: tune.id,
     faderNames: normalizeFaderNames(null),
     instrumentGroups: [],
     instruments: [],
@@ -92,18 +103,23 @@ function blankShowState(showName = defaultShowName()) {
 function initialState() {
   const session = loadSession();
   if (session) return session;
-  return blankShowState();
+  return blankSetlistState();
 }
 
 const boot = initialState();
 /** @type {string} */
-let showName = normalizeShowName(boot.showName);
+let setlistName = normalizeSetlistName(boot.setlistName);
 /** @type {string[]} */
 let navOrder = normalizeNavOrder(boot.navOrder);
+/** @type {import("./tunes.js").Tune[]} */
+let tunes = normalizeTunes(boot.tunes);
+/** @type {string} */
+let activeTuneId = resolveActiveTune(tunes, boot.activeTuneId).id;
+/** Working views into the active tune’s transitions (levels share array refs). */
 /** @type {number[][]} */
-let rows = boot.rows;
+let rows = [];
 /** @type {string[]} */
-let names = normalizeSceneNames(boot.names, rows.length);
+let names = [];
 /** @type {string[]} */
 let faderNames = normalizeFaderNames(boot.faderNames);
 /** @type {import("./instruments.js").InstrumentGroup[]} */
@@ -121,11 +137,40 @@ let fadeTime = FADE_TIMES.includes(boot.fadeTime) ? boot.fadeTime : 4;
 let fromRow = boot.fromRow;
 let toRow = boot.toRow;
 let selectedRow = boot.selectedRow ?? 0;
+
+function getActiveTune() {
+  return resolveActiveTune(tunes, activeTuneId);
+}
+
+/** Rebind rows/names to the active tune and clamp Current/Next/selected indices. */
+function bindActiveTune() {
+  const tune = getActiveTune();
+  activeTuneId = tune.id;
+  rows = tune.transitions.map((t) => t.levels);
+  names = tune.transitions.map((t) => t.name);
+  const n = rows.length;
+  selectedRow = Math.min(Math.max(0, selectedRow), Math.max(0, n - 1));
+  fromRow = Math.min(Math.max(0, fromRow), Math.max(0, n - 1));
+  syncPlaybackPair();
+}
+
+/** Next is always the following transition in tune order (wraps). */
+function syncPlaybackPair() {
+  const n = rows.length;
+  if (n < 2) {
+    toRow = fromRow;
+    return;
+  }
+  fromRow = Math.min(Math.max(0, fromRow), n - 1);
+  toRow = (fromRow + 1) % n;
+}
+
+bindActiveTune();
 /** @type {number} */
 let selectedFader = 0;
 /** @type {number | null} */
 let fadeRaf = null;
-/** @type {null | { start: number, target: number, durationMs: number, startedAt: number, pausedAt: number | null }} */
+/** @type {null | { start: number, target: number, durationMs: number, startedAt: number, pausedAt: number | null, mode?: "go" }} */
 let fadeState = null;
 /** @type {number | null} */
 let masterBlackoutSnapshot = null;
@@ -135,10 +180,11 @@ let fromSubBlackoutSnapshot = null;
 let toSubBlackoutSnapshot = null;
 
 /** @type {HTMLElement} */
-let showNameDisplay = requireEl("showNameDisplay", HTMLElement);
-const showMenuBtn = requireEl("showMenuBtn", HTMLButtonElement);
-const showMenu = requireEl("showMenu", HTMLElement);
-const showMenuList = requireEl("showMenuList", HTMLElement);
+let setlistNameDisplay = requireEl("setlistNameDisplay", HTMLElement);
+const setlistMenuBtn = requireEl("setlistMenuBtn", HTMLButtonElement);
+const setlistMenu = requireEl("setlistMenu", HTMLElement);
+const setlistMenuList = requireEl("setlistMenuList", HTMLElement);
+const rowsScroll = requireEl("rowsScroll", HTMLElement);
 const rowsEl = requireEl("rows", HTMLElement);
 const liveFadersEl = requireEl("liveFaders", HTMLElement);
 const channelLevelsEl = requireEl("channelLevels", HTMLElement);
@@ -171,17 +217,22 @@ const toSubLabel = requireEl("toSubLabel", HTMLElement);
 const toSubBlackoutBtn = requireEl("toSubBlackoutBtn", HTMLButtonElement);
 const crossfader = requireEl("crossfader", HTMLInputElement);
 const crossValue = requireEl("crossValue", HTMLOutputElement);
-const crossFrom = requireEl("crossFrom", HTMLSelectElement);
-const crossTo = requireEl("crossTo", HTMLSelectElement);
 const crossFromLabel = requireEl("crossFromLabel", HTMLElement);
 const crossToLabel = requireEl("crossToLabel", HTMLElement);
-const fadeTimeBtns = requireEl("fadeTimeBtns", HTMLElement);
+const goBtn = requireEl("goBtn", HTMLButtonElement);
+const goNextFade = requireEl("goNextFade", HTMLElement);
 const fadePauseBtn = requireEl("fadePauseBtn", HTMLButtonElement);
 const addRowBtn = requireEl("addRowBtn", HTMLButtonElement);
 const removeRowBtn = requireEl("removeRowBtn", HTMLButtonElement);
+const addTuneBtn = requireEl("addTuneBtn", HTMLButtonElement);
+const tuneScroll = requireEl("tuneScroll", HTMLElement);
+const tuneList = requireEl("tuneList", HTMLElement);
+const tuneEmpty = requireEl("tuneEmpty", HTMLElement);
+const activeTuneLabel = requireEl("activeTuneLabel", HTMLElement);
+const pageSetlist = requireEl("page-setlist", HTMLElement);
 const identityBtn = requireEl("identityBtn", HTMLButtonElement);
 const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
-const newShowBtn = requireEl("newShowBtn", HTMLButtonElement);
+const newSetlistBtn = requireEl("newSetlistBtn", HTMLButtonElement);
 const saveBtn = requireEl("saveBtn", HTMLButtonElement);
 const loadBtn = requireEl("loadBtn", HTMLButtonElement);
 const loadFile = requireEl("loadFile", HTMLInputElement);
@@ -203,7 +254,7 @@ const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
 const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
 const CHANNEL_GROUP_SIZE = 32;
 const CHANNEL_GROUP_COUNT = Math.ceil(512 / CHANNEL_GROUP_SIZE);
-const pageFaders = requireEl("page-faders", HTMLElement);
+const pageTunes = requireEl("page-tunes", HTMLElement);
 const pageChannels = requireEl("page-channels", HTMLElement);
 const pageInstruments = requireEl("page-instruments", HTMLElement);
 const pagePatch = requireEl("page-patch", HTMLElement);
@@ -243,7 +294,8 @@ let instrumentFormGroupPicker = null;
 const navEl = requireEl("nav", HTMLElement);
 /** @type {Record<string, HTMLElement>} */
 const pages = {
-  faders: pageFaders,
+  setlist: pageSetlist,
+  tunes: pageTunes,
   channels: pageChannels,
   instruments: pageInstruments,
   patch: pagePatch,
@@ -253,7 +305,7 @@ function getNavLinks() {
   return [...navEl.querySelectorAll(".nav-link")];
 }
 
-/** Snapshot of last explicitly saved/loaded show (or boot state). */
+/** Snapshot of last explicitly saved/loaded setlist (or boot state). */
 let cleanSnapshot = "";
 
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }[]} */
@@ -266,10 +318,15 @@ let channelRowKey = "";
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }} */
 let selectedGroupUi = { valueEls: [], patchLabelEls: [], sliders: [] };
 
-function sceneName(index) {
+function transitionName(index) {
   const name = names[index];
   if (typeof name === "string" && name.trim()) return name.trim();
-  return defaultSceneName(index);
+  return defaultTransitionName(index);
+}
+
+/** @deprecated */
+function sceneName(index) {
+  return transitionName(index);
 }
 
 function faderName(index) {
@@ -325,7 +382,8 @@ function abortInlineEdits() {
   endInlineFaderRename?.();
   endInlineRename?.();
   endInlineInstrumentRename?.();
-  closeShowMenu?.();
+  endInlineTuneRename?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -334,6 +392,9 @@ function abortInlineEdits() {
   closeCountPicker?.();
   closeInstrumentGroupPicker?.();
 }
+
+/** @type {null | (() => void)} */
+let endInlineTuneRename = null;
 
 /** @type {null | (() => void)} */
 let endInlineInstrumentRename = null;
@@ -467,7 +528,7 @@ function beginInlineFaderRename(index, target) {
 /** @type {null | (() => void)} */
 let closeFaderNameMenu = null;
 /** @type {null | (() => void)} */
-let closeShowMenu = null;
+let closeSetlistMenu = null;
 
 /**
  * @param {HTMLElement} anchor
@@ -478,7 +539,7 @@ let closeShowMenu = null;
 function openFaderNameMenu(anchor, index, clientX, clientY) {
   closeFaderNameMenu?.();
   closeSceneRowMenu?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
@@ -725,7 +786,7 @@ function ensureChannelRow() {
 }
 
 function persistSession() {
-  saveSession(currentShowState());
+  saveSession(currentSetlistState());
   savePatch(patch);
 }
 
@@ -789,56 +850,60 @@ function renderLiveRow() {
 
 function refreshRowSelects() {
   selectedRow = Math.min(Math.max(0, selectedRow), rows.length - 1);
-
-  for (const select of [crossFrom, crossTo]) {
-    const current = select === crossFrom ? fromRow : toRow;
-    select.replaceChildren();
-    for (let r = 0; r < rows.length; r++) {
-      const opt = document.createElement("option");
-      opt.value = String(r);
-      opt.textContent = sceneName(r);
-      select.append(opt);
-    }
-    select.value = String(Math.min(current, rows.length - 1));
-  }
-  fromRow = Number(crossFrom.value);
-  toRow = Number(crossTo.value);
-  crossFromLabel.textContent = sceneName(fromRow);
-  crossToLabel.textContent = sceneName(toRow);
+  syncPlaybackPair();
+  crossFromLabel.textContent = transitionName(fromRow);
+  crossToLabel.textContent = transitionName(toRow);
+  const nextFade =
+    getActiveTune().transitions[toRow]?.fadeTime ??
+    normalizeTransitionFadeTime(fadeTime);
+  goNextFade.textContent = `${nextFade}s`;
+  goBtn.title = `GO — fade to ${transitionName(toRow)} (${nextFade}s)`;
+  goBtn.setAttribute(
+    "aria-label",
+    `GO to ${transitionName(toRow)} in ${nextFade} seconds`,
+  );
   syncSubmasterLabels();
-  removeRowBtn.disabled = rows.length <= MIN_ROWS;
-  removeRowBtn.setAttribute("aria-label", `Remove scene ${sceneName(selectedRow)}`);
-  removeRowBtn.title = `Remove scene ${sceneName(selectedRow)}`;
-  addRowBtn.disabled = rows.length >= MAX_ROWS;
+  removeRowBtn.disabled = rows.length <= MIN_TRANSITIONS;
+  removeRowBtn.setAttribute(
+    "aria-label",
+    `Remove transition ${transitionName(selectedRow)}`,
+  );
+  removeRowBtn.title = `Remove transition ${transitionName(selectedRow)}`;
+  addRowBtn.disabled = rows.length >= MAX_TRANSITIONS;
   updateScenesButton();
+  syncTuneUi();
 }
 
 function updateScenesButton() {
   if (!currentSceneTitle) return;
-  currentSceneTitle.textContent = sceneName(selectedRow);
+  currentSceneTitle.textContent = transitionName(selectedRow);
   currentSceneTitle.title = "Click to rename";
   channelsSceneMenuBtn.setAttribute(
     "aria-label",
-    `Options for scene ${sceneName(selectedRow)}`,
+    `Options for transition ${transitionName(selectedRow)}`,
   );
-  channelsSceneMenuBtn.title = `Options for ${sceneName(selectedRow)}`;
+  channelsSceneMenuBtn.title = `Options for ${transitionName(selectedRow)}`;
 }
 
 function setSelectedRow(index) {
   if (index < 0 || index >= rows.length) return;
+  stopTimedFade();
   selectedRow = index;
+  // Selecting a transition sets Current; Next follows in tune order.
+  fromRow = index;
+  syncPlaybackPair();
   for (const bank of rowsEl.querySelectorAll(".fader-row")) {
     const r = Number(bank.dataset.row);
     const selected = r === selectedRow;
     bank.classList.toggle("is-selected", selected);
+    bank.classList.toggle("is-current", r === fromRow);
+    bank.classList.toggle("is-next", r === toRow);
     const head = bank.querySelector(".fader-row-head");
     if (head) head.setAttribute("aria-pressed", selected ? "true" : "false");
   }
-  removeRowBtn.setAttribute("aria-label", `Remove scene ${sceneName(selectedRow)}`);
-  removeRowBtn.title = `Remove scene ${sceneName(selectedRow)}`;
-  updateScenesButton();
+  refreshRowSelects();
   renderSelectedGroup();
-  persistSession();
+  pushToDmx();
 }
 
 /** @type {null | (() => void)} */
@@ -853,7 +918,7 @@ let closeChannelsSceneMenu = null;
 function pickScene({ anchor, clientX, clientY }) {
   closeScenePicker?.();
   closeChannelsSceneMenu?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
@@ -974,7 +1039,7 @@ function renderSelectedGroup() {
       setSelectedFader(i);
       rows[selectedRow][i] = Number(slider.value);
       value.textContent = String(rows[selectedRow][i]);
-      // Keep Faders-page UI in sync if that scene is rendered
+      // Keep Tunes-page UI in sync if that transition is rendered
       if (rowUi[selectedRow]) {
         rowUi[selectedRow].sliders[i].value = String(rows[selectedRow][i]);
         rowUi[selectedRow].valueEls[i].textContent = String(rows[selectedRow][i]);
@@ -1014,39 +1079,604 @@ function adjustIndexAfterRemove(index, removed, lengthAfter) {
   return index;
 }
 
+function syncTuneUi() {
+  const tune = getActiveTune();
+  activeTuneLabel.textContent = tune.name;
+  activeTuneLabel.title = `${tune.name} · ${tune.transitions.length} transitions`;
+  addTuneBtn.disabled = tunes.length >= MAX_TUNES;
+  if (!pageSetlist.hidden) renderTunes();
+}
+
+function clearTuneDropMarks() {
+  for (const el of tuneList.querySelectorAll(".is-drop-before, .is-drop-after")) {
+    el.classList.remove("is-drop-before", "is-drop-after");
+  }
+}
+
+/** @type {string | null} */
+let dragTuneId = null;
+/** @type {number | null} */
+let tuneDragClientY = null;
+/** @type {number | null} */
+let tuneDragScrollRaf = null;
+/** @type {null | (() => void)} */
+let stopTuneDragSession = null;
+
+const TUNE_DRAG_SCROLL_EDGE = 56;
+const TUNE_DRAG_SCROLL_MAX = 24;
+
+function tickTuneDragScroll() {
+  tuneDragScrollRaf = null;
+  if (!dragTuneId) return;
+
+  if (tuneDragClientY != null) {
+    const rect = tuneScroll.getBoundingClientRect();
+    const y = tuneDragClientY;
+    let dy = 0;
+
+    if (y < rect.top) {
+      dy = -TUNE_DRAG_SCROLL_MAX;
+    } else if (y > rect.bottom) {
+      dy = TUNE_DRAG_SCROLL_MAX;
+    } else if (y < rect.top + TUNE_DRAG_SCROLL_EDGE) {
+      const distance = rect.top + TUNE_DRAG_SCROLL_EDGE - y;
+      const t = Math.min(1, distance / TUNE_DRAG_SCROLL_EDGE);
+      dy = -Math.ceil(Math.max(2, t * TUNE_DRAG_SCROLL_MAX));
+    } else if (y > rect.bottom - TUNE_DRAG_SCROLL_EDGE) {
+      const distance = y - (rect.bottom - TUNE_DRAG_SCROLL_EDGE);
+      const t = Math.min(1, distance / TUNE_DRAG_SCROLL_EDGE);
+      dy = Math.ceil(Math.max(2, t * TUNE_DRAG_SCROLL_MAX));
+    }
+
+    if (dy !== 0) {
+      const maxScroll = Math.max(
+        0,
+        tuneScroll.scrollHeight - tuneScroll.clientHeight,
+      );
+      tuneScroll.scrollTop = Math.max(
+        0,
+        Math.min(maxScroll, tuneScroll.scrollTop + dy),
+      );
+    }
+  }
+
+  // Keep the loop alive for the whole drag — early frames often run before
+  // any dragover has set clientY.
+  tuneDragScrollRaf = requestAnimationFrame(tickTuneDragScroll);
+}
+
+/** @param {number} [initialClientY] */
+function startTuneDragSession(initialClientY) {
+  stopTuneDragSession?.();
+  tuneDragClientY =
+    typeof initialClientY === "number" ? initialClientY : null;
+  pageSetlist.classList.add("is-dragging-tune");
+
+  const onDragOver = (event) => {
+    if (!dragTuneId) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    tuneDragClientY = event.clientY;
+  };
+
+  document.addEventListener("dragover", onDragOver, true);
+  tuneDragScrollRaf = requestAnimationFrame(tickTuneDragScroll);
+
+  stopTuneDragSession = () => {
+    document.removeEventListener("dragover", onDragOver, true);
+    if (tuneDragScrollRaf != null) {
+      cancelAnimationFrame(tuneDragScrollRaf);
+      tuneDragScrollRaf = null;
+    }
+    tuneDragClientY = null;
+    pageSetlist.classList.remove("is-dragging-tune");
+    stopTuneDragSession = null;
+  };
+}
+
+function renderTunes() {
+  tuneList.replaceChildren();
+  tuneEmpty.hidden = tunes.length > 0;
+  addTuneBtn.disabled = tunes.length >= MAX_TUNES;
+
+  for (const tune of tunes) {
+    const row = document.createElement("div");
+    row.className = "tune-row";
+    row.setAttribute("role", "listitem");
+    row.dataset.tuneId = tune.id;
+    if (tune.id === activeTuneId) row.classList.add("is-active");
+
+    const handle = document.createElement("div");
+    handle.className = "tune-drag-handle";
+    handle.title = "Drag to reorder";
+    handle.setAttribute("aria-hidden", "true");
+    handle.textContent = "⋮⋮";
+
+    const name = document.createElement("h3");
+    name.className = "tune-row-name";
+    name.textContent = tune.name;
+    name.title = "Click to rename";
+    name.setAttribute("role", "button");
+    name.tabIndex = 0;
+    name.addEventListener("click", (event) => {
+      event.stopPropagation();
+      beginInlineTuneRename(tune.id, name);
+    });
+    name.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        beginInlineTuneRename(tune.id, name);
+      }
+    });
+
+    const meta = document.createElement("span");
+    meta.className = "tune-row-meta";
+    const n = tune.transitions.length;
+    meta.textContent = `${n} transition${n === 1 ? "" : "s"}`;
+
+    const badge = document.createElement("span");
+    badge.className = "tune-row-badge";
+    badge.textContent = tune.id === activeTuneId ? "Playing" : "Play";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "instrument-remove";
+    removeBtn.textContent = "×";
+    removeBtn.title = `Remove ${tune.name}`;
+    removeBtn.setAttribute("aria-label", `Remove ${tune.name}`);
+    removeBtn.disabled = tunes.length <= 1;
+    removeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void removeTune(tune.id);
+    });
+
+    row.append(handle, name, meta, badge, removeBtn);
+    wireTuneRowDrag(row, handle, tune.id);
+    row.addEventListener("click", (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          ".tune-drag-handle, .tune-row-name, .instrument-remove, .scene-title-input",
+        )
+      ) {
+        return;
+      }
+      if (tune.id !== activeTuneId) setActiveTune(tune.id);
+      else syncTuneUi();
+    });
+    tuneList.append(row);
+  }
+}
+
+/**
+ * @param {HTMLElement} row
+ * @param {HTMLElement} handle
+ * @param {string} tuneId
+ */
+function wireTuneRowDrag(row, handle, tuneId) {
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    row.dataset.dragArmed = "1";
+    const onUp = () => {
+      window.removeEventListener("pointerup", onUp, true);
+      requestAnimationFrame(() => {
+        if (!row.classList.contains("is-dragging")) delete row.dataset.dragArmed;
+      });
+    };
+    window.addEventListener("pointerup", onUp, true);
+  });
+
+  row.draggable = true;
+  row.addEventListener("dragstart", (event) => {
+    if (row.dataset.dragArmed !== "1") {
+      event.preventDefault();
+      return;
+    }
+    delete row.dataset.dragArmed;
+    abortInlineEdits();
+    dragTuneId = tuneId;
+    row.classList.add("is-dragging");
+    row.dataset.dragTuneId = tuneId;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", tuneId);
+    }
+    startTuneDragSession(event.clientY);
+  });
+
+  row.addEventListener("dragend", () => {
+    delete row.dataset.dragArmed;
+    delete row.dataset.dragTuneId;
+    row.classList.remove("is-dragging");
+    clearTuneDropMarks();
+    stopTuneDragSession?.();
+    dragTuneId = null;
+  });
+
+  row.addEventListener("dragover", (event) => {
+    if (!dragTuneId || dragTuneId === tuneId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    tuneDragClientY = event.clientY;
+    clearTuneDropMarks();
+    const rect = row.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    row.classList.add(after ? "is-drop-after" : "is-drop-before");
+  });
+
+  row.addEventListener("drop", (event) => {
+    if (!dragTuneId || dragTuneId === tuneId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const fromId = dragTuneId;
+    const rect = row.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    clearTuneDropMarks();
+    stopTuneDragSession?.();
+    dragTuneId = null;
+    if (moveTune(tunes, fromId, tuneId, after)) {
+      persistSession();
+      renderTunes();
+      syncTuneUi();
+    }
+  });
+}
+
+/**
+ * @param {string} id
+ * @param {HTMLElement} target
+ */
+function beginInlineTuneRename(id, target) {
+  const tune = tunes.find((item) => item.id === id);
+  if (!tune || !(target instanceof HTMLElement) || !target.isConnected) return;
+  abortInlineEdits();
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "scene-title-input";
+  input.maxLength = 40;
+  input.value = tune.name;
+  input.setAttribute("aria-label", "Tune name");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+
+  const parent = target.parentElement;
+  if (!parent) return;
+  target.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finish = (commit) => {
+    if (finished) return;
+    finished = true;
+    if (endInlineTuneRename === finishAbort) endInlineTuneRename = null;
+    input.removeEventListener("keydown", onKeydown);
+    input.removeEventListener("blur", onBlur);
+
+    const next = input.value.trim();
+    if (commit && next) {
+      tune.name = normalizeTuneName(next);
+      persistSession();
+    }
+
+    const restored = document.createElement("h3");
+    restored.className = "tune-row-name";
+    restored.textContent = tune.name;
+    restored.title = "Click to rename";
+    restored.setAttribute("role", "button");
+    restored.tabIndex = 0;
+    restored.addEventListener("click", (event) => {
+      event.stopPropagation();
+      beginInlineTuneRename(id, restored);
+    });
+    restored.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        beginInlineTuneRename(id, restored);
+      }
+    });
+    if (input.isConnected) input.replaceWith(restored);
+    else parent.prepend(restored);
+    syncTuneUi();
+  };
+
+  const finishAbort = () => finish(false);
+  endInlineTuneRename = finishAbort;
+
+  const onKeydown = (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finish(true);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      finish(false);
+    }
+  };
+  const onBlur = () => finish(true);
+  input.addEventListener("keydown", onKeydown);
+  input.addEventListener("blur", onBlur);
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+}
+
+function setActiveTune(tuneId) {
+  const tune = tunes.find((item) => item.id === tuneId);
+  if (!tune) return;
+  stopTimedFade();
+  activeTuneId = tune.id;
+  fromRow = 0;
+  toRow = Math.min(1, tune.transitions.length - 1);
+  selectedRow = 0;
+  cross = 0;
+  bindActiveTune();
+  syncCrossUi();
+  syncTuneUi();
+  renderRows();
+  renderSelectedGroup();
+  pushToDmx();
+  persistSession();
+}
+
+async function addTune() {
+  if (tunes.length >= MAX_TUNES) return;
+  const name = await promptName({
+    title: "New tune",
+    confirmLabel: "Create",
+    initial: defaultTuneName(tunes.length),
+  });
+  if (!name) return;
+  if (tunes.length >= MAX_TUNES) return;
+  const tune = createTune({ name });
+  tunes.push(tune);
+  setActiveTune(tune.id);
+  renderTunes();
+}
+
+/** @param {string} id */
+async function removeTune(id) {
+  if (tunes.length <= 1) return;
+  const tune = tunes.find((item) => item.id === id);
+  if (!tune) return;
+  const ok = await confirmAction({
+    title: "Remove tune?",
+    message: `Remove “${tune.name}” and all of its transitions?`,
+    confirmLabel: "Remove",
+  });
+  if (!ok) return;
+  const index = tunes.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  const wasActive = tune.id === activeTuneId;
+  tunes.splice(index, 1);
+  if (wasActive) {
+    const next = tunes[Math.min(index, tunes.length - 1)];
+    setActiveTune(next.id);
+  } else {
+    renderTunes();
+    persistSession();
+  }
+}
+
+/** @type {string | null} */
+let dragTransitionId = null;
+/** @type {number | null} */
+let transitionDragClientY = null;
+/** @type {number | null} */
+let transitionDragScrollRaf = null;
+/** @type {null | (() => void)} */
+let stopTransitionDragSession = null;
+
+const TRANSITION_DRAG_SCROLL_EDGE = 56;
+const TRANSITION_DRAG_SCROLL_MAX = 24;
+
+function tickTransitionDragScroll() {
+  transitionDragScrollRaf = null;
+  if (!dragTransitionId) return;
+
+  if (transitionDragClientY != null) {
+    const rect = rowsScroll.getBoundingClientRect();
+    const y = transitionDragClientY;
+    let dy = 0;
+
+    if (y < rect.top) {
+      dy = -TRANSITION_DRAG_SCROLL_MAX;
+    } else if (y > rect.bottom) {
+      dy = TRANSITION_DRAG_SCROLL_MAX;
+    } else if (y < rect.top + TRANSITION_DRAG_SCROLL_EDGE) {
+      const distance = rect.top + TRANSITION_DRAG_SCROLL_EDGE - y;
+      const t = Math.min(1, distance / TRANSITION_DRAG_SCROLL_EDGE);
+      dy = -Math.ceil(Math.max(2, t * TRANSITION_DRAG_SCROLL_MAX));
+    } else if (y > rect.bottom - TRANSITION_DRAG_SCROLL_EDGE) {
+      const distance = y - (rect.bottom - TRANSITION_DRAG_SCROLL_EDGE);
+      const t = Math.min(1, distance / TRANSITION_DRAG_SCROLL_EDGE);
+      dy = Math.ceil(Math.max(2, t * TRANSITION_DRAG_SCROLL_MAX));
+    }
+
+    if (dy !== 0) {
+      const maxScroll = Math.max(
+        0,
+        rowsScroll.scrollHeight - rowsScroll.clientHeight,
+      );
+      rowsScroll.scrollTop = Math.max(
+        0,
+        Math.min(maxScroll, rowsScroll.scrollTop + dy),
+      );
+    }
+  }
+
+  transitionDragScrollRaf = requestAnimationFrame(tickTransitionDragScroll);
+}
+
+/** @param {number} [initialClientY] */
+function startTransitionDragSession(initialClientY) {
+  stopTransitionDragSession?.();
+  transitionDragClientY =
+    typeof initialClientY === "number" ? initialClientY : null;
+  pageTunes.classList.add("is-dragging-transition");
+
+  const onDragOver = (event) => {
+    if (!dragTransitionId) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    transitionDragClientY = event.clientY;
+  };
+
+  document.addEventListener("dragover", onDragOver, true);
+  transitionDragScrollRaf = requestAnimationFrame(tickTransitionDragScroll);
+
+  stopTransitionDragSession = () => {
+    document.removeEventListener("dragover", onDragOver, true);
+    if (transitionDragScrollRaf != null) {
+      cancelAnimationFrame(transitionDragScrollRaf);
+      transitionDragScrollRaf = null;
+    }
+    transitionDragClientY = null;
+    pageTunes.classList.remove("is-dragging-transition");
+    stopTransitionDragSession = null;
+  };
+}
+
+/**
+ * @param {HTMLElement} bank
+ * @param {HTMLElement} handle
+ * @param {number} index
+ */
+function wireTransitionRowDrag(bank, handle, index) {
+  const transitionId = getActiveTune().transitions[index]?.id;
+  if (!transitionId) return;
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    bank.dataset.dragArmed = "1";
+    const onUp = () => {
+      window.removeEventListener("pointerup", onUp, true);
+      requestAnimationFrame(() => {
+        if (!bank.classList.contains("is-dragging")) delete bank.dataset.dragArmed;
+      });
+    };
+    window.addEventListener("pointerup", onUp, true);
+  });
+
+  bank.draggable = true;
+  bank.addEventListener("dragstart", (event) => {
+    if (bank.dataset.dragArmed !== "1") {
+      event.preventDefault();
+      return;
+    }
+    delete bank.dataset.dragArmed;
+    abortInlineEdits();
+    dragTransitionId = transitionId;
+    bank.classList.add("is-dragging");
+    bank.dataset.dragTransitionId = transitionId;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", transitionId);
+    }
+    startTransitionDragSession(event.clientY);
+  });
+
+  bank.addEventListener("dragend", () => {
+    delete bank.dataset.dragArmed;
+    delete bank.dataset.dragTransitionId;
+    bank.classList.remove("is-dragging");
+    clearTransitionDropMarks();
+    stopTransitionDragSession?.();
+    dragTransitionId = null;
+  });
+
+  bank.addEventListener("dragover", (event) => {
+    if (!dragTransitionId || dragTransitionId === transitionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    transitionDragClientY = event.clientY;
+    clearTransitionDropMarks();
+    const rect = bank.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    bank.classList.add(after ? "is-drop-after" : "is-drop-before");
+  });
+
+  bank.addEventListener("drop", (event) => {
+    if (!dragTransitionId || dragTransitionId === transitionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const fromId = dragTransitionId;
+    const rect = bank.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    const tune = getActiveTune();
+    const selectedId = tune.transitions[selectedRow]?.id;
+    const fromSelId = tune.transitions[fromRow]?.id;
+    const toSelId = tune.transitions[toRow]?.id;
+    clearTransitionDropMarks();
+    stopTransitionDragSession?.();
+    dragTransitionId = null;
+    if (!moveTransition(tune, fromId, transitionId, after)) return;
+    const indexOf = (id) =>
+      id ? tune.transitions.findIndex((t) => t.id === id) : -1;
+    selectedRow = Math.max(0, indexOf(selectedId));
+    fromRow = Math.max(0, indexOf(fromSelId));
+    toRow = Math.max(0, indexOf(toSelId));
+    bindActiveTune();
+    if (fromRow === toRow && rows.length > 1) {
+      toRow = (fromRow + 1) % rows.length;
+    }
+    renderRows();
+    renderSelectedGroup();
+    pushToDmx();
+    persistSession();
+  });
+}
+
+function clearTransitionDropMarks() {
+  for (const el of rowsEl.querySelectorAll(".is-drop-before, .is-drop-after")) {
+    el.classList.remove("is-drop-before", "is-drop-after");
+  }
+}
+
 function renderRows() {
   abortInlineEdits();
   rowsEl.replaceChildren();
   rowUi = [];
   selectedRow = Math.min(Math.max(0, selectedRow), Math.max(0, rows.length - 1));
 
+  syncPlaybackPair();
   for (let r = 0; r < rows.length; r++) {
     const bank = document.createElement("section");
     bank.className = "fader-row";
     bank.dataset.row = String(r);
     bank.classList.toggle("is-selected", r === selectedRow);
+    bank.classList.toggle("is-current", r === fromRow);
+    bank.classList.toggle("is-next", r === toRow);
 
     const head = document.createElement("div");
     head.className = "fader-row-head";
     head.tabIndex = 0;
     head.setAttribute("role", "button");
     head.setAttribute("aria-pressed", r === selectedRow ? "true" : "false");
-    head.title = "Click to select this scene";
+    head.title = "Click to set as Current";
+
+    const dragHandle = document.createElement("div");
+    dragHandle.className = "fader-row-drag-handle";
+    dragHandle.title = "Drag to reorder";
+    dragHandle.setAttribute("aria-hidden", "true");
+    dragHandle.textContent = "⋮⋮";
 
     const titleGroup = document.createElement("div");
     titleGroup.className = "scene-title-group";
 
     const title = document.createElement("h3");
     title.className = "scene-title";
-    title.textContent = sceneName(r);
+    title.textContent = transitionName(r);
     title.title = "Double-click to rename";
 
     const menuBtn = document.createElement("button");
     menuBtn.type = "button";
     menuBtn.className = "scene-menu-btn";
     menuBtn.innerHTML = '<span class="scene-menu-dots" aria-hidden="true"></span>';
-    menuBtn.title = "Scene options";
-    menuBtn.setAttribute("aria-label", `Options for ${sceneName(r)}`);
+    menuBtn.title = "Transition options";
+    menuBtn.setAttribute("aria-label", `Options for ${transitionName(r)}`);
     menuBtn.setAttribute("aria-haspopup", "menu");
     menuBtn.setAttribute("aria-expanded", "false");
     menuBtn.addEventListener("click", (event) => {
@@ -1060,17 +1690,63 @@ function renderRows() {
 
     titleGroup.append(title, menuBtn);
 
+    const fadeGroup = document.createElement("div");
+    fadeGroup.className = "transition-fade";
+    fadeGroup.title = "Fade time to arrive at this transition";
+    const fadeLabel = document.createElement("span");
+    fadeLabel.className = "transition-fade-label";
+    fadeLabel.textContent = "In";
+    const fadeSelect = document.createElement("select");
+    fadeSelect.className = "transition-fade-select";
+    fadeSelect.setAttribute(
+      "aria-label",
+      `Fade time into ${transitionName(r)}`,
+    );
+    const transition = getActiveTune().transitions[r];
+    const fadeValue = normalizeTransitionFadeTime(transition?.fadeTime);
+    for (const sec of TRANSITION_FADE_TIMES) {
+      const opt = document.createElement("option");
+      opt.value = String(sec);
+      opt.textContent = `${sec}s`;
+      if (sec === fadeValue) opt.selected = true;
+      fadeSelect.append(opt);
+    }
+    fadeSelect.addEventListener("click", (event) => event.stopPropagation());
+    fadeSelect.addEventListener("pointerdown", (event) => event.stopPropagation());
+    fadeSelect.addEventListener("change", (event) => {
+      event.stopPropagation();
+      const next = normalizeTransitionFadeTime(fadeSelect.value);
+      if (transition) transition.fadeTime = next;
+      if (r === toRow) refreshRowSelects();
+      persistSession();
+    });
+    fadeGroup.append(fadeLabel, fadeSelect);
+
     const hint = document.createElement("span");
     hint.className = "fader-row-hint";
-    hint.textContent = "Click to select";
+    hint.textContent =
+      r === fromRow
+        ? "Current"
+        : r === toRow
+          ? "Next"
+          : "Click to set Current";
 
-    head.append(titleGroup, hint);
+    head.append(dragHandle, titleGroup, fadeGroup, hint);
+    wireTransitionRowDrag(bank, dragHandle, r);
     head.addEventListener("click", (event) => {
-      if (event.target instanceof Element && event.target.closest(".scene-title-input")) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          ".scene-title-input, .fader-row-drag-handle, .scene-menu-btn, .transition-fade",
+        )
+      ) {
+        return;
+      }
       setSelectedRow(r);
     });
     head.addEventListener("keydown", (event) => {
       if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLSelectElement) return;
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         setSelectedRow(r);
@@ -1382,7 +2058,7 @@ function pickInstrumentGroup({ anchor, current }) {
   closeInstrumentGroupPicker?.();
   closeCountPicker?.();
   closeChannelPicker?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -1475,7 +2151,7 @@ function pickCount({ anchor, current }) {
   closeCountPicker?.();
   closeChannelPicker?.();
   closeInstrumentGroupPicker?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -1564,7 +2240,7 @@ function pickChannel({ anchor, current }) {
   closeChannelPicker?.();
   closeCountPicker?.();
   closeInstrumentGroupPicker?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2006,18 +2682,14 @@ function setCross(value, { fromUser = false, persist = true } = {}) {
   pushToDmx({ persist });
 }
 
-function updateFadeTimeButtons() {
-  for (const btn of fadeTimeBtns.querySelectorAll("button[data-fade]")) {
-    btn.classList.toggle("is-active", Number(btn.dataset.fade) === fadeTime);
-  }
-}
-
 function updateFadePauseButton() {
   const running = fadeState != null;
   const paused = running && fadeState.pausedAt != null;
   fadePauseBtn.disabled = !running;
   fadePauseBtn.textContent = paused ? "Resume" : "Pause";
   fadePauseBtn.classList.toggle("is-paused", paused);
+  goBtn.classList.toggle("is-running", running && !paused);
+  goBtn.disabled = rows.length < 2;
 }
 
 function stopTimedFade() {
@@ -2029,30 +2701,58 @@ function stopTimedFade() {
   updateFadePauseButton();
 }
 
-function startTimedFade(seconds) {
-  fadeTime = seconds;
-  updateFadeTimeButtons();
+/**
+ * GO: fade from the current transition’s fader levels to the next transition
+ * in tune order (using that next transition’s fadeTime), then advance.
+ */
+function goNextTransition() {
+  if (rows.length < 2) return;
 
-  const start = cross;
-  const target = start >= 99.5 ? 0 : 100;
-  const distance = Math.abs(target - start);
-  if (distance < 0.05) {
-    persistSession();
-    return;
-  }
+  // Current = the selected transition (the levels you’re on); Next = following.
+  stopTimedFade();
+  fromRow = Math.min(Math.max(0, selectedRow), rows.length - 1);
+  syncPlaybackPair();
+  refreshRowSelects();
+
+  const seconds = normalizeTransitionFadeTime(
+    getActiveTune().transitions[toRow]?.fadeTime,
+  );
+  fadeTime = seconds;
+
+  // Park on Current, then timed-fade into Next.
+  setCross(0, { persist: false });
 
   if (fadeRaf != null) cancelAnimationFrame(fadeRaf);
 
   fadeState = {
-    start,
-    target,
-    durationMs: (fadeTime * distance) / 100 * 1000,
+    start: 0,
+    target: 100,
+    durationMs: seconds * 1000,
     startedAt: performance.now(),
     pausedAt: null,
+    mode: "go",
   };
   updateFadePauseButton();
   fadeRaf = requestAnimationFrame(tickTimedFade);
   persistSession();
+}
+
+function completeGoAdvance() {
+  // Capture destination before advancing Current/Next.
+  const arrivedAt = toRow;
+  stopTimedFade();
+  fromRow = arrivedAt;
+  selectedRow = arrivedAt;
+  syncPlaybackPair();
+  setCross(0, { persist: false });
+  refreshRowSelects();
+  renderRows();
+  renderSelectedGroup();
+  pushToDmx();
+  persistSession();
+
+  const bank = rowsEl.querySelector(`.fader-row[data-row="${arrivedAt}"]`);
+  bank?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function tickTimedFade(now) {
@@ -2068,11 +2768,15 @@ function tickTimedFade(now) {
   if (t < 1) {
     fadeRaf = requestAnimationFrame(tickTimedFade);
   } else {
-    const end = fadeState.target;
+    const wasGo = fadeState.mode === "go";
     fadeRaf = null;
     fadeState = null;
-    setCross(end);
     updateFadePauseButton();
+    if (wasGo) {
+      completeGoAdvance();
+    } else {
+      setCross(100);
+    }
   }
 }
 
@@ -2096,62 +2800,62 @@ function toggleFadePause() {
   fadeRaf = requestAnimationFrame(tickTimedFade);
 }
 
-function syncShowNameUi() {
-  const label = normalizeShowName(showName);
-  showName = label;
-  if (showNameDisplay.isConnected) {
-    showNameDisplay.hidden = false;
-    showNameDisplay.textContent = label;
-    showNameDisplay.title = "Click to rename";
+function syncSetlistNameUi() {
+  const label = normalizeSetlistName(setlistName);
+  setlistName = label;
+  if (setlistNameDisplay.isConnected) {
+    setlistNameDisplay.hidden = false;
+    setlistNameDisplay.textContent = label;
+    setlistNameDisplay.title = "Click to rename";
   }
-  showMenuBtn.hidden = false;
-  showMenuBtn.setAttribute("aria-label", `Options for show ${label}`);
+  setlistMenuBtn.hidden = false;
+  setlistMenuBtn.setAttribute("aria-label", `Options for setlist ${label}`);
   document.title = `${label} · UnnaturalLight`;
 }
 
-function applyShowName(name) {
-  const next = normalizeShowName(name);
-  if (!next || next === showName) return false;
-  showName = next;
-  syncShowNameUi();
+function applySetlistName(name) {
+  const next = normalizeSetlistName(name);
+  if (!next || next === setlistName) return false;
+  setlistName = next;
+  syncSetlistNameUi();
   persistSession();
   return true;
 }
 
-function wireShowNameDisplay(el) {
+function wireSetlistNameDisplay(el) {
   el.title = "Click to rename";
   el.setAttribute("role", "button");
   el.tabIndex = 0;
   el.addEventListener("click", () => {
-    beginInlineShowRename();
+    beginInlineSetlistRename();
   });
   el.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      beginInlineShowRename();
+      beginInlineSetlistRename();
     }
   });
 }
 
-/** Edit the show name in place with a text input. */
-function beginInlineShowRename() {
+/** Edit the setlist name in place with a text input. */
+function beginInlineSetlistRename() {
   abortInlineEdits();
-  if (!(showNameDisplay instanceof HTMLElement) || !showNameDisplay.isConnected) {
-    const el = document.getElementById("showNameDisplay");
+  if (!(setlistNameDisplay instanceof HTMLElement) || !setlistNameDisplay.isConnected) {
+    const el = document.getElementById("setlistNameDisplay");
     if (!(el instanceof HTMLElement)) return;
-    showNameDisplay = el;
+    setlistNameDisplay = el;
   }
 
-  const title = showNameDisplay;
+  const title = setlistNameDisplay;
   const parent = title.parentElement;
   if (!parent) return;
 
   const input = document.createElement("input");
   input.type = "text";
-  input.className = "scene-title-input show-name-input";
+  input.className = "scene-title-input setlist-name-input";
   input.maxLength = 40;
-  input.value = showName;
-  input.setAttribute("aria-label", "Show name");
+  input.value = setlistName;
+  input.setAttribute("aria-label", "Setlist name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
@@ -2168,19 +2872,19 @@ function beginInlineShowRename() {
     input.removeEventListener("blur", onBlur);
 
     const next = input.value.trim();
-    if (commit && next) applyShowName(next);
+    if (commit && next) applySetlistName(next);
 
     const restored = document.createElement("p");
-    restored.id = "showNameDisplay";
-    restored.className = "show-name";
-    restored.textContent = showName;
+    restored.id = "setlistNameDisplay";
+    restored.className = "setlist-name";
+    restored.textContent = setlistName;
 
     if (input.isConnected) input.replaceWith(restored);
     else parent.prepend(restored);
 
-    showNameDisplay = restored;
-    wireShowNameDisplay(restored);
-    syncShowNameUi();
+    setlistNameDisplay = restored;
+    wireSetlistNameDisplay(restored);
+    syncSetlistNameUi();
   };
 
   const finishAbort = () => finish(false);
@@ -2209,8 +2913,8 @@ function beginInlineShowRename() {
  * @param {HTMLElement} anchor
  * @returns {Promise<"rename" | null>}
  */
-function openShowMenu(anchor) {
-  closeShowMenu?.();
+function openSetlistMenu(anchor) {
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2232,7 +2936,7 @@ function openShowMenu(anchor) {
     const onDocPointer = (event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (showMenu.contains(target) || anchor.contains(target)) return;
+      if (setlistMenu.contains(target) || anchor.contains(target)) return;
       finish(null);
     };
 
@@ -2241,17 +2945,17 @@ function openShowMenu(anchor) {
     };
 
     const cleanup = () => {
-      showMenu.hidden = true;
+      setlistMenu.hidden = true;
       anchor.setAttribute("aria-expanded", "false");
-      if (closeShowMenu === finishNull) closeShowMenu = null;
+      if (closeSetlistMenu === finishNull) closeSetlistMenu = null;
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onDocKeydown, true);
     };
 
     const finishNull = () => finish(null);
-    closeShowMenu = finishNull;
+    closeSetlistMenu = finishNull;
 
-    showMenuList.replaceChildren();
+    setlistMenuList.replaceChildren();
     const item = document.createElement("button");
     item.type = "button";
     item.className = "popup-menu-item";
@@ -2261,9 +2965,9 @@ function openShowMenu(anchor) {
       event.stopPropagation();
       finish("rename");
     });
-    showMenuList.append(item);
+    setlistMenuList.append(item);
 
-    showMenu.hidden = false;
+    setlistMenu.hidden = false;
     anchor.setAttribute("aria-expanded", "true");
 
     const anchorRect = anchor.getBoundingClientRect();
@@ -2277,20 +2981,25 @@ function openShowMenu(anchor) {
     if (top + menuHeight > window.innerHeight - 8) {
       top = Math.max(8, anchorRect.top - menuHeight - 6);
     }
-    showMenu.style.left = `${left}px`;
-    showMenu.style.top = `${top}px`;
+    setlistMenu.style.left = `${left}px`;
+    setlistMenu.style.top = `${top}px`;
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);
   }).then((action) => {
-    if (action === "rename") beginInlineShowRename();
+    if (action === "rename") beginInlineSetlistRename();
     return action;
   });
 }
 
-function currentShowState() {
+function currentSetlistState() {
+  // Keep transition names in sync (rows share level array refs already).
+  const tune = getActiveTune();
+  for (let i = 0; i < tune.transitions.length; i++) {
+    if (typeof names[i] === "string") tune.transitions[i].name = names[i];
+  }
   return {
-    showName,
+    setlistName,
     navOrder,
     master,
     cross,
@@ -2300,8 +3009,8 @@ function currentShowState() {
     fromRow,
     toRow,
     selectedRow,
-    rows,
-    names,
+    tunes,
+    activeTuneId,
     faderNames,
     instrumentGroups,
     instruments,
@@ -3056,7 +3765,7 @@ function renderInstrumentRow(instrument) {
   remove.addEventListener("click", async () => {
     const ok = await confirmAction({
       title: "Remove instrument?",
-      message: `Remove “${instrument.name}” from this show?`,
+      message: `Remove “${instrument.name}” from this setlist?`,
       confirmLabel: "Remove",
     });
     if (!ok) return;
@@ -3467,11 +4176,11 @@ async function removeInstrumentGroup(id) {
 }
 
 function markClean() {
-  cleanSnapshot = showSnapshot(currentShowState());
+  cleanSnapshot = setlistSnapshot(currentSetlistState());
 }
 
 function isDirty() {
-  return showSnapshot(currentShowState()) !== cleanSnapshot;
+  return setlistSnapshot(currentSetlistState()) !== cleanSnapshot;
 }
 
 function confirmDiscardLoad() {
@@ -3507,7 +4216,7 @@ function confirmAction({ title, message, confirmLabel = "Confirm" }) {
 
 function confirmRemoveScene(name) {
   return confirmAction({
-    title: "Remove scene?",
+    title: "Remove transition?",
     message: `Remove “${name}”? Its fader levels will be lost.`,
     confirmLabel: "Remove",
   });
@@ -3572,8 +4281,10 @@ let endInlineRename = null;
 
 function applySceneName(index, name) {
   const next = name.trim();
-  if (!next || next === sceneName(index)) return false;
+  if (!next || next === transitionName(index)) return false;
   names[index] = next;
+  const tune = getActiveTune();
+  if (tune.transitions[index]) tune.transitions[index].name = next;
   refreshRowSelects();
   updateScenesButton();
   persistSession();
@@ -3603,7 +4314,7 @@ function beginInlineRename(index, target) {
   }
   input.maxLength = 40;
   input.value = sceneName(index);
-  input.setAttribute("aria-label", "Scene name");
+  input.setAttribute("aria-label", "Transition name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
@@ -3699,7 +4410,7 @@ function wireCurrentSceneTitle(el) {
 function openChannelsSceneMenu(anchor) {
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
@@ -3743,7 +4454,7 @@ function openChannelsSceneMenu(anchor) {
     item.type = "button";
     item.className = "popup-menu-item";
     item.setAttribute("role", "menuitem");
-    item.textContent = "Select scene";
+    item.textContent = "Select transition";
     item.addEventListener("click", (event) => {
       event.stopPropagation();
       finish("select");
@@ -3779,19 +4490,20 @@ function openChannelsSceneMenu(anchor) {
 }
 
 async function removeSceneAt(index) {
-  if (rows.length <= MIN_ROWS) return false;
-  if (index < 0 || index >= rows.length) return false;
-  const ok = await confirmRemoveScene(sceneName(index));
+  const tune = getActiveTune();
+  if (tune.transitions.length <= MIN_TRANSITIONS) return false;
+  if (index < 0 || index >= tune.transitions.length) return false;
+  const ok = await confirmRemoveScene(transitionName(index));
   if (!ok) return false;
-  rows.splice(index, 1);
-  names.splice(index, 1);
-  fromRow = adjustIndexAfterRemove(fromRow, index, rows.length);
-  toRow = adjustIndexAfterRemove(toRow, index, rows.length);
-  selectedRow = adjustIndexAfterRemove(selectedRow, index, rows.length);
-  if (fromRow === toRow) toRow = (fromRow + 1) % rows.length;
+  tune.transitions.splice(index, 1);
+  fromRow = adjustIndexAfterRemove(fromRow, index, tune.transitions.length);
+  toRow = adjustIndexAfterRemove(toRow, index, tune.transitions.length);
+  selectedRow = adjustIndexAfterRemove(selectedRow, index, tune.transitions.length);
+  bindActiveTune();
   renderRows();
   renderSelectedGroup();
   pushToDmx();
+  persistSession();
   return true;
 }
 
@@ -3806,7 +4518,7 @@ let closeSceneRowMenu = null;
 function openSceneRowMenu(anchor, index) {
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
-  closeShowMenu?.();
+  closeSetlistMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
@@ -3864,7 +4576,7 @@ function openSceneRowMenu(anchor, index) {
     addItem("Rename", "rename");
     addItem("Remove", "remove", {
       danger: true,
-      disabled: rows.length <= MIN_ROWS,
+      disabled: rows.length <= MIN_TRANSITIONS,
     });
 
     sceneRowMenu.hidden = false;
@@ -3899,7 +4611,7 @@ function setUiConnected(connected) {
 }
 
 function showPage(name) {
-  const page = pages[name] ? name : "faders";
+  const page = pages[name] ? name : "tunes";
   abortInlineEdits();
 
   for (const [key, el] of Object.entries(pages)) {
@@ -3914,6 +4626,7 @@ function showPage(name) {
 
   if (page === "patch") renderPatchTable();
   if (page === "instruments") renderInstruments();
+  if (page === "setlist") renderTunes();
   if (page === "channels") {
     refreshChannelRow();
     renderSelectedGroup();
@@ -3922,10 +4635,24 @@ function showPage(name) {
 
 function routeFromHash() {
   const hash = location.hash.replace("#", "");
-  if (hash === "patch" || hash === "channels" || hash === "instruments") {
+  if (hash === "faders" || hash === "songs") {
+    showPage("tunes");
+    return;
+  }
+  if (hash === "show") {
+    showPage("setlist");
+    return;
+  }
+  if (
+    hash === "setlist" ||
+    hash === "tunes" ||
+    hash === "patch" ||
+    hash === "channels" ||
+    hash === "instruments"
+  ) {
     showPage(hash);
   } else {
-    showPage("faders");
+    showPage("tunes");
   }
 }
 
@@ -4017,40 +4744,12 @@ crossfader.addEventListener("input", () => {
   setCross(Number(crossfader.value), { fromUser: true });
 });
 
-fadeTimeBtns.addEventListener("click", (event) => {
-  const btn = event.target instanceof Element ? event.target.closest("button[data-fade]") : null;
-  if (!btn) return;
-  startTimedFade(Number(btn.dataset.fade));
+goBtn.addEventListener("click", () => {
+  goNextTransition();
 });
 
 fadePauseBtn.addEventListener("click", () => {
   toggleFadePause();
-});
-
-crossFrom.addEventListener("change", () => {
-  stopTimedFade();
-  fromRow = Number(crossFrom.value);
-  if (fromRow === toRow) {
-    toRow = (fromRow + 1) % rows.length;
-    crossTo.value = String(toRow);
-  }
-  crossFromLabel.textContent = sceneName(fromRow);
-  crossToLabel.textContent = sceneName(toRow);
-  syncSubmasterLabels();
-  pushToDmx();
-});
-
-crossTo.addEventListener("change", () => {
-  stopTimedFade();
-  toRow = Number(crossTo.value);
-  if (toRow === fromRow) {
-    fromRow = (toRow + 1) % rows.length;
-    crossFrom.value = String(fromRow);
-  }
-  crossFromLabel.textContent = sceneName(fromRow);
-  crossToLabel.textContent = sceneName(toRow);
-  syncSubmasterLabels();
-  pushToDmx();
 });
 
 wireCurrentSceneTitle(currentSceneTitle);
@@ -4065,20 +4764,24 @@ channelsSceneMenuBtn.addEventListener("click", (event) => {
 });
 
 addRowBtn.addEventListener("click", async () => {
-  if (rows.length >= MAX_ROWS) return;
+  const tune = getActiveTune();
+  if (tune.transitions.length >= MAX_TRANSITIONS) return;
   const name = await promptName({
-    title: "New scene",
+    title: "New transition",
     confirmLabel: "Add",
-    initial: defaultSceneName(rows.length),
+    initial: defaultTransitionName(tune.transitions.length),
   });
   if (!name) return;
-  if (rows.length >= MAX_ROWS) return;
-  rows.push(zeros());
-  names.push(name);
+  if (tune.transitions.length >= MAX_TRANSITIONS) return;
+  tune.transitions.push(createTransition({ name }));
+  bindActiveTune();
   selectedRow = rows.length - 1;
+  fromRow = selectedRow;
+  syncPlaybackPair();
   renderRows();
   renderSelectedGroup();
   pushToDmx();
+  persistSession();
 });
 
 removeRowBtn.addEventListener("click", async () => {
@@ -4103,10 +4806,10 @@ clearPatchBtn.addEventListener("click", async () => {
   renderPatchTable();
 });
 
-function applyShow(state) {
+function applySetlist(state) {
   stopTimedFade();
   clearBlackoutSnapshots();
-  showName = normalizeShowName(state.showName);
+  setlistName = normalizeSetlistName(state.setlistName);
   navOrder = normalizeNavOrder(state.navOrder);
   master = state.master;
   cross = state.cross;
@@ -4116,8 +4819,9 @@ function applyShow(state) {
   fromRow = state.fromRow;
   toRow = state.toRow;
   selectedRow = state.selectedRow ?? 0;
-  rows = state.rows;
-  names = normalizeSceneNames(state.names, rows.length);
+  tunes = normalizeTunes(state.tunes);
+  activeTuneId = resolveActiveTune(tunes, state.activeTuneId).id;
+  bindActiveTune();
   faderNames = normalizeFaderNames(state.faderNames);
   instrumentGroups = normalizeInstrumentGroups(state.instrumentGroups);
   instruments = normalizeInstruments(state.instruments, instrumentGroups);
@@ -4130,17 +4834,18 @@ function applyShow(state) {
   patch = state.patch;
 
   applyNavOrder(navOrder);
-  syncShowNameUi();
+  syncSetlistNameUi();
+  syncTuneUi();
   syncMasterUi();
   syncSubmasterUi();
   syncCrossUi();
-  updateFadeTimeButtons();
   updateFadePauseButton();
 
   renderRows();
   renderLiveRow();
   renderChannelRow();
   renderSelectedGroup();
+  renderTunes();
   renderInstruments();
   renderPatchTable();
   pushToDmx();
@@ -4150,46 +4855,46 @@ function syncTransportFromState() {
   syncMasterUi();
   syncSubmasterUi();
   syncCrossUi();
-  updateFadeTimeButtons();
+  refreshRowSelects();
   updateFadePauseButton();
 }
 
-showMenuBtn.addEventListener("click", (event) => {
+setlistMenuBtn.addEventListener("click", (event) => {
   event.stopPropagation();
-  if (showMenuBtn.getAttribute("aria-expanded") === "true") {
-    closeShowMenu?.();
+  if (setlistMenuBtn.getAttribute("aria-expanded") === "true") {
+    closeSetlistMenu?.();
     return;
   }
-  void openShowMenu(showMenuBtn);
+  void openSetlistMenu(setlistMenuBtn);
 });
 
-newShowBtn.addEventListener("click", async () => {
+newSetlistBtn.addEventListener("click", async () => {
   if (isDirty()) {
     const ok = await confirmAction({
-      title: "New show?",
-      message: "Discard unsaved changes and start a blank show?",
+      title: "New setlist?",
+      message: "Discard unsaved changes and start a blank setlist?",
       confirmLabel: "Continue",
     });
     if (!ok) return;
   }
 
   const name = await promptName({
-    title: "New show",
+    title: "New setlist",
     confirmLabel: "Create",
     initial: "",
   });
   if (!name) return;
 
-  applyShow(blankShowState(name));
+  applySetlist(blankSetlistState(name));
   markClean();
   persistSession();
-  setStatus(`New show · ${showName}`, dmx.connected ? "connected" : "idle");
+  setStatus(`New setlist · ${setlistName}`, dmx.connected ? "connected" : "idle");
 });
 
 saveBtn.addEventListener("click", () => {
-  downloadShow(currentShowState());
+  downloadSetlist(currentSetlistState());
   markClean();
-  setStatus("Show saved", dmx.connected ? "connected" : "idle");
+  setStatus("Setlist saved", dmx.connected ? "connected" : "idle");
 });
 
 loadBtn.addEventListener("click", () => {
@@ -4209,11 +4914,11 @@ loadFile.addEventListener("change", async () => {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    applyShow(parseShow(data));
+    applySetlist(parseSetlist(data));
     markClean();
-    setStatus(`Show loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
+    setStatus(`Setlist loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load show";
+    const message = err instanceof Error ? err.message : "Failed to load setlist";
     setStatus(message, "error");
     console.error(err);
   }
@@ -4319,6 +5024,10 @@ addInstrumentGroupBtn.addEventListener("click", () => {
   void addInstrumentGroup();
 });
 
+addTuneBtn.addEventListener("click", () => {
+  void addTune();
+});
+
 ensureInstrumentFormStartPicker();
 ensureInstrumentFormCountPicker();
 ensureInstrumentFormQtyPicker();
@@ -4326,13 +5035,15 @@ ensureInstrumentFormGroupPicker();
 suggestInstrumentFormStart();
 wireNavReorder();
 applyNavOrder(navOrder);
-wireShowNameDisplay(showNameDisplay);
-syncShowNameUi();
+wireSetlistNameDisplay(setlistNameDisplay);
+syncSetlistNameUi();
+syncTuneUi();
 syncTransportFromState();
 renderLiveRow();
 renderChannelRow();
 renderSelectedGroup();
 renderRows();
+renderTunes();
 renderInstruments();
 renderPatchTable();
 routeFromHash();

@@ -11,14 +11,14 @@
       <header class="header">
         <div class="brand">
           <h1>UnnaturalLight</h1>
-          <div class="show-name-group">
-            <p id="showNameDisplay" class="show-name" hidden></p>
+          <div class="setlist-name-group">
+            <p id="setlistNameDisplay" class="setlist-name" hidden></p>
             <button
-              id="showMenuBtn"
+              id="setlistMenuBtn"
               type="button"
-              class="scene-menu-btn show-menu-btn"
-              title="Show options"
-              aria-label="Show options"
+              class="scene-menu-btn setlist-menu-btn"
+              title="Setlist options"
+              aria-label="Setlist options"
               aria-haspopup="menu"
               aria-expanded="false"
               hidden
@@ -28,9 +28,9 @@
           </div>
         </div>
         <div class="controls">
-          <button id="newShowBtn" type="button">New show</button>
-          <button id="saveBtn" type="button">Save show</button>
-          <button id="loadBtn" type="button">Load show</button>
+          <button id="newSetlistBtn" type="button">New setlist</button>
+          <button id="saveBtn" type="button">Save setlist</button>
+          <button id="loadBtn" type="button">Load setlist</button>
           <input id="loadFile" type="file" accept="application/json,.json" hidden />
           <button id="connectBtn" type="button">Connect DMX Pro</button>
           <span id="status" class="status" data-state="idle">Disconnected</span>
@@ -38,64 +38,80 @@
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
-        <a href="#faders" data-page="faders" class="nav-link is-active" draggable="true">Faders</a>
+        <a href="#setlist" data-page="setlist" class="nav-link" draggable="true">Setlist</a>
+        <a href="#tunes" data-page="tunes" class="nav-link is-active" draggable="true">Tunes</a>
         <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
         <a href="#instruments" data-page="instruments" class="nav-link" draggable="true">Instruments</a>
         <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
       </nav>
 
-      <section id="page-faders" class="page is-active">
+      <section id="page-setlist" class="page" hidden>
+        <div class="page-intro">
+          <div>
+            <h2>Setlist</h2>
+            <p class="page-intro-hint">Tunes in this setlist · click to play · drag to reorder</p>
+          </div>
+          <div class="patch-actions">
+            <button id="addTuneBtn" type="button" class="btn-quiet">+ Tune</button>
+          </div>
+        </div>
+        <div id="tuneScroll" class="tune-scroll">
+          <div id="tuneEmpty" class="instrument-empty" hidden>No tunes yet.</div>
+          <div id="tuneList" class="tune-list" role="list" aria-label="Tunes"></div>
+        </div>
+      </section>
+
+      <section id="page-tunes" class="page is-active">
         <div class="faders-stage">
           <div class="faders-stage-main">
             <section class="transport">
-              <div class="crossfade">
-                <div class="crossfade-head">
-                  <label class="cross-from-label">
-                    From
-                    <select id="crossFrom" aria-label="Crossfade from scene"></select>
-                  </label>
-                  <div class="crossfade-title">
-                    Crossfade
-                    <output id="crossValue">0%</output>
-                  </div>
-                  <label class="cross-to-label">
-                    To
-                    <select id="crossTo" aria-label="Crossfade to scene"></select>
-                  </label>
-                </div>
-                <input id="crossfader" type="range" min="0" max="100" value="0" />
-                <div class="crossfade-ends">
-                  <span id="crossFromLabel" class="cross-from-label">A</span>
-                  <span id="crossToLabel" class="cross-to-label">B</span>
-                </div>
-                <div class="timed-crossfade">
-                  <div id="fadeTimeBtns" class="fade-time-btns" role="group" aria-label="Timed crossfade seconds">
-                    <button type="button" data-fade="2">2</button>
-                    <button type="button" data-fade="4">4</button>
-                    <button type="button" data-fade="6">6</button>
-                    <button type="button" data-fade="8">8</button>
-                    <button type="button" data-fade="10">10</button>
-                  </div>
-                  <button id="fadePauseBtn" type="button" disabled>Pause</button>
-                </div>
+              <div class="active-tune-bar">
+                <span class="active-tune-label">Tune</span>
+                <span id="activeTuneLabel" class="active-tune-name">Tune 1</span>
               </div>
 
-              <div class="row-actions">
-                <button id="addRowBtn" type="button" aria-label="Add scene" title="Add scene">+</button>
-                <button id="removeRowBtn" type="button" aria-label="Remove scene" title="Remove scene">−</button>
+              <div class="transport-main">
+                <div class="crossfade go-transport">
+                  <div class="crossfade-head">
+                    <div class="cross-from-label go-slot">
+                      <span class="go-slot-label">Current</span>
+                      <span id="crossFromLabel" class="go-slot-name">A</span>
+                    </div>
+                    <div class="crossfade-title go-title">
+                      <button id="goBtn" type="button" class="go-btn" title="GO — fade to next transition">
+                        GO
+                      </button>
+                      <output id="crossValue" class="go-progress">0%</output>
+                    </div>
+                    <div class="cross-to-label go-slot">
+                      <span class="go-slot-label">Next</span>
+                      <span id="crossToLabel" class="go-slot-name">B</span>
+                      <span id="goNextFade" class="go-next-fade">4s</span>
+                    </div>
+                  </div>
+                  <input id="crossfader" type="range" min="0" max="100" value="0" aria-label="Blend Current to Next" />
+                  <div class="timed-crossfade">
+                    <button id="fadePauseBtn" type="button" disabled>Pause</button>
+                  </div>
+                </div>
+
+                <div class="row-actions">
+                  <button id="addRowBtn" type="button" aria-label="Add transition" title="Add transition">+</button>
+                  <button id="removeRowBtn" type="button" aria-label="Remove transition" title="Remove transition">−</button>
+                </div>
               </div>
             </section>
 
             <section class="fader-row live-row" aria-label="Live fader levels">
               <div class="fader-row-head">
                 <h3>Live</h3>
-                <span class="fader-row-hint">Fader levels after submasters + crossfade + master</span>
+                <span class="fader-row-hint">Fader levels after submasters + blend + master</span>
               </div>
               <div id="liveFaders" class="faders live-faders"></div>
             </section>
           </div>
 
-          <aside class="submasters" aria-label="Scene submasters">
+          <aside class="submasters" aria-label="Transition submasters">
             <div class="submasters-title">Submaster</div>
             <div class="submasters-sliders">
               <div class="submaster submaster-from">
@@ -103,7 +119,7 @@
                   <span id="fromSubLabel" class="submaster-name">A</span>
                   <output id="fromSubValue" for="fromSub">100%</output>
                 </label>
-                <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Current scene submaster" />
+                <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Current transition submaster" />
                 <button id="fromSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
                   <span aria-hidden="true">×</span>
                 </button>
@@ -113,7 +129,7 @@
                   <span id="toSubLabel" class="submaster-name">B</span>
                   <output id="toSubValue" for="toSub">100%</output>
                 </label>
-                <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Next scene submaster" />
+                <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Next transition submaster" />
                 <button id="toSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
                   <span aria-hidden="true">×</span>
                 </button>
@@ -133,8 +149,8 @@
           </aside>
         </div>
 
-        <div class="rows-scroll">
-          <main id="rows" class="rows" aria-label="Scenes"></main>
+        <div id="rowsScroll" class="rows-scroll">
+          <main id="rows" class="rows" aria-label="Transitions"></main>
         </div>
       </section>
 
@@ -149,18 +165,18 @@
           <div id="channelLevels" class="faders channel-faders"></div>
         </section>
 
-        <section class="selected-group" aria-label="Current scene">
+        <section class="selected-group" aria-label="Current transition">
           <div class="selected-group-head">
             <div>
               <h3 id="currentSceneTitle">A</h3>
-              <p class="selected-group-hint">Current scene faders · click name to rename</p>
+              <p class="selected-group-hint">Current transition faders · click name to rename</p>
             </div>
             <button
               id="channelsSceneMenuBtn"
               type="button"
               class="scene-menu-btn"
-              title="Scene options"
-              aria-label="Scene options"
+              title="Transition options"
+              aria-label="Transition options"
               aria-haspopup="menu"
               aria-expanded="false"
             >
@@ -233,7 +249,7 @@
         <div class="page-intro">
           <div>
             <h2>Patch</h2>
-            <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all scenes.</p>
+            <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all transitions.</p>
           </div>
           <div class="patch-actions">
             <button id="identityBtn" type="button">1:1 (Fader → Ch)</button>
@@ -250,8 +266,8 @@
       <form method="dialog" class="dialog-body">
         <h2>Unsaved changes</h2>
         <p>
-          The current show has changed since it was last saved.
-          Load another show anyway and discard those changes?
+          The current setlist has changed since it was last saved.
+          Load another setlist anyway and discard those changes?
         </p>
         <div class="dialog-actions">
           <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
@@ -273,7 +289,7 @@
 
     <dialog id="sceneNameDialog" class="dialog">
       <form method="dialog" class="dialog-body" id="sceneNameForm">
-        <h2 id="sceneNameDialogTitle">New scene</h2>
+        <h2 id="sceneNameDialogTitle">New transition</h2>
         <label class="dialog-field">
           Name
           <input
@@ -295,27 +311,27 @@
     <div id="sceneMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-menu-panel">
         <div class="popup-menu-bar">
-          <span class="popup-menu-label">Scenes</span>
+          <span class="popup-menu-label">Transitions</span>
         </div>
-        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Scenes"></div>
+        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Transitions"></div>
       </div>
     </div>
 
     <div id="sceneRowMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Scene actions"></div>
+        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Transition actions"></div>
       </div>
     </div>
 
-    <div id="showMenu" class="popup-menu" hidden>
+    <div id="setlistMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="showMenuList" class="popup-menu-list" role="menu" aria-label="Show actions"></div>
+        <div id="setlistMenuList" class="popup-menu-list" role="menu" aria-label="Setlist actions"></div>
       </div>
     </div>
 
     <div id="channelsSceneMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Scene options"></div>
+        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Transition options"></div>
       </div>
     </div>
 
