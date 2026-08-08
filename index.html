@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UnnaturalLight</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <h1>UnnaturalLight</h1>
+          <p>DMX USB Pro · faders wired to dimmer channels</p>
+        </div>
+        <div class="controls">
+          <button id="saveBtn" type="button">Save config</button>
+          <button id="loadBtn" type="button">Load config</button>
+          <input id="loadFile" type="file" accept="application/json,.json" hidden />
+          <button id="connectBtn" type="button">Connect DMX Pro</button>
+          <button id="blackoutBtn" type="button" disabled>Blackout</button>
+          <span id="status" class="status" data-state="idle">Disconnected</span>
+        </div>
+      </header>
+
+      <nav class="nav" aria-label="Pages">
+        <a href="#faders" data-page="faders" class="nav-link is-active">Faders</a>
+        <a href="#channels" data-page="channels" class="nav-link">Channels</a>
+        <a href="#patch" data-page="patch" class="nav-link">Patch</a>
+      </nav>
+
+      <section id="page-faders" class="page is-active">
+        <div class="faders-stage">
+          <div class="faders-stage-main">
+            <section class="transport">
+              <div class="crossfade">
+                <div class="crossfade-head">
+                  <label class="cross-from-label">
+                    From
+                    <select id="crossFrom" aria-label="Crossfade from scene"></select>
+                  </label>
+                  <div class="crossfade-title">
+                    Crossfade
+                    <output id="crossValue">0%</output>
+                  </div>
+                  <label class="cross-to-label">
+                    To
+                    <select id="crossTo" aria-label="Crossfade to scene"></select>
+                  </label>
+                </div>
+                <input id="crossfader" type="range" min="0" max="100" value="0" />
+                <div class="crossfade-ends">
+                  <span id="crossFromLabel" class="cross-from-label">A</span>
+                  <span id="crossToLabel" class="cross-to-label">B</span>
+                </div>
+                <div class="timed-crossfade">
+                  <div id="fadeTimeBtns" class="fade-time-btns" role="group" aria-label="Timed crossfade seconds">
+                    <button type="button" data-fade="2">2</button>
+                    <button type="button" data-fade="4">4</button>
+                    <button type="button" data-fade="6">6</button>
+                    <button type="button" data-fade="8">8</button>
+                    <button type="button" data-fade="10">10</button>
+                  </div>
+                  <button id="fadePauseBtn" type="button" disabled>Pause</button>
+                </div>
+              </div>
+
+              <div class="row-actions">
+                <button id="addRowBtn" type="button" aria-label="Add scene" title="Add scene">+</button>
+                <button id="removeRowBtn" type="button" aria-label="Remove scene" title="Remove scene">−</button>
+              </div>
+            </section>
+
+            <section class="fader-row live-row" aria-label="Live fader levels">
+              <div class="fader-row-head">
+                <h3>Live</h3>
+                <span class="fader-row-hint">Fader levels after crossfade + master</span>
+              </div>
+              <div id="liveFaders" class="faders live-faders"></div>
+            </section>
+          </div>
+
+          <aside class="master" aria-label="Master">
+            <label for="master">
+              <span>Master</span>
+              <output id="masterValue" for="master">100%</output>
+            </label>
+            <input id="master" type="range" min="0" max="100" value="100" />
+          </aside>
+        </div>
+
+        <div class="rows-scroll">
+          <main id="rows" class="rows" aria-label="Scenes"></main>
+        </div>
+      </section>
+
+      <section id="page-channels" class="page" hidden>
+        <div class="page-intro">
+          <div>
+            <h2>Channels</h2>
+          </div>
+        </div>
+
+        <section class="fader-row channel-row channel-page" aria-label="DMX channel levels">
+          <div id="channelLevels" class="faders channel-faders"></div>
+        </section>
+
+        <section class="selected-group" aria-label="Current scene">
+          <div class="selected-group-head">
+            <div>
+              <h3 id="currentSceneTitle">A</h3>
+              <p class="selected-group-hint">Current scene faders · click name to edit</p>
+            </div>
+            <button id="scenesBtn" type="button">Choose scene</button>
+          </div>
+          <div id="selectedGroupFaders" class="faders selected-group-faders"></div>
+        </section>
+      </section>
+
+      <section id="page-patch" class="page" hidden>
+        <div class="page-intro">
+          <div>
+            <h2>Patch</h2>
+            <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all scenes.</p>
+          </div>
+          <div class="patch-actions">
+            <button id="identityBtn" type="button">1:1 (Fader → Ch)</button>
+            <button id="clearPatchBtn" type="button">Unpatch all</button>
+          </div>
+        </div>
+
+        <div id="patchConflicts" class="patch-conflicts" hidden></div>
+        <div id="patchTable" class="patch-table" role="table" aria-label="Fader to DMX patch"></div>
+      </section>
+    </div>
+
+    <dialog id="dirtyDialog" class="dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Unsaved changes</h2>
+        <p>
+          The current settings have changed since the last saved config.
+          Load a file anyway and discard those changes?
+        </p>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
+          <button value="confirm" type="submit" id="dirtyConfirmBtn">Load anyway</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog">
+      <form method="dialog" class="dialog-body">
+        <h2 id="confirmTitle">Are you sure?</h2>
+        <p id="confirmMessage">This cannot be undone.</p>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
+          <button value="confirm" type="submit" id="confirmConfirmBtn">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="sceneNameDialog" class="dialog">
+      <form method="dialog" class="dialog-body" id="sceneNameForm">
+        <h2 id="sceneNameDialogTitle">New scene</h2>
+        <label class="dialog-field">
+          Name
+          <input
+            id="sceneNameInput"
+            type="text"
+            maxlength="40"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit" formnovalidate class="btn-quiet">Cancel</button>
+          <button value="confirm" type="submit" id="sceneNameConfirmBtn">Add</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="sceneMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel scene-menu-panel">
+        <div class="popup-menu-bar">
+          <span class="popup-menu-label">Scenes</span>
+        </div>
+        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Scenes"></div>
+      </div>
+    </div>
+
+    <div id="sceneRowMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel scene-row-menu-panel">
+        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Scene actions"></div>
+      </div>
+    </div>
+
+    <div id="faderNameMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel scene-row-menu-panel">
+        <div id="faderNameMenuList" class="popup-menu-list" role="menu" aria-label="Fader actions"></div>
+      </div>
+    </div>
+
+    <div id="channelMenu" class="popup-menu popup-menu-flyout" hidden>
+      <div class="popup-menu-panel" id="channelMenuRoot">
+        <div class="popup-menu-bar">
+          <span class="popup-menu-label">Groups</span>
+        </div>
+        <input
+          id="channelMenuFilter"
+          class="popup-menu-filter"
+          type="search"
+          placeholder="Jump to channel…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div id="channelMenuList" class="popup-menu-list" role="menu" aria-label="Channel groups"></div>
+      </div>
+      <div class="popup-menu-panel popup-menu-submenu" id="channelMenuSub" hidden>
+        <div class="popup-menu-bar">
+          <span id="channelMenuSubLabel" class="popup-menu-label">Channels</span>
+        </div>
+        <div id="channelMenuSubList" class="popup-menu-list" role="menu" aria-label="Channels in group"></div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
+
