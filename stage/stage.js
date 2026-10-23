@@ -9,9 +9,11 @@ import {
   RIG_TYPES, PALETTE, applyRig, rigLowestY, rigOutline, normalizeRig,
   DMX_ATTRS, DMX_LABELS, setDmx, setColorHex, deriveFromDmx, homeInstrument,
   rgbFromHex, zoomFromBeam, layoutFor, linkChannels, LAYOUT_PRESETS,
-  CONSOLE_TYPES, consoleTypeFromKey, consoleTypeKey, DMX_SHORT,
+  CONSOLE_TYPES, consoleTypeFromKey, consoleTypeKey,
+  registerLayout, registerLabels, applyFixture,
 } from "./stage-model.js";
 import { createConsoleLink } from "./console-link.js";
+import { createFixturePicker } from "./fixture-library.js";
 import { createTracePopover } from "../shared/trace.js";
 
 /** @typedef {import("./stage-model.js").Instrument} Instrument */
@@ -145,6 +147,8 @@ function makeRigMember(rig, k, like) {
   Object.assign(inst.dmx, { dimmer, red, green, blue, zoom });
   deriveFromDmx(inst);
   inst.link.register = rig.consoleType ?? null;
+  inst.link.universe = rig.universe ?? null;
+  if (rig.fixture) applyFixture(inst, rig.fixture);
   return inst;
 }
 
@@ -1380,6 +1384,12 @@ function syncInspector() {
 
 function renderHud() {
   const sel = selectedInstruments();
+  // Keep the keys-bar color picker on the selection's color.
+  const kc = document.getElementById("keysColor");
+  if (kc) {
+    kc.disabled = !sel.length;
+    if (sel.length && document.activeElement !== kc) kc.value = sel[0].color;
+  }
   if (!sel.length) { hudEl.hidden = true; return; }
   hudEl.hidden = false;
   const flashRow = sel.some((i) => flashing.has(i.id)) ? `<div class="row flash-on"><span>FLASH</span><span>white · 100%</span></div>` : "";
@@ -1480,6 +1490,12 @@ function addInstrumentAt(x, y, z) {
   if (state.instruments.length >= MAX_INSTRUMENTS) { setPlacing(false); return; }
   const inst = createInstrument(x, y, z, state.instruments.length, state.box);
   inst.link.register = placeType;
+  inst.link.universe = placeUniverse;
+  if (placeFixture) {
+    applyFixture(inst, placeFixture);
+    const same = state.instruments.filter((i) => i.link.fixture?.model === placeFixture.model).length;
+    inst.name = `${placeFixture.model} ${same + 1}`;
+  }
   state.instruments.push(inst);
   setPlacing(false);
   select(inst.id);
@@ -1562,7 +1578,7 @@ function duplicateSelected() {
     ...structuredClone(inst), id: newId(), name: `${inst.name} copy`, x: round(inst.x + 0.5),
     rigId: null, rigIndex: 0,
     // Copies get their own console instrument if the original came from the stage.
-    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.owned ? inst.link.type : inst.link.register },
+    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.owned ? inst.link.type : inst.link.register, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null },
   }));
   state.instruments.push(...copies);
   state.selected = copies.map((c) => c.id);
@@ -1622,7 +1638,7 @@ function undoDelete() {
   // Their console instruments were removed on delete: register them again.
   for (const { inst } of removed) {
     if (!inst.link.owned) continue;
-    inst.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.type };
+    inst.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.type, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null };
   }
   requestRegistrations();
   state.selected = removed.map((r) => r.inst.id).filter((id) => byId(id));
@@ -1652,6 +1668,39 @@ function act(name) {
 // ---------------------------------------------------------------------
 // Keyboard
 // ---------------------------------------------------------------------
+
+// Keys bar color picker: sets the color of every selected instrument (like
+// the inspector's Color); shows the first selected one's color.
+const keysColor = /** @type {HTMLInputElement} */ (document.getElementById("keysColor"));
+keysColor.addEventListener("input", () => {
+  const sel = selectedInstruments();
+  if (!sel.length) return;
+  for (const inst of sel) setColorHex(inst, keysColor.value);
+  changed();
+});
+keysColor.addEventListener("change", () => keysColor.blur());
+
+// Keys bar under the 3D view: each key is a button that does what the key
+// does (it sends the same key press). Hold to repeat; ⇧-click for steps of 10.
+document.querySelectorAll(".keys [data-key]").forEach((btn) => {
+  const press = (shift) => window.dispatchEvent(new KeyboardEvent("keydown", {
+    key: btn.dataset.key, code: btn.dataset.code, shiftKey: shift, metaKey: btn.hasAttribute("data-meta"), bubbles: true,
+  }));
+  let delay = 0;
+  let repeat = 0;
+  const stop = () => { clearTimeout(delay); clearInterval(repeat); btn.classList.remove("held"); };
+  btn.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); // keep keyboard focus where it was
+    press(e.shiftKey);
+    if (!btn.hasAttribute("data-repeat")) return;
+    btn.classList.add("held");
+    delay = setTimeout(() => { repeat = setInterval(() => press(e.shiftKey), 60); }, 350);
+  });
+  for (const type of ["pointerup", "pointerleave", "pointercancel"]) btn.addEventListener(type, stop);
+  // Keyboard activation (Tab to it, Enter / Space): one press.
+  btn.addEventListener("click", (e) => { if (e.detail === 0) press(e.shiftKey); });
+});
 
 window.addEventListener("keydown", (e) => {
   const t = e.target;
@@ -1829,6 +1878,8 @@ document.getElementById("rigBtn").addEventListener("click", (e) => {
   rigInputs.count.max = String(Math.max(2, room));
   rigRoomEl.textContent = `${room} of ${MAX_INSTRUMENTS} instrument slots free.`;
   fillConsoleTypes(rigInputs.consoleType);
+  rigLib.sync();
+  fillUniverses(sd("rigUniverse"));
   rigDlg.showModal();
 });
 document.getElementById("rigClose").addEventListener("click", () => rigDlg.close());
@@ -1847,10 +1898,17 @@ document.getElementById("rigPlace").addEventListener("click", () => {
     return;
   }
   rigDlg.close();
+  let consoleType = consoleTypeFromKey(rigInputs.consoleType.value);
+  let fixture = null;
+  if (rigInputs.consoleType.value === LIBRARY) {
+    fixture = rigLib.profile();
+    if (!fixture) { rigRoomEl.textContent = "Pick a fixture and mode first."; return; }
+    consoleType = { mount: fixture.mount, color: fixture.color };
+  }
   rememberConsoleType(rigInputs.consoleType.value);
   setPlacing(true, {
     type: cfg.type, size: cfg.size, count: cfg.count, tilt: cfg.tilt, yaw: cfg.yaw,
-    consoleType: consoleTypeFromKey(rigInputs.consoleType.value),
+    consoleType, fixture, universe: readUniverse(sd("rigUniverse")),
   });
 });
 
@@ -1885,7 +1943,17 @@ const consoleStatusEl = document.getElementById("consoleStatus");
 
 const sortedConsoleInstruments = () => [...consoleLink.instruments()].sort((a, b) => a.channelStart - b.channelStart);
 const consoleInstrumentById = (id) => consoleLink.instruments().find((c) => c.id === id) ?? null;
-const chRange = (c) => `Ch ${c.channelStart}${c.channelEnd > c.channelStart ? `–${c.channelEnd}` : ""}`;
+/** Channel as shown: "45", or "2/45" (universe/channel) when the console has several universes. */
+const addr = (ch) => (consoleLink.universes > 1 ? `${Math.floor((ch - 1) / 512) + 1}/${((ch - 1) % 512) + 1}` : String(ch));
+/** "2/45" or "45" → channel number (null if invalid). */
+function parseAddr(text) {
+  const m = /^\s*(?:(\d+)\s*\/\s*)?(\d+)\s*$/.exec(String(text));
+  if (!m) return null;
+  const u = m[1] ? Number(m[1]) : 1;
+  const a = Number(m[2]);
+  return u >= 1 && u <= 8 && a >= 1 && a <= 512 ? (u - 1) * 512 + a : null;
+}
+const chRange = (c) => `Ch ${addr(c.channelStart)}${c.channelEnd > c.channelStart ? `–${addr(c.channelEnd)}` : ""}`;
 
 function updateConsoleStatus() {
   const live = consoleLink.live;
@@ -1947,6 +2015,7 @@ function linkSectionHtml(inst) {
   return `
     <div class="fields link-fields">
       <div class="subhead">Console link</div>
+      ${L.fixture ? `<label>Fixture</label><div class="hint" style="margin:0">${escapeHtml(`${L.fixture.manufacturer} ${L.fixture.model}`)} · ${escapeHtml(L.fixture.mode)} · ${L.fixture.channels.length} ch</div>` : ""}
       <label>Instrument</label>
       <select data-link="target">
         ${opt("", "— not linked —")}
@@ -1956,10 +2025,10 @@ function linkSectionHtml(inst) {
       </select>
       ${L.start ? `
       <label>Start ch</label>
-      <input type="number" min="1" max="512" step="1" data-link="start" value="${L.start}"${L.consoleId ? ' disabled title="Set by the console instrument"' : ""} />
+      <input type="text" data-link="start" value="${addr(L.start)}" title="Start channel: 45, or universe/channel like 2/45"${L.consoleId ? ' disabled' : ""} />
       <label>Layout</label>
       <div class="layout">
-        ${L.layout.map((a, k) => `<label class="lay"><span>${L.start + k}</span><select data-layout="${k}">${attrOpts(a)}</select></label>`).join("")}
+        ${L.layout.map((a, k) => `<label class="lay" title="${escapeHtml(L.fixture?.channels[k]?.name ?? "")}"><span>${addr(L.start + k)}</span><select data-layout="${k}">${attrOpts(a)}</select></label>`).join("")}
         <div class="lay-btns">
           <button type="button" data-link-act="add" title="Add a channel">+ ch</button>
           <button type="button" data-link-act="remove" title="Remove the last channel">− ch</button>
@@ -2013,13 +2082,17 @@ function bindLinkControls() {
     if (inst.link.owned && v !== inst.link.consoleId) consoleLink.unregister([inst.link.consoleId]);
     if (v === "") inst.link = { consoleId: null, start: null, layout: [] };
     else if (v === "manual") inst.link = { consoleId: null, start: inst.link.start ?? 1, layout: inst.link.layout.length ? inst.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
-    else linkToConsoleInstrument(inst, consoleInstrumentById(v));
+    else {
+      const fixture = inst.link.fixture;
+      linkToConsoleInstrument(inst, consoleInstrumentById(v));
+      inst.link.fixture = fixture ?? null;
+    }
     afterLinkChange();
   });
   inspectorEl.querySelector('[data-link="start"]')?.addEventListener("change", (e) => {
-    const v = Math.round(Number(e.target.value));
-    if (!Number.isFinite(v)) return;
-    inst.link.start = clamp(v, 1, 512);
+    const v = parseAddr(e.target.value);
+    if (v == null) { e.target.value = addr(inst.link.start); return; }
+    inst.link.start = v;
     afterLinkChange();
   });
   inspectorEl.querySelectorAll("[data-layout]").forEach((el) => {
@@ -2037,11 +2110,13 @@ function bindLinkControls() {
         const key = inspectorEl.querySelector("[data-reg-type]")?.value;
         rememberConsoleType(key);
         L.register = consoleTypeFromKey(key);
+        L.universe = lastUniverse();
         requestRegistrations();
       }
       if (el.dataset.linkAct === "preset") {
         const ci = consoleInstrumentById(L.consoleId);
-        if (ci) linkToConsoleInstrument(inst, ci);
+        if (L.fixture) L.layout = L.fixture.channels.map((c) => c.attr);
+        else if (ci) linkToConsoleInstrument(inst, ci);
       }
       afterLinkChange();
     });
@@ -2065,7 +2140,7 @@ function syncDmxRows(inst) {
     const ch = chans.get(a);
     const faders = ch ? consoleLink.fadersFor(ch) : [];
     const chan = ch
-      ? `<span class="chan${faders.length ? " on" : ""}" data-ch="${ch}" title="${faders.length ? `DMX ${ch} ← fader ${faders.join(", ")}` : `DMX ${ch} · no fader patched`} · ⌥-click to trace">${ch}${faders.length ? ` F${faders.join(",")}` : ""}</span>`
+      ? `<span class="chan${faders.length ? " on" : ""}" data-ch="${ch}" title="${faders.length ? `DMX ${addr(ch)} ← fader ${faders.join(", ")}` : `DMX ${addr(ch)} · no fader patched`} · ⌥-click to trace">${addr(ch)}${faders.length ? ` F${faders.join(",")}` : ""}</span>`
       : "";
     el.innerHTML = `<span>${unit}</span>${chan}`;
   });
@@ -2096,8 +2171,46 @@ const CONSOLE_TYPE_KEY = "unnaturallight.stage.consoleType";
 const lastConsoleType = () => { try { return localStorage.getItem(CONSOLE_TYPE_KEY) || "movable/multi"; } catch { return "movable/multi"; } };
 const rememberConsoleType = (key) => { try { localStorage.setItem(CONSOLE_TYPE_KEY, key); } catch { /* storage unavailable */ } };
 
+const LIBRARY = "library";
+
+// Universe choice for registering (shown when the console has several).
+const UNIVERSE_KEY = "unnaturallight.stage.universe";
+const sd = (id) => document.getElementById(id);
+const lastUniverse = () => { try { return Number(localStorage.getItem(UNIVERSE_KEY)) || null; } catch { return null; } };
+
+function fillUniverses(select) {
+  const n = consoleLink.universes;
+  select.closest("[data-universe-row]").hidden = n < 2;
+  const last = lastUniverse();
+  select.innerHTML = `<option value="">First with room</option>` +
+    Array.from({ length: n }, (_, i) => `<option value="${i + 1}"${last === i + 1 ? " selected" : ""}>Universe ${i + 1}</option>`).join("");
+}
+
+/** The chosen universe (remembered), or null for "first with room". */
+function readUniverse(select) {
+  const u = Number(select.value) || null;
+  try { localStorage.setItem(UNIVERSE_KEY, u ? String(u) : ""); } catch { /* storage unavailable */ }
+  return consoleLink.universes > 1 ? u : null;
+}
+
 function fillConsoleTypes(select) {
-  select.innerHTML = CONSOLE_TYPES.map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("");
+  const types = [...CONSOLE_TYPES.slice(0, -1), { key: LIBRARY, label: "From fixture library…" }, CONSOLE_TYPES[CONSOLE_TYPES.length - 1]];
+  select.innerHTML = types.map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("");
+}
+
+/**
+ * Show a fixture picker under a console-type select while "From fixture
+ * library…" is chosen. Returns () => the picked profile (or null).
+ */
+function libraryPickerFor(select, container) {
+  let picker = null;
+  const sync = () => {
+    const on = select.value === LIBRARY;
+    container.hidden = !on;
+    if (on && !picker) picker = createFixturePicker(container, { onChange: () => {} });
+  };
+  select.addEventListener("change", sync);
+  return { sync, profile: () => (select.value === LIBRARY ? picker?.profile ?? null : null) };
 }
 
 /** Lights asked for but not answered yet (stage id → give-up timer). */
@@ -2109,16 +2222,17 @@ function requestRegistrations() {
   for (const inst of state.instruments) {
     const t = inst.link.register;
     if (!t || registering.has(inst.id)) continue;
-    const layout = LAYOUT_PRESETS[consoleTypeKey(t)];
+    const layout = registerLayout(inst.link, t);
     requests.push({
       stageId: inst.id,
       name: inst.name,
       mount: t.mount,
       color: t.color,
       width: layout.length,
-      labels: layout.map((a) => DMX_SHORT[a]),
-      values: layout.map((a) => inst.dmx[a]),
+      labels: registerLabels(inst.link, t),
+      values: layout.map((a) => (a ? inst.dmx[a] : 0)),
       group: rigOf(inst)?.name ?? null,
+      universe: inst.link.universe ?? null,
     });
     registering.set(inst.id, setTimeout(() => registering.delete(inst.id), 5000));
   }
@@ -2142,7 +2256,7 @@ function onRegistered(results) {
       failed.push(`${inst.name}: ${r.error}`);
       continue;
     }
-    inst.link = { consoleId: r.consoleId, start: r.start, layout: [...LAYOUT_PRESETS[consoleTypeKey(type)]], owned: true, type, register: null };
+    inst.link = { consoleId: r.consoleId, start: r.start, layout: registerLayout(inst.link, type), owned: true, type, register: null, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null };
   }
   renderInspector();
   changed();
@@ -2154,21 +2268,39 @@ const placeDlg = /** @type {HTMLDialogElement} */ (document.getElementById("plac
 const placeTypeEl = document.getElementById("placeType");
 /** Console type for the instrument being placed (null = stage only). */
 let placeType = null;
+/** Real fixture for the instrument being placed (null = generic). */
+let placeFixture = null;
+/** Universe the instrument being placed registers in (null = first with room). */
+let placeUniverse = null;
+const placeLib = libraryPickerFor(placeTypeEl, document.getElementById("placeLib"));
 
 function togglePlaceInstrument() {
   if (placing) { setPlacing(false); return; }
   fillConsoleTypes(placeTypeEl);
+  placeLib.sync();
+  fillUniverses(sd("placeUniverse"));
   placeDlg.showModal();
 }
 
 document.getElementById("placeForm").addEventListener("submit", (e) => {
   e.preventDefault();
+  placeFixture = null;
+  if (placeTypeEl.value === LIBRARY) {
+    const p = placeLib.profile();
+    if (!p) { document.getElementById("placeLibMsg").textContent = "Pick a fixture and mode first."; return; }
+    placeFixture = p;
+    placeType = { mount: p.mount, color: p.color };
+  } else {
+    placeType = consoleTypeFromKey(placeTypeEl.value);
+  }
   rememberConsoleType(placeTypeEl.value);
-  placeType = consoleTypeFromKey(placeTypeEl.value);
+  placeUniverse = readUniverse(sd("placeUniverse"));
+  document.getElementById("placeLibMsg").textContent = "";
   placeDlg.close();
   setPlacing(true);
 });
 document.getElementById("placeClose").addEventListener("click", () => placeDlg.close());
+const rigLib = libraryPickerFor(rigInputs.consoleType, document.getElementById("rigLib"));
 placeDlg.addEventListener("click", (e) => { if (e.target === placeDlg) placeDlg.close(); });
 
 // ---------------------------------------------------------------------
@@ -2189,12 +2321,15 @@ function traceLights() {
     notes: { dimmer: `${Math.round(i.intensity * 100)}%`, pan: `${i.pan}°`, tilt: `${i.tilt}°`, zoom: `${i.beam}°` },
     consoleId: i.link.consoleId,
     consoleName: i.link.consoleId ? consoleInstrumentById(i.link.consoleId)?.name ?? null : null,
+    // Real fixture channel names (per channel, from the start channel), if it's a library fixture.
+    channelNames: i.link.fixture ? i.link.fixture.channels.map((c) => c.name) : null,
+    fixture: i.link.fixture ? `${i.link.fixture.manufacturer} ${i.link.fixture.model} · ${i.link.fixture.mode}` : null,
   }));
 }
 
 function traceSnapshot() {
-  const { levels, faders, mix } = consoleLink.traceInfo();
-  return { live: consoleLink.live, levels, faders, mix, consoleInstruments: consoleLink.instruments(), stageInstruments: traceLights() };
+  const { levels, faders, mix, universes } = consoleLink.traceInfo();
+  return { live: consoleLink.live, levels, faders, mix, universes, consoleInstruments: consoleLink.instruments(), stageInstruments: traceLights() };
 }
 
 function showTrace(target, e) {

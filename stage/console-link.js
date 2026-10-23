@@ -47,6 +47,8 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
   let faderInfo = null;
   /** Master / submasters / crossfade and transition names (for traces). */
   let mix = null;
+  /** The console setlist's universe count (channel 513 = universe 2/1). */
+  let universes = 1;
   /** channel → the value the console and stage agree on (heard or sent) */
   const synced = new Map();
   /** channel → { value, until }: just sent from the stage */
@@ -63,6 +65,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     if (Array.isArray(msg.instruments)) instruments = msg.instruments;
     faderInfo = Array.isArray(msg.faderInfo) ? msg.faderInfo : null;
     mix = msg.mix ?? null;
+    universes = Number.isInteger(msg.universes) && msg.universes >= 1 ? msg.universes : 1;
     onLevels();
   });
   bus?.postMessage({ type: "hello" });
@@ -73,11 +76,13 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     },
     /** The console's instruments (live, or from its saved session). */
     instruments: () => instruments,
+    /** Universes in the console's setlist (1 while offline / unknown). */
+    get universes() { return universes; },
     /** Fader numbers patched to a channel ([] = none / unknown). */
     fadersFor: (channel) => faders.get(channel) ?? [],
     /** What the console last sent, for traces (null while offline). */
     traceInfo() {
-      return this.live ? { levels, faders: faderInfo, mix } : { levels: null, faders: null, mix: null };
+      return this.live ? { levels, faders: faderInfo, mix, universes } : { levels: null, faders: null, mix: null, universes };
     },
     /** Ask the console to create instruments (+ patch / name free faders) for lights. */
     register(requests) {

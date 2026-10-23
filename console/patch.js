@@ -7,7 +7,43 @@ const LEGACY_KEYS = [
 ];
 
 export const FADER_COUNT = 256;
-export const DMX_CHANNEL_MAX = 512;
+/** Channels per DMX universe (one Enttec DMX USB Pro each). */
+export const UNIVERSE_SIZE = 512;
+/** Most universes a setlist can have. */
+export const MAX_UNIVERSES = 8;
+/**
+ * Channels are numbered continuously across universes: universe 2 channel 1
+ * is 513. Shown as "2/1" once there's more than one universe.
+ */
+export const DMX_CHANNEL_MAX = UNIVERSE_SIZE * MAX_UNIVERSES;
+
+let universeCount = 1;
+/** The current setlist's universe count (1…MAX_UNIVERSES); set by app.js. */
+export function setUniverseCount(n) {
+  universeCount = Math.max(1, Math.min(MAX_UNIVERSES, Math.round(Number(n)) || 1));
+}
+export const getUniverseCount = () => universeCount;
+/** Highest channel in use with the current universe count. */
+export const channelLimit = () => universeCount * UNIVERSE_SIZE;
+export const universeOf = (channel) => Math.floor((channel - 1) / UNIVERSE_SIZE) + 1;
+export const addressOf = (channel) => ((channel - 1) % UNIVERSE_SIZE) + 1;
+/** First channel of a universe. */
+export const universeStart = (universe) => (universe - 1) * UNIVERSE_SIZE + 1;
+
+/** 45 → "45" (one universe) · 557 → "2/45" (several). */
+export function formatAddress(channel) {
+  return universeCount > 1 ? `${universeOf(channel)}/${addressOf(channel)}` : String(channel);
+}
+
+/** "2/45" → 557 · "45" → 45 · invalid / beyond the universes → null. */
+export function parseAddress(text) {
+  const m = /^\s*(?:(\d+)\s*\/\s*)?(\d+)\s*$/.exec(String(text));
+  if (!m) return null;
+  const universe = m[1] ? Number(m[1]) : 1;
+  const address = Number(m[2]);
+  if (universe < 1 || universe > universeCount || address < 1 || address > UNIVERSE_SIZE) return null;
+  return universeStart(universe) + address - 1;
+}
 /** Channels shown on the main-page Channels meter row. */
 export const CHANNEL_METER_COUNT = 256;
 export const MIN_ROWS = 2;
@@ -103,8 +139,8 @@ export function normalizeFaderPatch(value) {
 export function formatChannelLabel(targets) {
   const list = normalizeFaderPatch(targets);
   if (list.length === 0) return "—";
-  if (list.length === 1) return `Ch${list[0].channel}`;
-  if (list.length === 2) return `${list[0].channel},${list[1].channel}`;
+  if (list.length === 1) return `Ch${formatAddress(list[0].channel)}`;
+  if (list.length === 2) return `${formatAddress(list[0].channel)},${formatAddress(list[1].channel)}`;
   return `${list.length}ch`;
 }
 
@@ -112,7 +148,7 @@ export function formatChannelLabel(targets) {
 export function formatChannelTooltip(targets) {
   const list = normalizeFaderPatch(targets);
   if (list.length === 0) return "Unpatched";
-  return list.map((t) => `Ch${t.channel}@${t.max}`).join(", ");
+  return list.map((t) => `Ch${formatAddress(t.channel)}@${t.max}`).join(", ");
 }
 
 /** Scale a fader level (0–255) by a target max (0–255). */

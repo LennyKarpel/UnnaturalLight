@@ -821,6 +821,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.universe-controls { display: inline-flex; align-items: center; gap: 0.3rem; }
+.universe-controls select,
+.meter-universe {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid #2d3340;
+  border-radius: 4px;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+}
+.universe-btn { min-width: 2.6rem; }
+
 button.connected {
   border-color: #3d6b45;
   background: linear-gradient(180deg, #243528, #162018);

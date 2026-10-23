@@ -4,6 +4,7 @@ import {
   MIN_ROWS,
   defaultPatch,
   normalizeFaderPatch,
+  MAX_UNIVERSES,
 } from "./patch.js";
 import {
   normalizeInstrumentGroups,
@@ -152,6 +153,12 @@ export function normalizeFaderNames(names) {
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
+/** Universe count (1…MAX_UNIVERSES); older setlists have one. */
+export function normalizeUniverses(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.max(1, Math.min(MAX_UNIVERSES, n)) : 1;
+}
+
 export function serializeSetlist(state) {
   const tunes = normalizeTunes(state.tunes);
   const active = resolveActiveTune(tunes, state.activeTuneId);
@@ -170,6 +177,7 @@ export function serializeSetlist(state) {
     fadeTime: FADE_TIMES.includes(Number(state.fadeTime))
       ? Number(state.fadeTime)
       : 4,
+    universes: normalizeUniverses(state.universes),
     fromRow: state.fromRow,
     toRow: state.toRow,
     selectedRow: state.selectedRow ?? 0,
@@ -290,6 +298,7 @@ export function parseSetlist(data) {
   const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
   // Legacy setlist-level field; live GO uses each transition’s fadeTime.
   const fadeTime = legacyFadeTime;
+  const universes = normalizeUniverses(obj.universes);
   let fromRow = clampInt(Number(obj.fromRow ?? 0), 0, transitionCount - 1);
   let toRow = (fromRow + 1) % transitionCount;
   const selectedRow = clampInt(
@@ -306,6 +315,7 @@ export function parseSetlist(data) {
     fromSub,
     toSub,
     fadeTime,
+    universes,
     fromRow,
     toRow,
     selectedRow,

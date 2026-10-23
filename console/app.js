@@ -11,6 +11,15 @@ import {
   formatChannelTooltip,
   makeTarget,
   scaledLevel,
+  UNIVERSE_SIZE,
+  MAX_UNIVERSES,
+  setUniverseCount,
+  channelLimit,
+  universeOf,
+  addressOf,
+  universeStart,
+  formatAddress,
+  parseAddress,
 } from "./patch.js";
 import {
   createInstrument,
@@ -57,9 +66,13 @@ import {
   saveSession,
   setlistSnapshot,
   TRANSITION_FADE_TIMES,
+  normalizeUniverses,
 } from "./setlist.js";
 
-const dmx = new EnttecDmxPro();
+/** One DMX USB Pro per universe (index 0 = universe 1). */
+const outputs = Array.from({ length: MAX_UNIVERSES }, () => new EnttecDmxPro());
+/** Universe 1's output (status messages ask whether it's connected). */
+const dmx = outputs[0];
 
 /**
  * @template {typeof Element} C
@@ -86,6 +99,7 @@ function blankSetlistState(setlistName = defaultSetlistName()) {
     navOrder: [...DEFAULT_NAV_ORDER],
     master: 100,
     cross: 0,
+    universes: 1,
     fromSub: 100,
     toSub: 100,
     fadeTime: 4,
@@ -112,6 +126,9 @@ const boot = initialState();
 let setlistName = normalizeSetlistName(boot.setlistName);
 /** @type {string[]} */
 let navOrder = normalizeNavOrder(boot.navOrder);
+/** Universes in this setlist (1…MAX_UNIVERSES); channels go up to universes × 512. */
+let universes = normalizeUniverses(boot.universes);
+setUniverseCount(universes);
 /** @type {import("./tunes.js").Tune[]} */
 let tunes = normalizeTunes(boot.tunes);
 /** @type {string} */
@@ -254,7 +271,8 @@ const channelMenuSub = requireEl("channelMenuSub", HTMLElement);
 const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
 const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
 const CHANNEL_GROUP_SIZE = 32;
-const CHANNEL_GROUP_COUNT = Math.ceil(512 / CHANNEL_GROUP_SIZE);
+/** Channel-picker groups of 32 across every universe in the setlist. */
+const channelGroupCount = () => Math.ceil(channelLimit() / CHANNEL_GROUP_SIZE);
 const pageTunes = requireEl("page-tunes", HTMLElement);
 const pageChannels = requireEl("page-channels", HTMLElement);
 const pageInstruments = requireEl("page-instruments", HTMLElement);
@@ -711,14 +729,19 @@ function patchedChannelSet() {
   return set;
 }
 
-/** Channels shown on the Channels tab: 1–256, plus any higher patched channels. */
+/** Universe shown by the Channels-tab meters. */
+let meterUniverse = 1;
+
+/** Channels shown on the Channels tab: 1–256 of the chosen universe, plus any higher patched channels in it. */
 function displayedChannels() {
   const patched = patchedChannelSet();
-  let highest = CHANNEL_METER_COUNT;
+  const first = universeStart(meterUniverse);
+  const lastInUniverse = first + UNIVERSE_SIZE - 1;
+  let highest = first + CHANNEL_METER_COUNT - 1;
   for (const channel of patched) {
-    if (channel > highest) highest = channel;
+    if (channel > highest && channel <= lastInUniverse) highest = channel;
   }
-  return Array.from({ length: highest }, (_, i) => i + 1);
+  return Array.from({ length: highest - first + 1 }, (_, i) => first + i);
 }
 
 function refreshChannelRow() {
@@ -738,7 +761,7 @@ function refreshChannelRow() {
 function renderChannelRow() {
   const channels = displayedChannels();
   const patched = patchedChannelSet();
-  channelRowKey = `${channels.length}:${[...patched].sort((a, b) => a - b).join(",")}`;
+  channelRowKey = `${meterUniverse}:${universes}:${channels.length}:${[...patched].sort((a, b) => a - b).join(",")}`;
   channelLevelsEl.replaceChildren();
   channelLevelsEl.hidden = false;
   channelLevelsEl.style.setProperty("--channel-count", String(channels.length));
@@ -755,7 +778,7 @@ function renderChannelRow() {
 
     const label = document.createElement("div");
     label.className = "label";
-    label.textContent = `Ch${channel}`;
+    label.textContent = `Ch${formatAddress(channel)}`;
 
     const value = document.createElement("div");
     value.className = "value";
@@ -782,7 +805,7 @@ function renderChannelRow() {
 function ensureChannelRow() {
   const patched = patchedChannelSet();
   const channels = displayedChannels();
-  const key = `${channels.length}:${[...patched].sort((a, b) => a - b).join(",")}`;
+  const key = `${meterUniverse}:${universes}:${channels.length}:${[...patched].sort((a, b) => a - b).join(",")}`;
   if (key !== channelRowKey) renderChannelRow();
 }
 
@@ -792,11 +815,13 @@ function persistSession() {
 }
 
 function pushToDmx({ persist = true } = {}) {
-  dmx.blackout();
+  for (const output of outputs) output.blackout();
 
   const byChannel = computeChannelLevels();
   for (const [channel, level] of byChannel) {
-    dmx.setChannel(channel, level);
+    // Each universe has its own output; channels beyond the setlist's universes aren't sent.
+    const u = universeOf(channel);
+    if (u <= universes) outputs[u - 1].setChannel(addressOf(channel), level);
   }
 
   refreshLiveRow();
@@ -1864,7 +1889,7 @@ function updateConflictBanner() {
 }
 
 function nextFreeChannel(used = new Set(patch.flatMap((t) => t.map((x) => x.channel)))) {
-  for (let ch = 1; ch <= 512; ch++) {
+  for (let ch = 1; ch <= channelLimit(); ch++) {
     if (!used.has(ch)) return ch;
   }
   return 1;
@@ -1872,7 +1897,7 @@ function nextFreeChannel(used = new Set(patch.flatMap((t) => t.map((x) => x.chan
 
 function channelGroupRange(groupIndex) {
   const start = groupIndex * CHANNEL_GROUP_SIZE + 1;
-  const end = Math.min(start + CHANNEL_GROUP_SIZE - 1, 512);
+  const end = Math.min(start + CHANNEL_GROUP_SIZE - 1, channelLimit());
   return { start, end };
 }
 
@@ -1921,7 +1946,7 @@ function makeChannelPickerButton({
 
   const sync = () => {
     const ch = getChannel();
-    setPickerButtonLabel(btn, `Ch${ch}`);
+    setPickerButtonLabel(btn, `Ch${formatAddress(ch)}`);
     btn.dataset.channel = String(ch);
     const label =
       typeof ariaLabel === "function"
@@ -2281,7 +2306,7 @@ function pickChannel({ anchor, current }) {
         item.className = "popup-menu-item";
         if (ch === current) item.classList.add("is-current");
         item.setAttribute("role", "menuitem");
-        item.textContent = `Ch ${ch}`;
+        item.textContent = `Ch ${formatAddress(ch)}`;
         item.addEventListener("click", (event) => {
           event.stopPropagation();
           finish(ch);
@@ -2307,14 +2332,17 @@ function pickChannel({ anchor, current }) {
       hideSubmenu();
 
       if (q !== "") {
-        if (/^\d+$/.test(q)) {
-          for (let ch = 1; ch <= 512; ch++) {
-            if (!String(ch).startsWith(q)) continue;
+        // "45" matches channel 45 in every universe; "2/4" matches 2/4, 2/40, …
+        const typed = /^(?:(\d+)\s*\/\s*)?(\d+)$/.exec(q);
+        if (typed) {
+          for (let ch = 1; ch <= channelLimit(); ch++) {
+            if (typed[1] && universeOf(ch) !== Number(typed[1])) continue;
+            if (!String(addressOf(ch)).startsWith(typed[2])) continue;
             const item = document.createElement("button");
             item.type = "button";
             item.className = "popup-menu-item";
             if (ch === current) item.classList.add("is-current");
-            item.textContent = `Ch ${ch}`;
+            item.textContent = `Ch ${formatAddress(ch)}`;
             item.addEventListener("click", (event) => {
               event.stopPropagation();
               finish(ch);
@@ -2325,7 +2353,7 @@ function pickChannel({ anchor, current }) {
         return;
       }
 
-      for (let g = 0; g < CHANNEL_GROUP_COUNT; g++) {
+      for (let g = 0; g < channelGroupCount(); g++) {
         const { start, end } = channelGroupRange(g);
         const containsCurrent = current >= start && current <= end;
         const item = document.createElement("button");
@@ -2333,7 +2361,7 @@ function pickChannel({ anchor, current }) {
         item.className = "popup-menu-item";
         if (containsCurrent) item.classList.add("is-current");
         item.setAttribute("role", "menuitem");
-        item.innerHTML = `<span>${start}–${end}</span><span class="popup-menu-caret">›</span>`;
+        item.innerHTML = `<span>${formatAddress(start)}–${formatAddress(end)}</span><span class="popup-menu-caret">›</span>`;
         item.addEventListener("pointerenter", () => showSubmenu(g, item));
         item.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -2354,8 +2382,8 @@ function pickChannel({ anchor, current }) {
     const onFilterKeydown = (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        const n = Number(channelMenuFilter.value.trim());
-        if (Number.isInteger(n) && n >= 1 && n <= 512) finish(n);
+        const n = parseAddress(channelMenuFilter.value.trim());
+        if (n != null) finish(n);
         else {
           const first = channelMenuList.querySelector(".popup-menu-item");
           if (first instanceof HTMLElement) first.click();
@@ -3008,6 +3036,7 @@ function currentSetlistState() {
     fromSub,
     toSub,
     fadeTime,
+    universes,
     fromRow,
     toRow,
     selectedRow,
@@ -3312,7 +3341,7 @@ function commitInstrumentRange(instrument, start, count, startPicker, countPicke
     startPicker?.sync();
     countPicker?.sync();
     setStatus(
-      `Start + channel count must fit in 1–${MAX_INSTRUMENT_CHANNELS} within DMX 1–512`,
+      `Start + channel count (up to ${MAX_INSTRUMENT_CHANNELS}) must fit inside one universe`,
       "error",
     );
     return false;
@@ -4607,9 +4636,129 @@ function openSceneRowMenu(anchor, index) {
   });
 }
 
-function setUiConnected(connected) {
-  connectBtn.textContent = connected ? "Disconnect" : "Connect DMX Pro";
-  connectBtn.classList.toggle("connected", connected);
+function setUiConnected() {
+  renderOutputs();
+}
+
+// ---------------------------------------------------------------------
+// Universes: count, one DMX USB Pro each, Channels-tab meter universe
+// ---------------------------------------------------------------------
+
+const universeControls = document.createElement("span");
+universeControls.className = "universe-controls";
+connectBtn.after(universeControls);
+
+/** Header: universe count, and a Connect button per universe (one DMX USB Pro each). */
+function renderOutputs() {
+  universeControls.replaceChildren();
+  const count = document.createElement("select");
+  count.className = "universe-count";
+  count.title = "Universes in this setlist (one DMX USB Pro each)";
+  for (let n = 1; n <= MAX_UNIVERSES; n++) {
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = n === 1 ? "1 universe" : `${n} universes`;
+    count.append(opt);
+  }
+  count.value = String(universes);
+  count.addEventListener("change", () => setUniverses(Number(count.value)));
+  universeControls.append(count);
+
+  // One universe: the original single button. Several: one per universe.
+  connectBtn.hidden = universes > 1;
+  connectBtn.textContent = dmx.connected ? "Disconnect" : "Connect DMX Pro";
+  connectBtn.classList.toggle("connected", dmx.connected);
+  if (universes > 1) {
+    for (let u = 1; u <= universes; u++) {
+      const out = outputs[u - 1];
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "universe-btn";
+      btn.classList.toggle("connected", out.connected);
+      btn.textContent = `U${u}`;
+      btn.title = out.connected ? `Universe ${u}: connected (click to disconnect)` : `Universe ${u}: connect its DMX USB Pro`;
+      btn.disabled = !("serial" in navigator);
+      btn.addEventListener("click", () => void toggleOutput(u));
+      universeControls.append(btn);
+    }
+  }
+  syncMeterUniverse();
+}
+
+async function toggleOutput(u) {
+  const out = outputs[u - 1];
+  const label = universes > 1 ? `Universe ${u}` : "DMX Pro";
+  if (out.connected) {
+    await out.disconnect();
+    renderOutputs();
+    setStatus(`${label} disconnected`, "idle");
+    return;
+  }
+  try {
+    setStatus(universes > 1 ? `Select the DMX USB Pro for universe ${u}…` : "Select the DMX USB Pro…", "idle");
+    await out.connect();
+    pushToDmx();
+    renderOutputs();
+    setStatus(`${label} connected`, "connected");
+  } catch (err) {
+    renderOutputs();
+    setStatus(err instanceof Error ? err.message : "Connection failed", "error");
+    console.error(err);
+  }
+}
+
+/** Change the universe count; refuses to drop universes that are in use. */
+function setUniverses(n) {
+  const next = Math.max(1, Math.min(MAX_UNIVERSES, Math.round(n) || 1));
+  if (next < universes) {
+    const limit = next * UNIVERSE_SIZE;
+    const usedPatch = patch.some((targets) => targets.some((t) => t.channel > limit));
+    const usedBy = instruments.find((i) => i.channelEnd > limit);
+    if (usedPatch || usedBy) {
+      setStatus(
+        `Universe ${next + 1}+ is in use (${usedBy ? usedBy.name : "patched faders"}) — move or remove that first`,
+        "error",
+      );
+      renderOutputs();
+      return;
+    }
+    for (let u = next + 1; u <= MAX_UNIVERSES; u++) if (outputs[u - 1].connected) void outputs[u - 1].disconnect();
+  }
+  universes = next;
+  setUniverseCount(universes);
+  if (meterUniverse > universes) meterUniverse = universes;
+  renderOutputs();
+  renderInstruments();
+  suggestInstrumentFormStart();
+  renderPatchTable();
+  refreshFaderPatchLabels();
+  renderChannelRow();
+  ensureInstrumentFormStartPicker();
+  pushToDmx();
+  setStatus(universes === 1 ? "1 universe" : `${universes} universes · channels shown as universe/channel`, "idle");
+}
+
+/** Channels tab: which universe the meters show. */
+const meterUniverseSelect = document.createElement("select");
+meterUniverseSelect.className = "meter-universe";
+meterUniverseSelect.title = "Universe shown by the meters";
+meterUniverseSelect.addEventListener("change", () => {
+  meterUniverse = Number(meterUniverseSelect.value) || 1;
+  renderChannelRow();
+});
+pageChannels.querySelector(".page-intro")?.append(meterUniverseSelect);
+
+function syncMeterUniverse() {
+  meterUniverseSelect.hidden = universes < 2;
+  meterUniverseSelect.replaceChildren(
+    ...Array.from({ length: universes }, (_, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i + 1);
+      opt.textContent = `Universe ${i + 1}`;
+      return opt;
+    }),
+  );
+  meterUniverseSelect.value = String(meterUniverse);
 }
 
 function showPage(name) {
@@ -4658,27 +4807,7 @@ function routeFromHash() {
   }
 }
 
-connectBtn.addEventListener("click", async () => {
-  if (dmx.connected) {
-    await dmx.disconnect();
-    setUiConnected(false);
-    setStatus("Disconnected", "idle");
-    return;
-  }
-
-  try {
-    setStatus("Select the DMX USB Pro…", "idle");
-    await dmx.connect();
-    pushToDmx();
-    setUiConnected(true);
-    setStatus("Connected", "connected");
-  } catch (err) {
-    setUiConnected(false);
-    const message = err instanceof Error ? err.message : "Connection failed";
-    setStatus(message, "error");
-    console.error(err);
-  }
-});
+connectBtn.addEventListener("click", () => void toggleOutput(1));
 
 function syncMasterUi() {
   masterInput.value = String(Math.round(master));
@@ -4818,6 +4947,9 @@ function applySetlist(state) {
   fromSub = state.fromSub ?? 100;
   toSub = state.toSub ?? 100;
   fadeTime = FADE_TIMES.includes(state.fadeTime) ? state.fadeTime : 4;
+  universes = normalizeUniverses(state.universes);
+  setUniverseCount(universes);
+  renderOutputs();
   fromRow = state.fromRow;
   toRow = state.toRow;
   selectedRow = state.selectedRow ?? 0;
@@ -4952,8 +5084,8 @@ instrumentForm.addEventListener("submit", (event) => {
     if (!range) {
       setStatus(
         qty > 1
-          ? `Only room for ${i} of ${qty} — start + channels must fit in DMX 1–512`
-          : `Start + channel count must fit in 1–${MAX_INSTRUMENT_CHANNELS} within DMX 1–512`,
+          ? `Only room for ${i} of ${qty} — each instrument must fit inside one universe`
+          : `Start + channel count (up to ${MAX_INSTRUMENT_CHANNELS}) must fit inside one universe`,
         "error",
       );
       instrumentFormStartPicker?.el.focus();
@@ -5048,6 +5180,7 @@ renderRows();
 renderTunes();
 renderInstruments();
 renderPatchTable();
+renderOutputs();
 routeFromHash();
 persistSession();
 markClean();
@@ -5069,8 +5202,9 @@ function registerFromStage(requests) {
     const fail = (error) => results.push({ stageId: req.stageId, ok: false, error });
     const width = Math.max(1, Math.min(MAX_INSTRUMENT_CHANNELS, Math.round(req.width) || 1));
     if (instruments.length >= MAX_INSTRUMENTS) { fail(`the console already has its maximum of ${MAX_INSTRUMENTS} instruments`); continue; }
-    const range = nextAvailableRange(instruments, width);
-    if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left`); continue; }
+    const universe = Number.isInteger(req.universe) && req.universe >= 1 && req.universe <= universes ? req.universe : null;
+    const range = nextAvailableRange(instruments, width, universe);
+    if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left${universe ? ` in universe ${universe}` : ""}`); continue; }
     const free = [];
     for (let i = 0; i < FADER_COUNT && free.length < width; i++) if (isUnpatched(patch[i])) free.push(i);
     if (free.length < width) { fail(`needs ${width} free fader${width > 1 ? "s" : ""}, only ${free.length} left`); continue; }
@@ -5174,6 +5308,7 @@ startStageLink({
     patch: patch[i],
   })),
   mix: () => ({ master, fromSub, toSub, cross, fromName: sceneName(fromRow), toName: sceneName(toRow) }),
+  universes: () => universes,
   // Which fader / channel meter / Patch card / instrument row an element
   // belongs to (for ⌥-click trace).
   traceTarget: (el) => {

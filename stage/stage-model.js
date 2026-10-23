@@ -2,6 +2,7 @@
 // format. No DOM or rendering here; stage.js owns the view and UI state.
 
 import * as THREE from "three";
+import { normalizeProfile } from "./fixture-library.js";
 
 // ---------------------------------------------------------------------
 // Coordinates (metres): origin at floor centre of the box.
@@ -27,7 +28,10 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
 /** @typedef {{
  *   consoleId: string | null, start: number | null, layout: (DmxAttr | null)[],
  *   owned?: boolean, type?: ConsoleType | null, register?: ConsoleType | null,
+ *   fixture?: import("./fixture-library.js").FixtureProfile | null,
  * }} Link
+ * fixture: a real fixture mode (Open Fixture Library) this light is; its
+ * channels set the console instrument's channels and fader names.
  * owned: the stage registered this console instrument (deleting the light
  * removes it there too); type: its console type; register: waiting to be
  * registered in the console (e.g. placed while the console was closed).
@@ -298,12 +302,39 @@ function normalizeLink(raw) {
   const layout = Array.isArray(raw?.layout) ? raw.layout.slice(0, 16).map((a) => (DMX_ATTRS.includes(a) ? a : null)) : [];
   return {
     consoleId: typeof raw?.consoleId === "string" ? raw.consoleId : null,
-    start: Number.isInteger(start) && start >= 1 && start <= 512 ? start : null,
+    // Channels run continuously across universes (513 = universe 2/1), up to 8 universes.
+    start: Number.isInteger(start) && start >= 1 && start <= 4096 ? start : null,
     layout,
+    /** Universe to register in (null = the console picks the first with room). */
+    universe: Number.isInteger(raw?.universe) && raw.universe >= 1 && raw.universe <= 8 ? raw.universe : null,
     owned: raw?.owned === true,
     type: normalizeType(raw?.type),
     register: normalizeType(raw?.register),
+    fixture: normalizeProfile(raw?.fixture),
   };
+}
+
+/** Channel layout (attribute per channel) a link registers with. */
+export function registerLayout(link, type) {
+  return link.fixture ? link.fixture.channels.map((c) => c.attr) : [...LAYOUT_PRESETS[consoleTypeKey(type)]];
+}
+
+/** Console fader name suffix per channel ("Dim", or the fixture's channel name). */
+export function registerLabels(link, type) {
+  return link.fixture ? link.fixture.channels.map((c) => c.name) : LAYOUT_PRESETS[consoleTypeKey(type)].map((a) => DMX_SHORT[a]);
+}
+
+/** Use a fixture's real pan / tilt / zoom ranges (and full dimmer if it has none). */
+export function applyFixture(inst, p) {
+  if (p.panLimit != null) inst.panLimit = clamp(p.panLimit, 0, 360);
+  if (p.tiltLimit != null) inst.tiltLimit = clamp(p.tiltLimit, 0, 180);
+  if (p.zoomMin != null && p.zoomMax != null) {
+    inst.zoomMin = clamp(Math.min(p.zoomMin, p.zoomMax), 1, 120);
+    inst.zoomMax = clamp(Math.max(p.zoomMin, p.zoomMax), inst.zoomMin, 120);
+  }
+  if (!p.channels.some((c) => c.attr === "dimmer")) inst.dmx.dimmer = 255;
+  inst.link.fixture = p;
+  deriveFromDmx(inst);
 }
 
 export function normalizeInstrument(raw, i) {
@@ -494,6 +525,10 @@ export function normalizeRig(raw, i) {
     count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_INSTRUMENTS),
     /** Console type its members are registered as (null = stage only). */
     consoleType: normalizeType(raw?.consoleType),
+    /** Real fixture its members are (null = generic). */
+    fixture: normalizeProfile(raw?.fixture),
+    /** Universe its members register in (null = first with room). */
+    universe: Number.isInteger(raw?.universe) && raw.universe >= 1 && raw.universe <= 8 ? raw.universe : null,
   };
 }
 

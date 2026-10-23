@@ -101,6 +101,26 @@ button.danger:hover { border-color: var(--warn); color: var(--warn); }
   display: flex; flex-wrap: wrap; gap: 4px 14px;
   pointer-events: none;
 }
+/* Keys-bar keys are buttons (the bar itself lets clicks through to the 3D view). */
+.keys .kbd {
+  pointer-events: auto;
+  font: inherit;
+  font-family: var(--mono);
+  border: 1px solid var(--track);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 2px;
+  color: var(--ink);
+  background: var(--panel);
+  cursor: pointer;
+  line-height: 1.35;
+}
+.keys .kbd:hover { border-color: var(--accent); color: var(--accent); }
+.keys-color { display: inline-flex; align-items: center; gap: 5px; pointer-events: auto; cursor: pointer; }
+.keys-color input[type="color"] { width: 26px; height: 18px; padding: 0; border: 1px solid var(--track); border-radius: 3px; background: none; cursor: pointer; }
+.keys-color input[type="color"]:disabled { opacity: 0.4; cursor: default; }
+.keys .kbd:active, .keys .kbd.held { background: var(--accent); color: #1a1408; border-color: var(--accent); }
 kbd {
   font-family: var(--mono);
   border: 1px solid var(--track);
@@ -201,6 +221,15 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 .lay select { font-size: 11px; padding: 1px 2px; }
 .lay-btns { display: flex; gap: 4px; width: 100%; }
 .lay-btns button { padding: 1px 6px; font-size: 11px; }
+.lib { margin-top: 8px; }
+.lib select[size] { width: 100%; }
+.lib-info { margin-top: 6px; font-size: 12px; color: var(--muted); max-height: 180px; overflow: auto; }
+.lib-info[data-tone="warn"], .hint.warn { color: var(--accent); }
+.lib-chans { margin: 4px 0; padding-left: 0; list-style: none; columns: 2; font-family: var(--mono); font-size: 11px; }
+.lib-chans span { color: var(--muted); display: inline-block; min-width: 18px; }
+.lib-chans b { color: #6fbf7a; font-weight: 500; }
+.lib-note { font-size: 11px; }
+dialog.dlg { max-height: 90vh; overflow: auto; }
 .ctx-menu {
   position: fixed; z-index: 20; min-width: 160px;
   background: var(--panel-2); border: 1px solid var(--track); border-radius: 6px;

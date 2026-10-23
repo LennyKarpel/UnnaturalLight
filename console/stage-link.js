@@ -18,7 +18,7 @@
  * and the current values (../shared/trace.js).
  */
 
-import { DMX_CHANNEL_MAX } from "./patch.js";
+import { UNIVERSE_SIZE } from "./patch.js";
 import { createTracePopover } from "../shared/trace.js";
 
 const CHANNEL_NAME = "unnaturallight.dmx";
@@ -33,6 +33,7 @@ const HEARTBEAT_MS = 1000;
  *   groups: () => { id: string, name: string }[],
  *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
  *   mix: () => { master: number, fromSub: number, toSub: number, cross: number, fromName: string, toName: string },
+ *   universes: () => number,
  *   traceTarget: (el: EventTarget | null) => ({ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "instrument", id: string } | null),
  *   afterSet: () => void,
  *   register: (requests: { stageId: string, name: string, mount: string, color: string, labels: string[], width: number, group: string | null }[]) => { stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[],
@@ -63,8 +64,9 @@ export function notifyStage() {
 }
 
 function outputLevels() {
-  const levels = new Array(DMX_CHANNEL_MAX).fill(0);
-  for (const [channel, level] of api.levels()) levels[channel - 1] = level;
+  // Every universe in the setlist, end to end (channel 513 = universe 2/1).
+  const levels = new Array(api.universes() * UNIVERSE_SIZE).fill(0);
+  for (const [channel, level] of api.levels()) if (channel <= levels.length) levels[channel - 1] = level;
   return levels;
 }
 
@@ -75,6 +77,7 @@ function traceSnapshot() {
     levels: outputLevels(),
     faders: api.faderInfo(),
     mix: api.mix(),
+    universes: api.universes(),
     consoleInstruments: api.instruments(),
     stageInstruments,
   };
@@ -99,6 +102,7 @@ function send() {
     groups: api.groups().map(({ id, name }) => ({ id, name })),
     faderInfo: api.faderInfo(),
     mix: api.mix(),
+    universes: api.universes(),
   });
 }
 

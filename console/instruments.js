@@ -1,11 +1,11 @@
-import { DMX_CHANNEL_MAX } from "./patch.js";
+import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress } from "./patch.js";
 
 export const MOUNT_TYPES = /** @type {const} */ (["fixed", "movable"]);
 export const COLOR_MODES = /** @type {const} */ (["single", "multi"]);
 export const MAX_INSTRUMENTS = 64;
 export const MAX_INSTRUMENT_GROUPS = 32;
-/** Max DMX channels per instrument (UI picker 1…16). */
-export const MAX_INSTRUMENT_CHANNELS = 16;
+/** Max DMX channels per instrument (UI picker 1…64; real moving lights often use 20–40). */
+export const MAX_INSTRUMENT_CHANNELS = 64;
 /** Max instruments to create in one add-form submit. */
 export const MAX_INSTRUMENT_QTY = 16;
 
@@ -101,6 +101,8 @@ export function normalizeChannelSpan(start, count) {
   }
   const channelEnd = channelStart + n - 1;
   if (channelEnd > DMX_CHANNEL_MAX) return null;
+  // A block stays inside one universe.
+  if (universeOf(channelStart) !== universeOf(channelEnd)) return null;
   return { channelStart, channelEnd };
 }
 
@@ -144,20 +146,24 @@ export function findRangeConflict(instruments, start, end, excludeId) {
 }
 
 /**
- * First free contiguous block of `width` channels in 1…512.
+ * First free contiguous block of `width` channels, inside one universe
+ * (only `universe` if given; else the first universe with room).
  * @param {Pick<Instrument, "channelStart" | "channelEnd">[]} instruments
  * @param {number} [width]
  * @returns {{ channelStart: number, channelEnd: number } | null}
  */
-export function nextAvailableRange(instruments, width = 1) {
-  const size = Math.max(1, Math.min(DMX_CHANNEL_MAX, Math.round(Number(width) || 1)));
+export function nextAvailableRange(instruments, width = 1, universe = null) {
+  const size = Math.max(1, Math.min(UNIVERSE_SIZE, Math.round(Number(width) || 1)));
   const occupied = new Array(DMX_CHANNEL_MAX + 1).fill(false);
   for (const instrument of instruments) {
     for (let ch = instrument.channelStart; ch <= instrument.channelEnd; ch++) {
       if (ch >= 1 && ch <= DMX_CHANNEL_MAX) occupied[ch] = true;
     }
   }
-  for (let start = 1; start <= DMX_CHANNEL_MAX - size + 1; start++) {
+  const first = universe ? universeStart(universe) : 1;
+  const last = universe ? universeStart(universe) + UNIVERSE_SIZE - 1 : channelLimit();
+  for (let start = first; start <= last - size + 1; start++) {
+    if (universeOf(start) !== universeOf(start + size - 1)) continue;
     let free = true;
     for (let ch = start; ch < start + size; ch++) {
       if (occupied[ch]) {
@@ -360,8 +366,8 @@ export function createInstrument({
 /** @param {Pick<Instrument, "channelStart" | "channelEnd">} instrument */
 export function formatChannelRange(instrument) {
   const count = channelCount(instrument);
-  if (count === 1) return `Ch${instrument.channelStart}`;
-  return `Ch${instrument.channelStart}×${count}`;
+  if (count === 1) return `Ch${formatAddress(instrument.channelStart)}`;
+  return `Ch${formatAddress(instrument.channelStart)}×${count}`;
 }
 
 /** @param {MountType} mount */

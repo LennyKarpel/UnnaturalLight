@@ -88,6 +88,21 @@
         background: var(--track);
       }
       .divider:hover::after, body.dragging .divider::after { background: var(--accent); width: 2px; left: 2px; }
+      /* Grip in the middle: a small pill, so it reads as draggable. */
+      .divider .grip {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 44px;
+        border-radius: 6px;
+        background: var(--panel);
+        border: 1px solid var(--track);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .divider:hover .grip, body.dragging .divider .grip { border-color: var(--accent); }
       body.dragging iframe { pointer-events: none; }
       body.dragging { cursor: col-resize; user-select: none; }
     </style>
@@ -106,7 +121,7 @@
     </header>
     <main class="panes" id="panes">
       <iframe id="stageFrame" src="stage/stage.html" title="Stage"></iframe>
-      <div class="divider" id="divider" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+      <div class="divider" id="divider" role="separator" aria-orientation="vertical" title="Drag to resize · double-click for 50 / 50"><span class="grip"></span></div>
       <iframe id="consoleFrame" src="console/console.html" title="Console" allow="serial"></iframe>
     </main>
 

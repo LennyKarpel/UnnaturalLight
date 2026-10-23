@@ -37,16 +37,18 @@
       <div class="view" id="view">
         <div class="hud" id="hud" hidden></div>
         <div class="banner" id="banner" hidden>Click a surface (inside) · ⌥-click a wall (outside) · click the ground off the box · or click the plan · Esc cancels</div>
+        <!-- The keys here are buttons: click = press the key (hold to repeat, ⇧-click = ×10). -->
         <div class="keys">
-          <span><kbd>←</kbd><kbd>→</kbd> pan</span>
-          <span><kbd>↑</kbd><kbd>↓</kbd> tilt</span>
-          <span><kbd>+</kbd><kbd>−</kbd> intensity</span>
-          <span><kbd>[</kbd><kbd>]</kbd> beam</span>
+          <span><button type="button" class="kbd" data-key="ArrowLeft" data-code="ArrowLeft" data-repeat title="Pan left (hold to repeat · ⇧-click ×10)">←</button><button type="button" class="kbd" data-key="ArrowRight" data-code="ArrowRight" data-repeat title="Pan right (hold to repeat · ⇧-click ×10)">→</button> pan</span>
+          <span><button type="button" class="kbd" data-key="ArrowUp" data-code="ArrowUp" data-repeat title="Tilt up (hold to repeat · ⇧-click ×10)">↑</button><button type="button" class="kbd" data-key="ArrowDown" data-code="ArrowDown" data-repeat title="Tilt down (hold to repeat · ⇧-click ×10)">↓</button> tilt</span>
+          <span><button type="button" class="kbd" data-key="=" data-code="Equal" data-repeat title="Dimmer up (hold to repeat · ⇧-click ×10)">+</button><button type="button" class="kbd" data-key="-" data-code="Minus" data-repeat title="Dimmer down (hold to repeat · ⇧-click ×10)">−</button> intensity</span>
+          <span><button type="button" class="kbd" data-key="[" data-code="BracketLeft" data-repeat title="Beam narrower (hold to repeat · ⇧-click ×10)">[</button><button type="button" class="kbd" data-key="]" data-code="BracketRight" data-repeat title="Beam wider (hold to repeat · ⇧-click ×10)">]</button> beam</span>
+          <span><label class="keys-color" title="Color of the selected instrument(s)"><input type="color" id="keysColor" disabled /> color</label></span>
           <span>0–255 · <kbd>⇧</kbd> ×10</span>
-          <span><kbd>Tab</kbd> next</span>
-          <span><kbd>A</kbd> place</span>
+          <span><button type="button" class="kbd" data-key="Tab" data-code="Tab" title="Select the next instrument">Tab</button> next</span>
+          <span><button type="button" class="kbd" data-key="a" data-code="KeyA" title="Place an instrument">A</button> place</span>
           <span>right-click an instrument for more</span>
-          <span><kbd>⌫</kbd> delete · <kbd>⌘Z</kbd> undo</span>
+          <span><button type="button" class="kbd" data-key="Backspace" data-code="Backspace" title="Delete the selected instrument(s)">⌫</button> delete · <button type="button" class="kbd" data-key="z" data-code="KeyZ" data-meta title="Undo the last delete">⌘Z</button> undo</span>
         </div>
       </div>
 
@@ -85,6 +87,12 @@
             <label for="placeType">Console type</label>
             <select id="placeType"></select>
           </div>
+          <div class="fields" data-universe-row hidden>
+            <label for="placeUniverse">Universe</label>
+            <select id="placeUniverse"></select>
+          </div>
+          <div class="lib" id="placeLib" hidden></div>
+          <p class="hint warn" id="placeLibMsg"></p>
           <p class="hint">The console gets a matching instrument at the next free DMX block, with free faders patched to its channels and named after the light. "Stage only" doesn't touch the console.</p>
           <div class="buttons">
             <button class="primary" type="submit">Place…</button>
@@ -113,6 +121,11 @@
           <label for="rigConsoleType">Console type</label>
           <select id="rigConsoleType" title="Each instrument in the rig gets a console instrument of this type (grouped under the rig's name)"></select>
         </div>
+        <div class="fields" data-universe-row hidden>
+          <label for="rigUniverse">Universe</label>
+          <select id="rigUniverse"></select>
+        </div>
+        <div class="lib" id="rigLib" hidden></div>
         <p class="hint" id="rigHelp"></p>
         <p class="hint" id="rigRoom"></p>
         <div class="buttons">
