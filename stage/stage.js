@@ -7,7 +7,12 @@ import {
   isInside, axisHits, createInstrument, parseStage, serializeStage,
   SURFACES, TRANSPARENT_OPACITY, DEFAULT_TRANSPARENT,
   RIG_TYPES, PALETTE, applyRig, rigLowestY, rigOutline, normalizeRig,
+  DMX_ATTRS, DMX_LABELS, setDmx, setColorHex, deriveFromDmx, homeInstrument,
+  rgbFromHex, zoomFromBeam, layoutFor, linkChannels, LAYOUT_PRESETS,
+  CONSOLE_TYPES, consoleTypeFromKey, consoleTypeKey, DMX_SHORT,
 } from "./stage-model.js";
+import { createConsoleLink } from "./console-link.js";
+import { createTracePopover } from "../shared/trace.js";
 
 /** @typedef {import("./stage-model.js").Instrument} Instrument */
 /** @typedef {import("./stage-model.js").Rig} Rig */
@@ -134,9 +139,12 @@ function makeRigMember(rig, k, like) {
   Object.assign(inst, {
     name: `${rig.name} · ${k + 1}`,
     rigId: rig.id, rigIndex: k,
-    color: like.color, intensity: like.intensity, beam: like.beam,
-    panLimit: like.panLimit, tiltLimit: like.tiltLimit,
+    panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax,
   });
+  const { dimmer, red, green, blue, zoom } = like.dmx;
+  Object.assign(inst.dmx, { dimmer, red, green, blue, zoom });
+  deriveFromDmx(inst);
+  inst.link.register = rig.consoleType ?? null;
   return inst;
 }
 
@@ -155,7 +163,11 @@ function addRigAt(cfg, x, y, z) {
   // Keep an upright / tilted rig above the floor.
   const low = rigLowestY(rig);
   if (low < PLACE_OFFSET) rig.y = round(rig.y + PLACE_OFFSET - low, 2);
-  const like = { color: PALETTE[n % PALETTE.length], intensity: 0.75, beam: 24, panLimit: 270, tiltLimit: 135 };
+  const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
+  const like = {
+    dmx: { dimmer: 191, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
+  };
   const members = Array.from({ length: rig.count }, (_, k) => makeRigMember(rig, k, like));
   state.rigs.push(rig);
   state.instruments.push(...members);
@@ -164,6 +176,7 @@ function addRigAt(cfg, x, y, z) {
   state.selected = members.map((m) => m.id);
   renderInspector();
   changed();
+  requestRegistrations();
 }
 
 /** Change how many instruments a rig has; extras copy the first member's look. */
@@ -173,14 +186,17 @@ function setRigCount(rig, n) {
   n = clamp(Math.round(n), 2, max);
   if (n === members.length) return;
   if (n < members.length) {
-    const drop = new Set(members.slice(n).map((m) => m.id));
+    const dropped = members.slice(n);
+    const drop = new Set(dropped.map((m) => m.id));
     state.instruments = state.instruments.filter((i) => !drop.has(i.id));
     state.selected = state.selected.filter((id) => !drop.has(id));
+    consoleLink.unregister(dropped.filter((m) => m.link.owned).map((m) => m.link.consoleId));
   } else {
     for (let k = members.length; k < n; k++) state.instruments.push(makeRigMember(rig, k, members[0]));
   }
   rig.count = n;
   syncRig(rig);
+  requestRegistrations();
 }
 
 function setRigField(rig, k, raw) {
@@ -747,6 +763,7 @@ view.addEventListener("pointerup", (e) => {
   if (d) {
     renderer.domElement.style.cursor = "grab";
     if (d.active) changed();
+    else if (e.altKey) showTrace({ kind: "light", id: d.id }, e);
     else select(d.id, d.shift);
     return;
   }
@@ -1071,6 +1088,7 @@ plan.addEventListener("pointerdown", (e) => {
     return;
   }
   const best = planInstrumentAt(px, py);
+  if (e.altKey && best) { showTrace({ kind: "light", id: best.id }, e); return; }
   if (!best) { if (!e.shiftKey) select(null); return; }
   if (e.shiftKey) { select(best.id, true); return; }
   if (!state.selected.includes(best.id)) select(best.id);
@@ -1119,9 +1137,9 @@ function renderList() {
       <span class="swatch" style="background:${inst.color}"></span>
       <span></span>
       <div class="bar"><div style="width:${Math.round(inst.intensity * 100)}%"></div></div>
-      <span class="pct">${Math.round(inst.intensity * 100)}</span>`;
+      <span class="pct" title="Dimmer (0–255)">${inst.dmx.dimmer}</span>`;
     row.children[1].textContent = inst.name + (isInside(inst, state.box) ? "" : "  ·  outside");
-    row.addEventListener("click", (e) => select(inst.id, e.shiftKey));
+    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "light", id: inst.id }, e) : select(inst.id, e.shiftKey)));
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(inst.id, e.clientX, e.clientY); });
     listEl.append(row);
   }
@@ -1160,13 +1178,13 @@ function renderInspector() {
     inspectorEl.innerHTML = `
       <h2>Inspector <span>${sel.length} selected</span></h2>
       <div class="fields">
+        <label>Dimmer</label>
+        <div class="slider"><input type="range" min="0" max="255" step="1" data-multi="dimmer" /><input type="number" min="0" max="255" data-multi="dimmer" /></div>
         <label>Color</label>
         <input type="color" data-multi="color" />
-        <label>Intensity</label>
-        <div class="slider"><input type="range" min="0" max="100" step="1" data-multi="intensity" /><input type="number" min="0" max="100" data-multi="intensity" /></div>
       </div>
-      <p class="hint">Arrow keys, +/− and [ ] apply to every selected instrument, each relative to its own zero.</p>
-      ${commonRig(sel) ? rigSectionHtml(commonRig(sel)) : ""}
+      <p class="hint">Sets every selected instrument. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
+      ${commonRig(sel) ? rigSectionHtml(commonRig(sel)) + rigLinkHtml() : ""}
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
         <button data-act="aimSpot" title="Point all selected beams at one spot (T)">Aim at spot</button>
@@ -1185,8 +1203,6 @@ function renderInspector() {
     <h2>Inspector${rig ? ` <span>in ${escapeHtml(rig.name)}</span>` : ""}</h2>
     <div class="fields">
       <label>Name</label><input type="text" data-k="name" />
-      <label>Color</label>
-      <input type="color" data-k="color" />
       <label>Position</label>
       <div class="xyz">
         <input type="number" step="0.1" data-k="x" title="x (− SR · + SL)" ${lock} />
@@ -1195,20 +1211,27 @@ function renderInspector() {
       </div>
       <label></label><div class="hint" style="margin:0">x · height · z (m)${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
 
-      <label>Intensity</label>
-      <div class="slider"><input type="range" min="0" max="100" step="1" data-k="intensityPct" /><input type="number" min="0" max="100" data-k="intensityPct" /></div>
-      <label>Beam °</label>
-      <div class="slider"><input type="range" min="2" max="120" step="1" data-k="beam" /><input type="number" min="2" max="120" data-k="beam" /></div>
+      <div class="subhead">DMX values · 0–255</div>
+      ${DMX_ATTRS.map((a) => `
+      <label>${DMX_LABELS[a]}</label>
+      <div class="dmx-row">
+        <input type="range" min="0" max="255" step="1" data-d="${a}" />
+        <input type="number" min="0" max="255" step="1" data-d="${a}" />
+        <span class="dmx-note" data-note="${a}"></span>
+      </div>`).join("")}
+      <label>Color</label>
+      <input type="color" data-k="color" title="Sets red / green / blue" />
 
-      <div class="subhead">Relative to zero</div>
-      <label>Pan °</label>
-      <div class="slider"><input type="range" step="0.5" data-k="pan" /><input type="number" step="0.5" data-k="pan" /></div>
-      <label>Tilt °</label>
-      <div class="slider"><input type="range" step="0.5" data-k="tilt" /><input type="number" step="0.5" data-k="tilt" /></div>
-      <label>Limits ±</label>
+      <div class="subhead">Ranges (what 0 and 255 mean)</div>
+      <label>Pan / Tilt ±°</label>
       <div class="xyz">
-        <input type="number" min="0" max="360" step="5" data-k="panLimit" title="pan limit ±°" />
-        <input type="number" min="0" max="180" step="5" data-k="tiltLimit" title="tilt limit ±°" />
+        <input type="number" min="0" max="360" step="5" data-k="panLimit" title="pan: 0 = −limit, 128 = zero, 255 = +limit" />
+        <input type="number" min="0" max="180" step="5" data-k="tiltLimit" title="tilt: 0 = −limit, 128 = zero, 255 = +limit" />
+      </div>
+      <label>Zoom °</label>
+      <div class="xyz">
+        <input type="number" min="1" max="120" step="1" data-k="zoomMin" title="beam angle at zoom 0" />
+        <input type="number" min="1" max="120" step="1" data-k="zoomMax" title="beam angle at zoom 255" />
       </div>
 
       <div class="subhead">Zero frame (world)</div>
@@ -1220,7 +1243,8 @@ function renderInspector() {
       </div>
       <div class="readout" id="readout"></div>
     </div>
-    ${rig ? rigSectionHtml(rig) : ""}
+    ${linkSectionHtml(sel[0])}
+    ${rig ? rigSectionHtml(rig) + rigLinkHtml() : ""}
     <div class="buttons">
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
       <button data-act="aimSpot" title="Point the beam at a spot you click (T)">Aim at spot</button>
@@ -1236,22 +1260,20 @@ function renderInspector() {
 }
 
 function getField(inst, k) {
-  if (k === "intensityPct") return Math.round(inst.intensity * 100);
   if (k.startsWith("base.")) return inst.base[k.slice(5)];
   return inst[k];
 }
 
 function setField(inst, k, raw) {
   if (k === "name") { inst.name = raw; return; }
-  if (k === "color") { inst.color = raw; return; }
+  if (k === "color") { setColorHex(inst, raw); return; }
   const v = Number(raw);
   if (!Number.isFinite(v)) return;
-  if (k === "intensityPct") inst.intensity = clamp(v / 100, 0, 1);
-  else if (k === "beam") inst.beam = clamp(v, 2, 120);
-  else if (k === "pan") inst.pan = clamp(v, -inst.panLimit, inst.panLimit);
-  else if (k === "tilt") inst.tilt = clamp(v, -inst.tiltLimit, inst.tiltLimit);
-  else if (k === "panLimit") { inst.panLimit = clamp(v, 0, 360); inst.pan = clamp(inst.pan, -inst.panLimit, inst.panLimit); }
-  else if (k === "tiltLimit") { inst.tiltLimit = clamp(v, 0, 180); inst.tilt = clamp(inst.tilt, -inst.tiltLimit, inst.tiltLimit); }
+  // Ranges change what the same 0–255 values mean, so re-derive afterwards.
+  if (k === "panLimit") { inst.panLimit = clamp(v, 0, 360); deriveFromDmx(inst); }
+  else if (k === "tiltLimit") { inst.tiltLimit = clamp(v, 0, 180); deriveFromDmx(inst); }
+  else if (k === "zoomMin") { inst.zoomMin = clamp(v, 1, Math.min(120, inst.zoomMax)); deriveFromDmx(inst); }
+  else if (k === "zoomMax") { inst.zoomMax = clamp(v, Math.max(1, inst.zoomMin), 120); deriveFromDmx(inst); }
   else if (k.startsWith("base.")) inst.base[k.slice(5)] = v;
   else if (k === "x" || k === "y" || k === "z") inst[k] = v;
 }
@@ -1266,20 +1288,31 @@ function bindInspector() {
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
-  inspectorEl.querySelectorAll("[data-multi]").forEach((el) => {
+  inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     el.addEventListener("input", () => {
-      if (el.dataset.multi === "color") {
-        for (const inst of selectedInstruments()) inst.color = el.value;
-        changed();
-        return;
-      }
-      const v = clamp(Number(el.value) / 100, 0, 1);
-      if (!Number.isFinite(v)) return;
-      for (const inst of selectedInstruments()) inst.intensity = v;
+      const inst = selectedInstruments()[0];
+      const v = Number(el.value);
+      if (!inst || el.value === "" || !Number.isFinite(v)) return;
+      setDmx(inst, el.dataset.d, v);
       changed();
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
+  inspectorEl.querySelectorAll("[data-multi]").forEach((el) => {
+    el.addEventListener("input", () => {
+      if (el.dataset.multi === "color") {
+        for (const inst of selectedInstruments()) setColorHex(inst, el.value);
+        changed();
+        return;
+      }
+      const v = Number(el.value);
+      if (el.value === "" || !Number.isFinite(v)) return;
+      for (const inst of selectedInstruments()) setDmx(inst, "dimmer", v);
+      changed();
+    });
+    if (el.type === "range") el.addEventListener("change", () => el.blur());
+  });
+  bindLinkControls();
   inspectorEl.querySelectorAll("[data-r]").forEach((el) => {
     el.addEventListener("input", () => {
       const rig = commonRig(selectedInstruments());
@@ -1315,8 +1348,8 @@ function syncInspector() {
   const rig = commonRig(sel);
   if (rig) syncRigFields(rig);
   if (sel.length > 1) {
-    const avg = Math.round((sel.reduce((s, i) => s + i.intensity, 0) / sel.length) * 100);
-    inspectorEl.querySelectorAll('[data-multi="intensity"]').forEach((el) => { if (el !== document.activeElement) el.value = String(avg); });
+    const avg = Math.round(sel.reduce((s, i) => s + i.dmx.dimmer, 0) / sel.length);
+    inspectorEl.querySelectorAll('[data-multi="dimmer"]').forEach((el) => { if (el !== document.activeElement) el.value = String(avg); });
     const colorEl = inspectorEl.querySelector('[data-multi="color"]');
     if (colorEl && colorEl !== document.activeElement) colorEl.value = sel[0].color;
     return;
@@ -1325,12 +1358,11 @@ function syncInspector() {
   if (!inst) return;
   inspectorEl.querySelectorAll("[data-k]").forEach((el) => {
     const k = el.dataset.k;
-    if (k === "pan") { el.min = String(-inst.panLimit); el.max = String(inst.panLimit); }
-    if (k === "tilt") { el.min = String(-inst.tiltLimit); el.max = String(inst.tiltLimit); }
     if (el === document.activeElement && el.type !== "range") return;
     const v = getField(inst, k);
     el.value = typeof v === "number" ? String(round(v)) : v;
   });
+  syncDmxRows(inst);
   const readout = inspectorEl.querySelector("#readout");
   if (readout) {
     const dir = beamDir(inst);
@@ -1358,11 +1390,11 @@ function renderHud() {
   const i = sel[0];
   hudEl.innerHTML = `
     <div class="name"></div>
-    <div class="row"><span>pan</span><span>${i.pan.toFixed(1)}°</span></div>
-    <div class="row"><span>tilt</span><span>${i.tilt.toFixed(1)}°</span></div>
-    <div class="row"><span>intensity</span><span>${Math.round(i.intensity * 100)}%</span></div>
-    <div class="row"><span>beam</span><span>${i.beam}°</span></div>
-    <div class="row"><span>color</span><span><span class="swatch hud-swatch" style="background:${i.color}"></span>${i.color}</span></div>
+    <div class="row"><span>dimmer</span><span>${i.dmx.dimmer} · ${Math.round(i.intensity * 100)}%</span></div>
+    <div class="row"><span>pan</span><span>${i.dmx.pan} · ${i.pan.toFixed(1)}°</span></div>
+    <div class="row"><span>tilt</span><span>${i.dmx.tilt} · ${i.tilt.toFixed(1)}°</span></div>
+    <div class="row"><span>zoom</span><span>${i.dmx.zoom} · ${i.beam}°</span></div>
+    <div class="row"><span>color</span><span><span class="swatch hud-swatch" style="background:${i.color}"></span>${i.dmx.red} ${i.dmx.green} ${i.dmx.blue}</span></div>
     ${flashRow}`;
   hudEl.querySelector(".name").textContent = i.name;
 }
@@ -1372,6 +1404,9 @@ function renderHud() {
 // ---------------------------------------------------------------------
 
 function changed({ list = true, inspector = true } = {}) {
+  pushToConsole();
+  publishStage();
+  trace?.refresh();
   syncScene();
   drawPlan();
   if (list) renderList();
@@ -1444,9 +1479,11 @@ function applyAim(p) {
 function addInstrumentAt(x, y, z) {
   if (state.instruments.length >= MAX_INSTRUMENTS) { setPlacing(false); return; }
   const inst = createInstrument(x, y, z, state.instruments.length, state.box);
+  inst.link.register = placeType;
   state.instruments.push(inst);
   setPlacing(false);
   select(inst.id);
+  requestRegistrations();
 }
 
 // ---------------------------------------------------------------------
@@ -1521,11 +1558,17 @@ function duplicateSelected() {
     return;
   }
   // Copies are free instruments, even when copied from a rig.
-  const copies = src.map((inst) => ({ ...structuredClone(inst), id: newId(), name: `${inst.name} copy`, x: round(inst.x + 0.5), rigId: null, rigIndex: 0 }));
+  const copies = src.map((inst) => ({
+    ...structuredClone(inst), id: newId(), name: `${inst.name} copy`, x: round(inst.x + 0.5),
+    rigId: null, rigIndex: 0,
+    // Copies get their own console instrument if the original came from the stage.
+    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.owned ? inst.link.type : inst.link.register },
+  }));
   state.instruments.push(...copies);
   state.selected = copies.map((c) => c.id);
   renderInspector();
   changed();
+  requestRegistrations();
   if (src.length < wanted.length) setBanner(`Instrument limit reached (${MAX_INSTRUMENTS}): copied ${src.length} of ${wanted.length}`, 3000);
 }
 
@@ -1554,6 +1597,8 @@ function deleteSelected() {
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   state.instruments = state.instruments.filter((i) => !ids.has(i.id));
   state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
+  // Lights the stage registered leave the console too (their faders are freed).
+  consoleLink.unregister(removed.filter((r) => r.inst.link.owned).map((r) => r.inst.link.consoleId));
   select(null);
   const what = rigs.length === 1 && removed.every((r) => r.inst.rigId === rigs[0].id)
     ? rigs[0].name
@@ -1574,6 +1619,12 @@ function undoDelete() {
   // Re-insert in original order so each lands back at its old index.
   for (const { inst, index } of removed) state.instruments.splice(Math.min(index, state.instruments.length), 0, inst);
   rigs.forEach(syncRig);
+  // Their console instruments were removed on delete: register them again.
+  for (const { inst } of removed) {
+    if (!inst.link.owned) continue;
+    inst.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.type };
+  }
+  requestRegistrations();
   state.selected = removed.map((r) => r.inst.id).filter((id) => byId(id));
   renderInspector();
   changed();
@@ -1583,7 +1634,7 @@ function undoDelete() {
 
 function act(name) {
   const sel = selectedInstruments();
-  if (name === "home") sel.forEach((i) => { i.pan = 0; i.tilt = 0; });
+  if (name === "home") sel.forEach(homeInstrument);
   // A rig member's zero is set by its rig, so these skip rig members.
   const free = sel.filter((i) => !i.rigId);
   if (name === "zero") free.forEach(setZeroHere);
@@ -1609,13 +1660,13 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" || e.key === "Enter") t.blur();
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey && !settingsDlg.open && !rigDlg.open) {
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey && !settingsDlg.open && !rigDlg.open && !placeDlg.open) {
     e.preventDefault();
     undoDelete();
     return;
   }
   if (e.metaKey || e.ctrlKey) return;
-  if (settingsDlg.open || rigDlg.open) return;
+  if (settingsDlg.open || rigDlg.open || placeDlg.open) return;
 
   if (e.key === "Escape") {
     if (!ctxMenu.hidden) closeContextMenu();
@@ -1630,7 +1681,7 @@ window.addEventListener("keydown", (e) => {
     if (state.selected.length) { e.preventDefault(); deleteSelected(); }
     return;
   }
-  if (e.key === "a" || e.key === "A") { setPlacing(!placing); return; }
+  if (e.key === "a" || e.key === "A") { togglePlaceInstrument(); return; }
   if (e.code === "KeyF") { if (!e.repeat) startFlash(); e.preventDefault(); return; }
   if (e.key === "Tab" && state.instruments.length) {
     e.preventDefault();
@@ -1644,20 +1695,21 @@ window.addEventListener("keydown", (e) => {
   const sel = selectedInstruments();
   if (!sel.length) return;
 
-  const angleStep = e.altKey ? 0.1 : e.shiftKey ? 10 : 1;
-  const pctStep = e.altKey ? 0.01 : 0.05;
+  // Every value is 0–255: one key press = 1 step, ⇧ = 10.
+  const step = e.shiftKey ? 10 : 1;
+  const nudge = (attr, by) => sel.forEach((i) => setDmx(i, attr, i.dmx[attr] + by));
   let handled = true;
   // e.code is layout-independent; keeps ⇧/⌥ from changing the key we see.
   switch (e.code) {
-    case "ArrowLeft": sel.forEach((i) => { i.pan = clamp(round(i.pan + angleStep), -i.panLimit, i.panLimit); }); break;
-    case "ArrowRight": sel.forEach((i) => { i.pan = clamp(round(i.pan - angleStep), -i.panLimit, i.panLimit); }); break;
-    case "ArrowUp": sel.forEach((i) => { i.tilt = clamp(round(i.tilt + angleStep), -i.tiltLimit, i.tiltLimit); }); break;
-    case "ArrowDown": sel.forEach((i) => { i.tilt = clamp(round(i.tilt - angleStep), -i.tiltLimit, i.tiltLimit); }); break;
-    case "Equal": case "NumpadAdd": sel.forEach((i) => { i.intensity = clamp(round(i.intensity + pctStep), 0, 1); }); break;
-    case "Minus": case "NumpadSubtract": sel.forEach((i) => { i.intensity = clamp(round(i.intensity - pctStep), 0, 1); }); break;
-    case "BracketLeft": sel.forEach((i) => { i.beam = clamp(i.beam - (e.shiftKey ? 5 : 1), 2, 120); }); break;
-    case "BracketRight": sel.forEach((i) => { i.beam = clamp(i.beam + (e.shiftKey ? 5 : 1), 2, 120); }); break;
-    case "KeyH": sel.forEach((i) => { i.pan = 0; i.tilt = 0; }); break;
+    case "ArrowLeft": nudge("pan", step); break;
+    case "ArrowRight": nudge("pan", -step); break;
+    case "ArrowUp": nudge("tilt", step); break;
+    case "ArrowDown": nudge("tilt", -step); break;
+    case "Equal": case "NumpadAdd": nudge("dimmer", step); break;
+    case "Minus": case "NumpadSubtract": nudge("dimmer", -step); break;
+    case "BracketLeft": nudge("zoom", -step); break;
+    case "BracketRight": nudge("zoom", step); break;
+    case "KeyH": sel.forEach(homeInstrument); break;
     case "KeyZ": sel.filter((i) => !i.rigId).forEach(setZeroHere); break;
     default: handled = false;
   }
@@ -1683,7 +1735,7 @@ for (const [k, el] of Object.entries(boxInputs)) {
   });
 }
 
-document.getElementById("addBtn").addEventListener("click", (e) => { setPlacing(!placing); e.currentTarget.blur(); });
+document.getElementById("addBtn").addEventListener("click", (e) => { e.currentTarget.blur(); togglePlaceInstrument(); });
 
 document.getElementById("exportBtn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: "application/json" });
@@ -1766,6 +1818,7 @@ const rigInputs = {
   count: document.getElementById("rigCount"),
   tilt: document.getElementById("rigTilt"),
   yaw: document.getElementById("rigYaw"),
+  consoleType: document.getElementById("rigConsoleType"),
 };
 const rigRoomEl = document.getElementById("rigRoom");
 
@@ -1775,6 +1828,7 @@ document.getElementById("rigBtn").addEventListener("click", (e) => {
   const room = MAX_INSTRUMENTS - state.instruments.length;
   rigInputs.count.max = String(Math.max(2, room));
   rigRoomEl.textContent = `${room} of ${MAX_INSTRUMENTS} instrument slots free.`;
+  fillConsoleTypes(rigInputs.consoleType);
   rigDlg.showModal();
 });
 document.getElementById("rigClose").addEventListener("click", () => rigDlg.close());
@@ -1793,7 +1847,11 @@ document.getElementById("rigPlace").addEventListener("click", () => {
     return;
   }
   rigDlg.close();
-  setPlacing(true, { type: cfg.type, size: cfg.size, count: cfg.count, tilt: cfg.tilt, yaw: cfg.yaw });
+  rememberConsoleType(rigInputs.consoleType.value);
+  setPlacing(true, {
+    type: cfg.type, size: cfg.size, count: cfg.count, tilt: cfg.tilt, yaw: cfg.yaw,
+    consoleType: consoleTypeFromKey(rigInputs.consoleType.value),
+  });
 });
 
 /** Switching type relabels the size and loads that type's defaults and help. */
@@ -1809,6 +1867,353 @@ function syncRigDialogType() {
 rigInputs.type.innerHTML = Object.entries(RIG_TYPES).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join("");
 rigInputs.type.addEventListener("change", syncRigDialogType);
 syncRigDialogType();
+
+// ---------------------------------------------------------------------
+// Console link: stage instruments ↔ console instruments / DMX channels
+// ---------------------------------------------------------------------
+// A linked instrument has a start channel and a layout (which attribute
+// each channel drives). Values flow both ways for channels that have a
+// console fader patched: the console's output sets the stage, and changing
+// a value here moves that fader (see console-link.js for the rules).
+
+const consoleLink = createConsoleLink({
+  onLevels: () => applyConsoleLevels(),
+  onStageHello: () => publishStage(),
+  onRegistered: (results) => onRegistered(results),
+});
+const consoleStatusEl = document.getElementById("consoleStatus");
+
+const sortedConsoleInstruments = () => [...consoleLink.instruments()].sort((a, b) => a.channelStart - b.channelStart);
+const consoleInstrumentById = (id) => consoleLink.instruments().find((c) => c.id === id) ?? null;
+const chRange = (c) => `Ch ${c.channelStart}${c.channelEnd > c.channelStart ? `–${c.channelEnd}` : ""}`;
+
+function updateConsoleStatus() {
+  const live = consoleLink.live;
+  consoleStatusEl.textContent = live ? "Console · live" : "Console · offline";
+  consoleStatusEl.classList.toggle("on", live);
+  consoleStatusEl.title = live
+    ? "Linked values follow the console's faders, and changes here move them"
+    : "Open the console (console/console.html) in another tab to link";
+}
+setInterval(updateConsoleStatus, 1000);
+
+/** Take the console's current values for linked, patched channels. */
+function applyConsoleLevels() {
+  let moved = false;
+  for (const inst of state.instruments) {
+    // Follow the console instrument if its address was changed there.
+    const ci = inst.link.consoleId ? consoleInstrumentById(inst.link.consoleId) : null;
+    if (ci && ci.channelStart !== inst.link.start) { inst.link.start = ci.channelStart; moved = true; }
+    for (const { channel, attr } of linkChannels(inst)) {
+      const v = consoleLink.incoming(channel);
+      if (v != null && v !== inst.dmx[attr]) { setDmx(inst, attr, v); moved = true; }
+    }
+  }
+  updateConsoleStatus();
+  requestRegistrations();
+  if (moved) { syncScene(); drawPlan(); renderList(); save(); publishStage(); }
+  syncInspector();
+  renderHud();
+  trace.refresh();
+}
+
+/** Send values changed on the stage to the console (called from changed()). */
+function pushToConsole() {
+  const entries = [];
+  for (const inst of state.instruments) {
+    for (const { channel, attr } of linkChannels(inst)) entries.push({ channel, value: inst.dmx[attr] });
+  }
+  consoleLink.push(entries);
+}
+
+function linkToConsoleInstrument(inst, ci) {
+  if (!ci) return;
+  inst.link = { consoleId: ci.id, start: ci.channelStart, layout: layoutFor(ci.mount, ci.color, ci.channelEnd - ci.channelStart + 1) };
+}
+
+/** After (re)linking: take the console's values (it wins at link time), then redraw. */
+function afterLinkChange() {
+  renderInspector();
+  applyConsoleLevels();
+  changed();
+}
+
+function linkSectionHtml(inst) {
+  const L = inst.link;
+  const mode = L.consoleId ?? (L.start ? "manual" : "");
+  const opt = (v, text) => `<option value="${escapeHtml(v)}"${v === mode ? " selected" : ""}>${escapeHtml(text)}</option>`;
+  const missing = L.consoleId && !consoleInstrumentById(L.consoleId);
+  const attrOpts = (cur) => [`<option value="">—</option>`, ...DMX_ATTRS.map((a) => `<option value="${a}"${a === cur ? " selected" : ""}>${DMX_LABELS[a]}</option>`)].join("");
+  return `
+    <div class="fields link-fields">
+      <div class="subhead">Console link</div>
+      <label>Instrument</label>
+      <select data-link="target">
+        ${opt("", "— not linked —")}
+        ${sortedConsoleInstruments().map((c) => opt(c.id, `${c.name} · ${chRange(c)}`)).join("")}
+        ${missing ? opt(L.consoleId, "(not found in the console)") : ""}
+        ${opt("manual", "Manual address…")}
+      </select>
+      ${L.start ? `
+      <label>Start ch</label>
+      <input type="number" min="1" max="512" step="1" data-link="start" value="${L.start}"${L.consoleId ? ' disabled title="Set by the console instrument"' : ""} />
+      <label>Layout</label>
+      <div class="layout">
+        ${L.layout.map((a, k) => `<label class="lay"><span>${L.start + k}</span><select data-layout="${k}">${attrOpts(a)}</select></label>`).join("")}
+        <div class="lay-btns">
+          <button type="button" data-link-act="add" title="Add a channel">+ ch</button>
+          <button type="button" data-link-act="remove" title="Remove the last channel">− ch</button>
+          ${L.consoleId ? `<button type="button" data-link-act="preset" title="Reset to the preset for the console instrument's type">Preset</button>` : ""}
+        </div>
+      </div>` : ""}
+      ${!L.start ? `
+      <label>Register</label>
+      <div class="xyz">
+        <select data-reg-type>${CONSOLE_TYPES.filter((t) => t.key !== "none").map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("")}</select>
+        <button type="button" data-link-act="register" title="Create a console instrument for this light, with free faders patched to it">Register</button>
+      </div>` : ""}
+      <div class="readout" id="linkStatus"></div>
+    </div>`;
+}
+
+/** Rig only: link every member to consecutive console instruments. */
+function rigLinkHtml() {
+  return `
+    <div class="fields rig-fields">
+      <label>Link rig</label>
+      <select data-rig-link title="Link member 1 to the chosen console instrument, member 2 to the next one, …">
+        <option value="">Members in order, from…</option>
+        ${sortedConsoleInstruments().map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} · ${chRange(c)}</option>`).join("")}
+        <option value="__unlink">Unlink all members</option>
+      </select>
+    </div>`;
+}
+
+function linkRigFrom(rig, id) {
+  const members = rigMembers(rig);
+  if (id === "__unlink") {
+    members.forEach((m) => { m.link = { consoleId: null, start: null, layout: [] }; });
+  } else {
+    const list = sortedConsoleInstruments();
+    const first = list.findIndex((c) => c.id === id);
+    if (first < 0) return;
+    members.forEach((m, k) => linkToConsoleInstrument(m, list[first + k]));
+    const linked = Math.min(members.length, list.length - first);
+    if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console instruments`, 4000);
+  }
+  afterLinkChange();
+}
+
+function bindLinkControls() {
+  const sel = selectedInstruments();
+  const inst = sel.length === 1 ? sel[0] : null;
+  inspectorEl.querySelector('[data-link="target"]')?.addEventListener("change", (e) => {
+    const v = e.target.value;
+    // Moving off a console instrument the stage registered: remove it there.
+    if (inst.link.owned && v !== inst.link.consoleId) consoleLink.unregister([inst.link.consoleId]);
+    if (v === "") inst.link = { consoleId: null, start: null, layout: [] };
+    else if (v === "manual") inst.link = { consoleId: null, start: inst.link.start ?? 1, layout: inst.link.layout.length ? inst.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
+    else linkToConsoleInstrument(inst, consoleInstrumentById(v));
+    afterLinkChange();
+  });
+  inspectorEl.querySelector('[data-link="start"]')?.addEventListener("change", (e) => {
+    const v = Math.round(Number(e.target.value));
+    if (!Number.isFinite(v)) return;
+    inst.link.start = clamp(v, 1, 512);
+    afterLinkChange();
+  });
+  inspectorEl.querySelectorAll("[data-layout]").forEach((el) => {
+    el.addEventListener("change", () => {
+      inst.link.layout[Number(el.dataset.layout)] = el.value || null;
+      afterLinkChange();
+    });
+  });
+  inspectorEl.querySelectorAll("[data-link-act]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const L = inst.link;
+      if (el.dataset.linkAct === "add" && L.layout.length < 16) L.layout.push(null);
+      if (el.dataset.linkAct === "remove" && L.layout.length > 1) L.layout.pop();
+      if (el.dataset.linkAct === "register") {
+        const key = inspectorEl.querySelector("[data-reg-type]")?.value;
+        rememberConsoleType(key);
+        L.register = consoleTypeFromKey(key);
+        requestRegistrations();
+      }
+      if (el.dataset.linkAct === "preset") {
+        const ci = consoleInstrumentById(L.consoleId);
+        if (ci) linkToConsoleInstrument(inst, ci);
+      }
+      afterLinkChange();
+    });
+  });
+  inspectorEl.querySelector("[data-rig-link]")?.addEventListener("change", (e) => {
+    const rig = commonRig(selectedInstruments());
+    if (rig && e.target.value) linkRigFrom(rig, e.target.value);
+  });
+}
+
+/** DMX rows in the inspector: values, units, and which channel / fader drives each. */
+function syncDmxRows(inst) {
+  const chans = new Map(linkChannels(inst).map(({ channel, attr }) => [attr, channel]));
+  inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
+    if (el === document.activeElement && el.type !== "range") return;
+    el.value = String(inst.dmx[el.dataset.d]);
+  });
+  inspectorEl.querySelectorAll("[data-note]").forEach((el) => {
+    const a = el.dataset.note;
+    const unit = { dimmer: `${Math.round(inst.intensity * 100)}%`, pan: `${inst.pan}°`, tilt: `${inst.tilt}°`, zoom: `${inst.beam}°` }[a] ?? "";
+    const ch = chans.get(a);
+    const faders = ch ? consoleLink.fadersFor(ch) : [];
+    const chan = ch
+      ? `<span class="chan${faders.length ? " on" : ""}" data-ch="${ch}" title="${faders.length ? `DMX ${ch} ← fader ${faders.join(", ")}` : `DMX ${ch} · no fader patched`} · ⌥-click to trace">${ch}${faders.length ? ` F${faders.join(",")}` : ""}</span>`
+      : "";
+    el.innerHTML = `<span>${unit}</span>${chan}`;
+  });
+  const status = inspectorEl.querySelector("#linkStatus");
+  if (!status) return;
+  const linked = linkChannels(inst);
+  const withFader = linked.filter(({ channel }) => consoleLink.fadersFor(channel).length).length;
+  const owned = inst.link.owned ? " Registered by the stage: deleting the light removes it from the console." : "";
+  status.textContent = inst.link.register
+    ? (consoleLink.live ? "Registering in the console…" : "Will register in the console when it opens.")
+    : !linked.length
+    ? (inst.link.start ? "No channels assigned in the layout." : "Not linked: values are set here only.")
+    : !consoleLink.live
+      ? "Console offline: changes stay here. Open the console to sync (its values take over)."
+      : `${withFader} of ${linked.length} channels have a fader: those follow the console, and changes here move the fader.${owned}`;
+}
+
+// ---------------------------------------------------------------------
+// Registering lights in the console
+// ---------------------------------------------------------------------
+// A light placed with a console type (or a rig's members, or a copy of a
+// registered light) asks the console to create an instrument at the next
+// free DMX block, patch one free fader per channel and name them. It starts
+// at the light's current values. Lights placed while the console is closed
+// wait (link.register) and register when it opens.
+
+const CONSOLE_TYPE_KEY = "unnaturallight.stage.consoleType";
+const lastConsoleType = () => { try { return localStorage.getItem(CONSOLE_TYPE_KEY) || "movable/multi"; } catch { return "movable/multi"; } };
+const rememberConsoleType = (key) => { try { localStorage.setItem(CONSOLE_TYPE_KEY, key); } catch { /* storage unavailable */ } };
+
+function fillConsoleTypes(select) {
+  select.innerHTML = CONSOLE_TYPES.map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("");
+}
+
+/** Lights asked for but not answered yet (stage id → give-up timer). */
+const registering = new Map();
+
+function requestRegistrations() {
+  if (!consoleLink.live) return;
+  const requests = [];
+  for (const inst of state.instruments) {
+    const t = inst.link.register;
+    if (!t || registering.has(inst.id)) continue;
+    const layout = LAYOUT_PRESETS[consoleTypeKey(t)];
+    requests.push({
+      stageId: inst.id,
+      name: inst.name,
+      mount: t.mount,
+      color: t.color,
+      width: layout.length,
+      labels: layout.map((a) => DMX_SHORT[a]),
+      values: layout.map((a) => inst.dmx[a]),
+      group: rigOf(inst)?.name ?? null,
+    });
+    registering.set(inst.id, setTimeout(() => registering.delete(inst.id), 5000));
+  }
+  if (requests.length) consoleLink.register(requests);
+}
+
+function onRegistered(results) {
+  const failed = [];
+  for (const r of results) {
+    clearTimeout(registering.get(r.stageId));
+    registering.delete(r.stageId);
+    const inst = byId(r.stageId);
+    if (!inst || !inst.link.register) {
+      // Deleted (or unlinked) while waiting: undo it in the console.
+      if (r.ok) consoleLink.unregister([r.consoleId]);
+      continue;
+    }
+    const type = inst.link.register;
+    if (!r.ok) {
+      inst.link.register = null;
+      failed.push(`${inst.name}: ${r.error}`);
+      continue;
+    }
+    inst.link = { consoleId: r.consoleId, start: r.start, layout: [...LAYOUT_PRESETS[consoleTypeKey(type)]], owned: true, type, register: null };
+  }
+  renderInspector();
+  changed();
+  if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 7000);
+}
+
+// Place instrument: pick its console type first.
+const placeDlg = /** @type {HTMLDialogElement} */ (document.getElementById("placeDlg"));
+const placeTypeEl = document.getElementById("placeType");
+/** Console type for the instrument being placed (null = stage only). */
+let placeType = null;
+
+function togglePlaceInstrument() {
+  if (placing) { setPlacing(false); return; }
+  fillConsoleTypes(placeTypeEl);
+  placeDlg.showModal();
+}
+
+document.getElementById("placeForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  rememberConsoleType(placeTypeEl.value);
+  placeType = consoleTypeFromKey(placeTypeEl.value);
+  placeDlg.close();
+  setPlacing(true);
+});
+document.getElementById("placeClose").addEventListener("click", () => placeDlg.close());
+placeDlg.addEventListener("click", (e) => { if (e.target === placeDlg) placeDlg.close(); });
+
+// ---------------------------------------------------------------------
+// Trace: ⌥-click a light (3D, plan, list) or a channel badge in the
+// inspector for a card showing what controls it and the current values.
+// ---------------------------------------------------------------------
+
+const trace = createTracePopover();
+
+/** A light as the trace card (here and in the console) sees it. */
+function traceLights() {
+  return state.instruments.map((i) => ({
+    id: i.id,
+    name: i.name,
+    start: i.link.start,
+    layout: i.link.layout,
+    dmx: { ...i.dmx },
+    notes: { dimmer: `${Math.round(i.intensity * 100)}%`, pan: `${i.pan}°`, tilt: `${i.tilt}°`, zoom: `${i.beam}°` },
+    consoleId: i.link.consoleId,
+    consoleName: i.link.consoleId ? consoleInstrumentById(i.link.consoleId)?.name ?? null : null,
+  }));
+}
+
+function traceSnapshot() {
+  const { levels, faders, mix } = consoleLink.traceInfo();
+  return { live: consoleLink.live, levels, faders, mix, consoleInstruments: consoleLink.instruments(), stageInstruments: traceLights() };
+}
+
+function showTrace(target, e) {
+  trace.show(target, e.clientX, e.clientY, traceSnapshot);
+}
+
+// Tell the console about the stage's lights (coalesced; plus a slow heartbeat).
+let publishTimer = 0;
+function publishStage() {
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(() => consoleLink.publishStage(traceLights()), 80);
+}
+setInterval(publishStage, 2000);
+
+// ⌥-click a channel badge in the inspector: trace that DMX channel.
+inspectorEl.addEventListener("click", (e) => {
+  const badge = e.altKey && e.target instanceof Element ? e.target.closest("[data-ch]") : null;
+  if (badge) showTrace({ kind: "channel", channel: Number(badge.dataset.ch) }, e);
+});
 
 // ---------------------------------------------------------------------
 // Boot

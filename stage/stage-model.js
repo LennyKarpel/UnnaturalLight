@@ -21,14 +21,131 @@ export const FORWARD = new THREE.Vector3(0, 0, -1);
 export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "#ffe066", "#7fffe0", "#ffb070"];
 
 /** @typedef {{ yaw: number, pitch: number, roll: number }} Frame */
+/** @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} DmxAttr */
+/** @typedef {Record<DmxAttr, number>} DmxValues */
+/** @typedef {{ mount: "fixed" | "movable", color: "single" | "multi" }} ConsoleType */
 /** @typedef {{
- *   id: string, name: string, color: string,
+ *   consoleId: string | null, start: number | null, layout: (DmxAttr | null)[],
+ *   owned?: boolean, type?: ConsoleType | null, register?: ConsoleType | null,
+ * }} Link
+ * owned: the stage registered this console instrument (deleting the light
+ * removes it there too); type: its console type; register: waiting to be
+ * registered in the console (e.g. placed while the console was closed).
+ */
+/** @typedef {{
+ *   id: string, name: string,
  *   x: number, y: number, z: number,
  *   base: Frame,
- *   pan: number, tilt: number,
- *   panLimit: number, tiltLimit: number,
- *   intensity: number, beam: number,
- * }} Instrument */
+ *   dmx: DmxValues,
+ *   panLimit: number, tiltLimit: number, zoomMin: number, zoomMax: number,
+ *   link: Link,
+ *   color: string, pan: number, tilt: number, intensity: number, beam: number,
+ *   rigId: string | null, rigIndex: number,
+ * }} Instrument
+ * `dmx` (0–255 per attribute) is the source of truth, like a real fixture's
+ * channels. color / pan / tilt (°) / intensity (0–1) / beam (°) are derived
+ * from it by deriveFromDmx() and only read by the drawing code.
+ */
+
+// ---------------------------------------------------------------------
+// DMX attributes (each 0–255)
+// ---------------------------------------------------------------------
+
+export const DMX_ATTRS = /** @type {const} */ (["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"]);
+export const DMX_LABELS = { dimmer: "Dimmer", pan: "Pan", tilt: "Tilt", red: "Red", green: "Green", blue: "Blue", zoom: "Zoom" };
+/** Short names used for console fader names, e.g. "Inst 1 Dim". */
+export const DMX_SHORT = { dimmer: "Dim", pan: "Pan", tilt: "Tilt", red: "R", green: "G", blue: "B", zoom: "Zoom" };
+/** Pan / tilt value that means "at zero" (Home). */
+export const DMX_CENTRE = 128;
+
+const toByte = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+
+/** DMX 0–255 → angle −limit…+limit, with 128 exactly 0. */
+export function angleFromDmx(v, limit) {
+  return v >= DMX_CENTRE ? ((v - DMX_CENTRE) / 127) * limit : ((v - DMX_CENTRE) / 128) * limit;
+}
+
+/** Angle → nearest DMX 0–255 (inverse of angleFromDmx). */
+export function dmxFromAngle(deg, limit) {
+  if (!limit) return DMX_CENTRE;
+  return toByte(deg >= 0 ? DMX_CENTRE + (deg / limit) * 127 : DMX_CENTRE + (deg / limit) * 128);
+}
+
+export const beamFromZoom = (v, min, max) => min + (v / 255) * (max - min);
+export const zoomFromBeam = (deg, min, max) => (max > min ? toByte(((deg - min) / (max - min)) * 255) : 0);
+
+export function hexFromRgb(r, g, b) {
+  return `#${[r, g, b].map((c) => toByte(c).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function rgbFromHex(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  return Number.isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
+}
+
+/** Recompute the derived look / angles from the instrument's DMX values. */
+export function deriveFromDmx(inst) {
+  const d = inst.dmx;
+  inst.intensity = d.dimmer / 255;
+  inst.pan = round(angleFromDmx(d.pan, inst.panLimit));
+  inst.tilt = round(angleFromDmx(d.tilt, inst.tiltLimit));
+  inst.color = hexFromRgb(d.red, d.green, d.blue);
+  inst.beam = round(beamFromZoom(d.zoom, inst.zoomMin, inst.zoomMax), 1);
+}
+
+/** Set one DMX attribute (clamped to 0–255) and update the derived values. */
+export function setDmx(inst, attr, v) {
+  inst.dmx[attr] = toByte(v);
+  deriveFromDmx(inst);
+}
+
+/** Set the color as hex (the picker) by setting red / green / blue. */
+export function setColorHex(inst, hex) {
+  const [r, g, b] = rgbFromHex(hex);
+  Object.assign(inst.dmx, { red: r, green: g, blue: b });
+  deriveFromDmx(inst);
+}
+
+/**
+ * Channel layouts. Presets follow the console's instrument types
+ * (Fixed / Movable × Single / Multi-color); `null` = channel not used.
+ */
+export const LAYOUT_PRESETS = {
+  "fixed/single": ["dimmer"],
+  "fixed/multi": ["dimmer", "red", "green", "blue"],
+  "movable/single": ["dimmer", "pan", "tilt", "zoom"],
+  "movable/multi": ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"],
+};
+
+/** Console types offered when placing ("none" = stage only). */
+export const CONSOLE_TYPES = [
+  { key: "movable/multi", label: "Movable · Multi-color · 7 ch" },
+  { key: "movable/single", label: "Movable · Single color · 4 ch" },
+  { key: "fixed/multi", label: "Fixed · Multi-color · 4 ch" },
+  { key: "fixed/single", label: "Fixed · Single color · 1 ch" },
+  { key: "none", label: "Stage only (not in the console)" },
+];
+
+/** "movable/multi" → { mount, color }; "none" / unknown → null. */
+export function consoleTypeFromKey(key) {
+  const [mount, color] = String(key).split("/");
+  return LAYOUT_PRESETS[key] ? { mount, color } : null;
+}
+
+export const consoleTypeKey = (t) => (t ? `${t.mount}/${t.color}` : "none");
+
+/** Preset layout for a console instrument, fitted to its channel count. */
+export function layoutFor(mount, color, count) {
+  const preset = LAYOUT_PRESETS[`${mount === "movable" ? "movable" : "fixed"}/${color === "multi" ? "multi" : "single"}`];
+  return Array.from({ length: Math.max(1, count) }, (_, k) => preset[k] ?? null);
+}
+
+/** [{ channel, attr }] an instrument listens on / sends to (none if unlinked). */
+export function linkChannels(inst) {
+  const { start, layout } = inst.link;
+  if (!start) return [];
+  return layout.flatMap((attr, k) => (attr ? [{ channel: start + k, attr }] : []));
+}
 
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -63,26 +180,32 @@ export function defaultTarget(inst, box) {
   return inst.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
 }
 
+/** Pan / tilt back to zero (DMX 128). */
+export function homeInstrument(inst) {
+  inst.dmx.pan = DMX_CENTRE;
+  inst.dmx.tilt = DMX_CENTRE;
+  deriveFromDmx(inst);
+}
+
 export function aimZeroAt(inst, target) {
   const v = target.clone().sub(new THREE.Vector3(inst.x, inst.y, inst.z));
   if (v.lengthSq() < 1e-6) v.set(0, -1, 0);
   inst.base = frameFacing(v);
-  inst.pan = 0;
-  inst.tilt = 0;
+  homeInstrument(inst);
 }
 
 export function setZeroHere(inst) {
   const e = new THREE.Euler().setFromQuaternion(fullQuat(inst), "YXZ");
   inst.base = { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) };
-  inst.pan = 0;
-  inst.tilt = 0;
+  homeInstrument(inst);
 }
 
 /**
  * Set pan/tilt (inside the instrument's zero frame) so the beam's centre
  * points at `target`. The zero frame is left alone. Pan picks whichever
  * equivalent angle (±360°) is closest to the current pan. Clamped to the
- * limits; returns false if the target is out of reach.
+ * limits; returns false if the target is out of reach. The result is
+ * stored as DMX 0–255, so it lands on the nearest step.
  */
 export function aimAt(inst, target) {
   const v = target.clone().sub(new THREE.Vector3(inst.x, inst.y, inst.z));
@@ -98,8 +221,9 @@ export function aimAt(inst, target) {
   if (pan === null) pan = clamp(want.yaw, -inst.panLimit, inst.panLimit);
   const tilt = clamp(want.pitch, -inst.tiltLimit, inst.tiltLimit);
   if (tilt !== want.pitch) reached = false;
-  inst.pan = round(pan);
-  inst.tilt = round(tilt);
+  inst.dmx.pan = dmxFromAngle(pan, inst.panLimit);
+  inst.dmx.tilt = dmxFromAngle(tilt, inst.tiltLimit);
+  deriveFromDmx(inst);
   return reached;
 }
 
@@ -148,39 +272,82 @@ export function axisHits(inst, box) {
 
 /** `n` is the instrument's index, used for its default name and color. */
 export function createInstrument(x, y, z, n, box) {
+  const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
   /** @type {Instrument} */
   const inst = {
     id: newId(),
     name: `Inst ${n + 1}`,
-    color: PALETTE[n % PALETTE.length],
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
-    pan: 0, tilt: 0,
-    panLimit: 270, tiltLimit: 135,
-    intensity: 0.75,
-    beam: 24,
+    dmx: { dimmer: 191, pan: DMX_CENTRE, tilt: DMX_CENTRE, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
+    link: { consoleId: null, start: null, layout: [] },
+    rigId: null, rigIndex: 0,
   };
+  deriveFromDmx(inst);
   aimZeroAt(inst, defaultTarget(inst, box));
   return inst;
+}
+
+function normalizeType(raw) {
+  return raw && typeof raw === "object" ? consoleTypeFromKey(consoleTypeKey(raw)) : null;
+}
+
+function normalizeLink(raw) {
+  const start = Number(raw?.start);
+  const layout = Array.isArray(raw?.layout) ? raw.layout.slice(0, 16).map((a) => (DMX_ATTRS.includes(a) ? a : null)) : [];
+  return {
+    consoleId: typeof raw?.consoleId === "string" ? raw.consoleId : null,
+    start: Number.isInteger(start) && start >= 1 && start <= 512 ? start : null,
+    layout,
+    owned: raw?.owned === true,
+    type: normalizeType(raw?.type),
+    register: normalizeType(raw?.register),
+  };
 }
 
 export function normalizeInstrument(raw, i) {
   const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
   const b = raw.base || {};
-  return {
+  const panLimit = clamp(num(raw.panLimit, 270), 0, 360);
+  const tiltLimit = clamp(num(raw.tiltLimit, 135), 0, 180);
+  let zoomMin = clamp(num(raw.zoomMin, 5), 1, 120);
+  let zoomMax = clamp(num(raw.zoomMax, 60), 1, 120);
+  if (zoomMax < zoomMin) [zoomMin, zoomMax] = [zoomMax, zoomMin];
+  let dmx;
+  if (raw.dmx && typeof raw.dmx === "object") {
+    dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, toByte(num(raw.dmx[a], a === "pan" || a === "tilt" ? DMX_CENTRE : 0))]));
+  } else {
+    // Older saves stored angles / 0–1 / hex: convert to DMX values.
+    const color = /^#[0-9a-f]{6}$/i.test(raw.color) ? raw.color : PALETTE[i % PALETTE.length];
+    const [red, green, blue] = rgbFromHex(color);
+    dmx = {
+      dimmer: toByte(clamp(num(raw.intensity, 0.75), 0, 1) * 255),
+      pan: dmxFromAngle(clamp(num(raw.pan, 0), -panLimit, panLimit), panLimit),
+      tilt: dmxFromAngle(clamp(num(raw.tilt, 0), -tiltLimit, tiltLimit), tiltLimit),
+      red, green, blue,
+      zoom: zoomFromBeam(clamp(num(raw.beam, 24), zoomMin, zoomMax), zoomMin, zoomMax),
+    };
+  }
+  const inst = {
     id: typeof raw.id === "string" ? raw.id : newId(),
     name: typeof raw.name === "string" ? raw.name : `Inst ${i + 1}`,
-    color: /^#[0-9a-f]{6}$/i.test(raw.color) ? raw.color : PALETTE[i % PALETTE.length],
     x: num(raw.x, 0), y: num(raw.y, 3), z: num(raw.z, 0),
     base: { yaw: num(b.yaw, 0), pitch: num(b.pitch, -45), roll: num(b.roll, 0) },
-    pan: num(raw.pan, 0), tilt: num(raw.tilt, 0),
-    panLimit: clamp(num(raw.panLimit, 270), 0, 360),
-    tiltLimit: clamp(num(raw.tiltLimit, 135), 0, 180),
-    intensity: clamp(num(raw.intensity, 0.75), 0, 1),
-    beam: clamp(num(raw.beam, 24), 2, 120),
+    dmx,
+    panLimit, tiltLimit, zoomMin, zoomMax,
+    link: normalizeLink(raw.link),
     rigId: typeof raw.rigId === "string" ? raw.rigId : null,
     rigIndex: Number.isInteger(raw.rigIndex) ? raw.rigIndex : 0,
   };
+  deriveFromDmx(inst);
+  return inst;
+}
+
+/** What gets saved for an instrument (the derived look is left out). */
+export function serializeInstrument(inst) {
+  const { color, pan, tilt, intensity, beam, ...saved } = inst;
+  return saved;
 }
 
 // ---------------------------------------------------------------------
@@ -325,6 +492,8 @@ export function normalizeRig(raw, i) {
     // `diameter` is the older name for a circle's size.
     size: clamp(num(raw?.size ?? raw?.diameter, d.size), 0.5, 50),
     count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_INSTRUMENTS),
+    /** Console type its members are registered as (null = stage only). */
+    consoleType: normalizeType(raw?.consoleType),
   };
 }
 
@@ -382,5 +551,5 @@ export function parseStage(data) {
 }
 
 export function serializeStage(box, instruments, transparent, rigs) {
-  return { app: "UnnaturalLight.stage", version: 1, box, transparent, rigs, instruments };
+  return { app: "UnnaturalLight.stage", version: 2, box, transparent, rigs, instruments: instruments.map(serializeInstrument) };
 }

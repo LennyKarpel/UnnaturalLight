@@ -25,6 +25,7 @@
           <label>m</label>
         </div>
         <div class="spacer"></div>
+        <span id="consoleStatus" class="pill">Console · offline</span>
         <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place instrument</button>
         <button id="rigBtn" title="Place a rig: a preset group of instruments">+ Place rig</button>
         <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
@@ -41,7 +42,7 @@
           <span><kbd>↑</kbd><kbd>↓</kbd> tilt</span>
           <span><kbd>+</kbd><kbd>−</kbd> intensity</span>
           <span><kbd>[</kbd><kbd>]</kbd> beam</span>
-          <span><kbd>⇧</kbd> ×10 · <kbd>⌥</kbd> fine</span>
+          <span>0–255 · <kbd>⇧</kbd> ×10</span>
           <span><kbd>Tab</kbd> next</span>
           <span><kbd>A</kbd> place</span>
           <span>right-click an instrument for more</span>
@@ -73,6 +74,25 @@
 
     <div class="ctx-menu" id="ctxMenu" role="menu" hidden></div>
 
+    <dialog id="placeDlg" class="dlg">
+      <header class="dlg-head">
+        <h2>Place an instrument</h2>
+        <button id="placeClose" type="button" aria-label="Close">✕</button>
+      </header>
+      <section>
+        <form id="placeForm">
+          <div class="fields">
+            <label for="placeType">Console type</label>
+            <select id="placeType"></select>
+          </div>
+          <p class="hint">The console gets a matching instrument at the next free DMX block, with free faders patched to its channels and named after the light. "Stage only" doesn't touch the console.</p>
+          <div class="buttons">
+            <button class="primary" type="submit">Place…</button>
+          </div>
+        </form>
+      </section>
+    </dialog>
+
     <dialog id="rigDlg" class="dlg">
       <header class="dlg-head">
         <h2>Place a rig</h2>
@@ -90,6 +110,8 @@
           <input id="rigTilt" type="number" min="-90" max="90" step="5" value="0" />
           <label for="rigYaw">Yaw °</label>
           <input id="rigYaw" type="number" step="5" value="0" />
+          <label for="rigConsoleType">Console type</label>
+          <select id="rigConsoleType" title="Each instrument in the rig gets a console instrument of this type (grouped under the rig's name)"></select>
         </div>
         <p class="hint" id="rigHelp"></p>
         <p class="hint" id="rigRoom"></p>

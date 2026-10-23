@@ -185,6 +185,22 @@ select {
 }
 .fields.rig-fields { margin-top: 10px; }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
+.pill {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--track); color: var(--muted); white-space: nowrap;
+}
+.pill.on { color: #0b1a0e; background: #6fbf7a; border-color: #6fbf7a; }
+.dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
+.dmx-row input[type="number"] { width: 100%; }
+.dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
+.chan.on { border-color: #6fbf7a; color: #6fbf7a; }
+.fields.link-fields { margin-top: 10px; }
+.layout { display: flex; flex-wrap: wrap; gap: 4px; }
+.lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.lay select { font-size: 11px; padding: 1px 2px; }
+.lay-btns { display: flex; gap: 4px; width: 100%; }
+.lay-btns button { padding: 1px 6px; font-size: 11px; }
 .ctx-menu {
   position: fixed; z-index: 20; min-width: 160px;
   background: var(--panel-2); border: 1px solid var(--track); border-radius: 6px;

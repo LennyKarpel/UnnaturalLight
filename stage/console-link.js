@@ -1,0 +1,122 @@
+// Stage side of the live link with the console (see console/stage-link.js),
+// over a BroadcastChannel between tabs of the same site.
+//
+//   console → stage   output levels (0–255 per DMX channel), which fader(s)
+//                     drive each channel, and the console's instruments
+//   stage → console   "set channel N to V" when a linked value is changed here,
+//                     and the stage's lights (for the console's ⌥-click trace)
+//
+// Only channels with a fader patched are synced. A channel is sent only after
+// the console's value for it has been heard, so opening the stage never moves
+// a console fader; and a value just sent is held briefly against the
+// console's older broadcasts so dragging a slider doesn't jitter.
+
+const CHANNEL_NAME = "unnaturallight.dmx";
+/** Where the console saves its session (its instruments are read from here while it's closed). */
+const CONSOLE_SESSION_KEY = "unnaturallight.setlist.session.v1";
+/** No message for this long = console offline. */
+const LIVE_MS = 2500;
+/** How long a value sent from the stage wins over the console's broadcasts. */
+const PENDING_MS = 600;
+
+/**
+ * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleInstrument
+ */
+
+function readSavedInstruments() {
+  try {
+    const data = JSON.parse(localStorage.getItem(CONSOLE_SESSION_KEY) ?? "null");
+    const list = Array.isArray(data?.instruments) ? data.instruments : [];
+    return list.filter((i) => typeof i?.id === "string" && Number.isInteger(i.channelStart) && Number.isInteger(i.channelEnd));
+  } catch {
+    return [];
+  }
+}
+
+/** @param {{ onLevels: () => void, onStageHello: () => void, onRegistered: (results: any[]) => void }} opts */
+export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
+  const bus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL_NAME);
+  let lastHeard = 0;
+  /** @type {number[] | null} */
+  let levels = null;
+  /** channel → fader numbers (1-based) patched to it */
+  let faders = new Map();
+  /** @type {ConsoleInstrument[]} */
+  let instruments = readSavedInstruments();
+  /** Per fader: number, name, live level, transition values, patch (for traces). */
+  let faderInfo = null;
+  /** Master / submasters / crossfade and transition names (for traces). */
+  let mix = null;
+  /** channel → the value the console and stage agree on (heard or sent) */
+  const synced = new Map();
+  /** channel → { value, until }: just sent from the stage */
+  const pending = new Map();
+
+  bus?.addEventListener("message", (e) => {
+    const msg = e.data;
+    if (msg?.type === "stage-hello") { onStageHello(); return; }
+    if (msg?.type === "registered" && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
+    if (msg?.type !== "levels" || !Array.isArray(msg.levels)) return;
+    lastHeard = Date.now();
+    levels = msg.levels;
+    faders = new Map(Array.isArray(msg.faders) ? msg.faders : []);
+    if (Array.isArray(msg.instruments)) instruments = msg.instruments;
+    faderInfo = Array.isArray(msg.faderInfo) ? msg.faderInfo : null;
+    mix = msg.mix ?? null;
+    onLevels();
+  });
+  bus?.postMessage({ type: "hello" });
+
+  return {
+    get live() {
+      return Date.now() - lastHeard < LIVE_MS;
+    },
+    /** The console's instruments (live, or from its saved session). */
+    instruments: () => instruments,
+    /** Fader numbers patched to a channel ([] = none / unknown). */
+    fadersFor: (channel) => faders.get(channel) ?? [],
+    /** What the console last sent, for traces (null while offline). */
+    traceInfo() {
+      return this.live ? { levels, faders: faderInfo, mix } : { levels: null, faders: null, mix: null };
+    },
+    /** Ask the console to create instruments (+ patch / name free faders) for lights. */
+    register(requests) {
+      bus?.postMessage({ type: "register", requests });
+    },
+    /** Ask the console to remove instruments the stage registered (frees their faders). */
+    unregister(consoleIds) {
+      if (consoleIds.length) bus?.postMessage({ type: "unregister", consoleIds });
+    },
+    /** Send the stage's lights to the console (for its traces). */
+    publishStage(list) {
+      bus?.postMessage({ type: "stage", instruments: list });
+    },
+    /**
+     * The console's value for a channel that the stage should take now, or
+     * null (no fader patched, nothing heard yet, or a stage change in flight).
+     */
+    incoming(channel) {
+      if (!levels || !faders.has(channel)) return null;
+      const v = levels[channel - 1];
+      const p = pending.get(channel);
+      if (p) {
+        if (v !== p.value && Date.now() < p.until) return null;
+        pending.delete(channel);
+      }
+      synced.set(channel, v);
+      return v;
+    },
+    /** Send the stage's values for channels that changed here. */
+    push(entries) {
+      if (!bus || !this.live) return;
+      const values = [];
+      for (const { channel, value } of entries) {
+        if (!synced.has(channel) || synced.get(channel) === value) continue;
+        synced.set(channel, value);
+        pending.set(channel, { value, until: Date.now() + PENDING_MS });
+        values.push({ channel, value });
+      }
+      if (values.length) bus.postMessage({ type: "set", values });
+    },
+  };
+}

@@ -1,4 +1,5 @@
 import { EnttecDmxPro } from "./dmx.js";
+import { notifyStage, startStageLink } from "./stage-link.js";
 import {
   FADER_COUNT,
   CHANNEL_METER_COUNT,
@@ -801,6 +802,7 @@ function pushToDmx({ persist = true } = {}) {
   refreshLiveRow();
   refreshChannelRow();
   refreshSelectedGroup();
+  notifyStage();
   if (persist) persistSession();
 }
 
@@ -5049,6 +5051,154 @@ renderPatchTable();
 routeFromHash();
 persistSession();
 markClean();
+
+// ---------------------------------------------------------------------
+// Instruments registered from the Stage page (see stage-link.js)
+// ---------------------------------------------------------------------
+// Placing a light on the stage registers it here: a console instrument at
+// the next free DMX block, one free fader patched 1:1 per channel and named
+// after the light. Deleting it on the stage removes it and frees the faders.
+
+/**
+ * @param {{ stageId: string, name: string, mount: string, color: string, labels: string[], width: number, group: string | null }[]} requests
+ * @returns {{ stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[]}
+ */
+function registerFromStage(requests) {
+  const results = [];
+  for (const req of requests) {
+    const fail = (error) => results.push({ stageId: req.stageId, ok: false, error });
+    const width = Math.max(1, Math.min(MAX_INSTRUMENT_CHANNELS, Math.round(req.width) || 1));
+    if (instruments.length >= MAX_INSTRUMENTS) { fail(`the console already has its maximum of ${MAX_INSTRUMENTS} instruments`); continue; }
+    const range = nextAvailableRange(instruments, width);
+    if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left`); continue; }
+    const free = [];
+    for (let i = 0; i < FADER_COUNT && free.length < width; i++) if (isUnpatched(patch[i])) free.push(i);
+    if (free.length < width) { fail(`needs ${width} free fader${width > 1 ? "s" : ""}, only ${free.length} left`); continue; }
+
+    let groupId = null;
+    if (req.group) {
+      let group = instrumentGroups.find((g) => g.name === req.group);
+      if (!group && instrumentGroups.length < MAX_INSTRUMENT_GROUPS) {
+        group = createInstrumentGroup({ name: req.group });
+        instrumentGroups.push(group);
+      }
+      groupId = group?.id ?? null;
+    }
+    const instrument = createInstrument({
+      name: req.name,
+      mount: normalizeMount(req.mount),
+      color: normalizeColorMode(req.color),
+      channelStart: range.channelStart,
+      channelEnd: range.channelEnd,
+      groupId,
+    });
+    instruments.push(instrument);
+    free.forEach((fader, k) => {
+      patch[fader] = [makeTarget(range.channelStart + k, 255)];
+      faderNames[fader] = `${req.name} ${req.labels[k] ?? k + 1}`.slice(0, 40);
+    });
+    results.push({ stageId: req.stageId, ok: true, consoleId: instrument.id, start: range.channelStart, faders: free.map((f) => f + 1) });
+  }
+  if (results.some((r) => r.ok)) afterStageInstrumentsChanged();
+  return results;
+}
+
+/** Remove stage-registered instruments: unpatch, rename and zero their faders. */
+function unregisterFromStage(consoleIds) {
+  let removed = 0;
+  for (const id of consoleIds) {
+    const instrument = instruments.find((item) => item.id === id);
+    if (!instrument) continue;
+    const inBlock = (t) => t.channel >= instrument.channelStart && t.channel <= instrument.channelEnd;
+    for (let i = 0; i < FADER_COUNT; i++) {
+      if (!patch[i].some(inBlock)) continue;
+      patch[i] = patch[i].filter((t) => !inBlock(t));
+      if (patch[i].length) continue;
+      // Fader is free again: default name, 0 in every transition of every tune.
+      faderNames[i] = "";
+      for (const tune of tunes) for (const transition of tune.transitions) transition.levels[i] = 0;
+    }
+    instruments = instruments.filter((item) => item.id !== id);
+    const { groupId } = instrument;
+    if (groupId && !instruments.some((item) => item.groupId === groupId)) {
+      instrumentGroups = instrumentGroups.filter((g) => g.id !== groupId);
+      if (instrumentFormGroupId === groupId) instrumentFormGroupId = null;
+    }
+    removed++;
+  }
+  if (removed) afterStageInstrumentsChanged();
+}
+
+function afterStageInstrumentsChanged() {
+  renderInstruments();
+  suggestInstrumentFormStart();
+  renderLiveRow();
+  renderRows();
+  renderSelectedGroup();
+  renderPatchTable();
+  ensureChannelRow();
+  pushToDmx();
+}
+
+// Fader blocks scroll sideways (256 faders): keep them lined up, so the Live
+// strip and every transition row show the same faders.
+let syncingFaderScroll = false;
+document.addEventListener(
+  "scroll",
+  (event) => {
+    const el = event.target;
+    if (syncingFaderScroll || !(el instanceof HTMLElement)) return;
+    if (!el.classList.contains("faders") || el.classList.contains("channel-faders")) return;
+    syncingFaderScroll = true;
+    for (const other of document.querySelectorAll(".faders:not(.channel-faders)")) {
+      if (other !== el) other.scrollLeft = el.scrollLeft;
+    }
+    syncingFaderScroll = false;
+  },
+  true,
+);
+
+// Live link to the Stage page: send output levels, apply fader moves made there.
+startStageLink({
+  levels: computeChannelLevels,
+  patch: () => patch,
+  live: () => ({ rows, fromRow, toRow, fromSub, toSub, cross, master }),
+  instruments: () => instruments,
+  groups: () => instrumentGroups,
+  faderInfo: () => Array.from({ length: FADER_COUNT }, (_, i) => ({
+    num: i + 1,
+    name: faderName(i),
+    live: liveLevel(i),
+    from: rows[fromRow]?.[i] ?? 0,
+    to: rows[toRow]?.[i] ?? 0,
+    patch: patch[i],
+  })),
+  mix: () => ({ master, fromSub, toSub, cross, fromName: sceneName(fromRow), toName: sceneName(toRow) }),
+  // Which fader / channel meter / Patch card / instrument row an element
+  // belongs to (for ⌥-click trace).
+  traceTarget: (el) => {
+    if (!(el instanceof Element)) return null;
+    const card = el.closest(".patch-card[data-fader]");
+    if (card) return { kind: "fader", fader: Number(card.dataset.fader) + 1 };
+    const instrumentRow = el.closest(".instrument-row[data-id]");
+    if (instrumentRow) return { kind: "instrument", id: instrumentRow.dataset.id };
+    const wrap = el.closest(".fader");
+    if (!wrap) return null;
+    for (const [channel, w] of channelUi.wrapEls) if (w === wrap) return { kind: "channel", channel };
+    const hit = (els) => els.findIndex((x) => x?.closest(".fader") === wrap);
+    for (const els of [liveUi.valueEls, selectedGroupUi.sliders, ...rowUi.map((ui) => ui.sliders)]) {
+      const i = hit(els);
+      if (i >= 0) return { kind: "fader", fader: i + 1 };
+    }
+    return null;
+  },
+  afterSet: () => {
+    syncSlidersFromState();
+    pushToDmx();
+  },
+  register: registerFromStage,
+  unregister: unregisterFromStage,
+});
 
 if (!("serial" in navigator)) {
   connectBtn.disabled = true;

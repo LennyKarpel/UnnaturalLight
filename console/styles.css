@@ -1840,10 +1840,31 @@ button.connected {
   background: linear-gradient(180deg, #7eb6ff, #3a6ea5);
 }
 
+/* Fader blocks: one row of 256 faders that scrolls sideways (kept in line
+   with each other by app.js). */
 .faders {
   display: grid;
-  grid-template-columns: repeat(32, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: 40px;
   gap: 0.2rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+
+/* Let a block's container shrink to the page width, so the block itself
+   scrolls (instead of stretching the whole page sideways). */
+.fader-row,
+.live-row {
+  min-width: 0;
+}
+
+/* Channel meters (1–256) still wrap into rows of 32. */
+.faders.channel-faders {
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  grid-template-columns: repeat(32, minmax(0, 1fr));
+  overflow-x: visible;
+  padding-bottom: 0;
 }
 
 .fader {
@@ -2277,12 +2298,12 @@ input[type="range"] {
 }
 
 @media (max-width: 1100px) {
-  .faders {
+  .faders.channel-faders {
     overflow-x: auto;
     padding-bottom: 0.35rem;
   }
 
-  .fader {
+  .channel-faders .fader {
     min-width: 28px;
   }
 }

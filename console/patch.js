@@ -6,7 +6,7 @@ const LEGACY_KEYS = [
   "sunlight.patch.v1",
 ];
 
-export const FADER_COUNT = 32;
+export const FADER_COUNT = 256;
 export const DMX_CHANNEL_MAX = 512;
 /** Channels shown on the main-page Channels meter row. */
 export const CHANNEL_METER_COUNT = 256;
@@ -48,8 +48,9 @@ export function loadPatch() {
     }
     if (!raw) return defaultPatch();
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length !== FADER_COUNT) return defaultPatch();
-    return parsed.map(normalizeFaderPatch);
+    if (!Array.isArray(parsed)) return defaultPatch();
+    // Older patches had fewer faders: pad with unpatched ones.
+    return defaultPatch().map((_, i) => normalizeFaderPatch(parsed[i]));
   } catch {
     return defaultPatch();
   }

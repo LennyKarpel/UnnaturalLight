@@ -1,0 +1,171 @@
+/**
+ * Live link to the Stage page (../stage/stage.html) over a BroadcastChannel
+ * (same origin, other tabs; works whether or not the DMX Pro is connected).
+ *
+ * Console → stage: the 512 output levels, which fader(s) each patched
+ * channel comes from, and the console's instruments — on every output change, when the
+ * stage says hello, and as a heartbeat.
+ *
+ * Stage → console: "set channel N to V" requests. The fader(s) patched to N
+ * are moved (in the transition(s) currently on the output) so the output
+ * becomes V, allowing for the patch max, master, submasters and crossfade.
+ * The stage also sends its lights, so ⌥-click traces here can show them, and
+ * asks to register / unregister lights placed / deleted there (app.js creates
+ * the console instrument, patches free faders and names them).
+ *
+ * Trace: ⌥-click a fader (rows, Live meters, Patch cards), a channel meter or
+ * an instrument row for a card showing what controls it, what it controls
+ * and the current values (../shared/trace.js).
+ */
+
+import { DMX_CHANNEL_MAX } from "./patch.js";
+import { createTracePopover } from "../shared/trace.js";
+
+const CHANNEL_NAME = "unnaturallight.dmx";
+const HEARTBEAT_MS = 1000;
+
+/**
+ * @typedef {{
+ *   levels: () => Map<number, number>,
+ *   patch: () => { channel: number, max: number }[][],
+ *   live: () => { rows: number[][], fromRow: number, toRow: number, fromSub: number, toSub: number, cross: number, master: number },
+ *   instruments: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
+ *   groups: () => { id: string, name: string }[],
+ *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
+ *   mix: () => { master: number, fromSub: number, toSub: number, cross: number, fromName: string, toName: string },
+ *   traceTarget: (el: EventTarget | null) => ({ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "instrument", id: string } | null),
+ *   afterSet: () => void,
+ *   register: (requests: { stageId: string, name: string, mount: string, color: string, labels: string[], width: number, group: string | null }[]) => { stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[],
+ *   unregister: (consoleIds: string[]) => void,
+ * }} StageLinkApi
+ */
+
+/** @type {BroadcastChannel | null} */
+let bus = null;
+/** @type {StageLinkApi | null} */
+let api = null;
+let queued = false;
+/** The stage's lights, as last sent by the stage (null = stage not open). */
+let stageInstruments = null;
+/** @type {ReturnType<typeof createTracePopover> | null} */
+let trace = null;
+
+const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+
+/** Tell the stage the output changed (coalesced to one message per tick). */
+export function notifyStage() {
+  if (!bus || queued) return;
+  queued = true;
+  queueMicrotask(() => {
+    queued = false;
+    send();
+  });
+}
+
+function outputLevels() {
+  const levels = new Array(DMX_CHANNEL_MAX).fill(0);
+  for (const [channel, level] of api.levels()) levels[channel - 1] = level;
+  return levels;
+}
+
+/** Everything a trace card needs, from the console's side. */
+function traceSnapshot() {
+  return {
+    live: true,
+    levels: outputLevels(),
+    faders: api.faderInfo(),
+    mix: api.mix(),
+    consoleInstruments: api.instruments(),
+    stageInstruments,
+  };
+}
+
+function send() {
+  if (!bus || !api) return;
+  trace?.refresh();
+  const levels = outputLevels();
+  /** channel → 1-based fader numbers patched to it */
+  const faders = new Map();
+  api.patch().forEach((targets, i) => {
+    for (const t of targets) faders.set(t.channel, [...(faders.get(t.channel) ?? []), i + 1]);
+  });
+  bus.postMessage({
+    type: "levels",
+    levels,
+    faders: [...faders.entries()],
+    instruments: api.instruments().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
+      id, name, mount, color, channelStart, channelEnd, groupId,
+    })),
+    groups: api.groups().map(({ id, name }) => ({ id, name })),
+    faderInfo: api.faderInfo(),
+    mix: api.mix(),
+  });
+}
+
+/** @param {{ channel: number, value: number }[]} values */
+function applySet(values) {
+  if (!api) return;
+  const patch = api.patch();
+  const L = api.live();
+  const t = L.cross / 100;
+  let touched = false;
+  for (const { channel, value } of values) {
+    for (let i = 0; i < patch.length; i++) {
+      const target = patch[i].find((p) => p.channel === channel);
+      if (!target || target.max <= 0 || L.master <= 0) continue;
+      // Live level the fader needs for this channel to output `value`…
+      const level = clampByte((value * 255) / target.max);
+      // …and the pre-master mix that gives it (see liveLevel in app.js).
+      const mixed = (level * 100) / L.master;
+      if (t < 1 && L.fromSub > 0) L.rows[L.fromRow][i] = clampByte((mixed * 100) / L.fromSub);
+      if (t > 0 && L.toSub > 0) L.rows[L.toRow][i] = clampByte((mixed * 100) / L.toSub);
+      touched = true;
+    }
+  }
+  if (touched) api.afterSet();
+}
+
+/** @param {StageLinkApi} linkApi */
+export function startStageLink(linkApi) {
+  if (typeof BroadcastChannel === "undefined") return;
+  api = linkApi;
+  bus = new BroadcastChannel(CHANNEL_NAME);
+  bus.addEventListener("message", (e) => {
+    const msg = e.data;
+    if (msg?.type === "hello") send();
+    if (msg?.type === "set" && Array.isArray(msg.values)) applySet(msg.values);
+    if (msg?.type === "register" && Array.isArray(msg.requests)) {
+      const results = api.register(msg.requests);
+      // Start each new light at its stage values (moves the new faders).
+      applySet(msg.requests.flatMap((req) => {
+        const r = results.find((x) => x.stageId === req.stageId && x.ok);
+        return r ? req.values.map((value, k) => ({ channel: r.start + k, value })) : [];
+      }));
+      bus.postMessage({ type: "registered", results });
+      send();
+    }
+    if (msg?.type === "unregister" && Array.isArray(msg.consoleIds)) api.unregister(msg.consoleIds);
+    if (msg?.type === "stage" && Array.isArray(msg.instruments)) {
+      stageInstruments = msg.instruments;
+      trace?.refresh();
+    }
+  });
+  setInterval(send, HEARTBEAT_MS);
+  send();
+  bus.postMessage({ type: "stage-hello" });
+
+  // ⌥-click a fader, channel meter, Patch card or instrument row: show its
+  // trace (instead of moving / renaming / dragging it).
+  trace = createTracePopover();
+  const onAltPress = (e) => {
+    if (!e.altKey) return;
+    const target = api.traceTarget(e.target);
+    if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "pointerdown") trace.show(target, e.clientX, e.clientY, traceSnapshot);
+  };
+  // Swallow the whole ⌥-press (press, mouse down, click) so it can't also
+  // move a fader, start a rename or begin a drag.
+  for (const type of ["pointerdown", "mousedown", "click"]) document.addEventListener(type, onAltPress, true);
+}

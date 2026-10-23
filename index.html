@@ -12,40 +12,183 @@
         --muted: #9a9488;
         --accent: #e2a13a;
         --track: #2a303b;
+        --bar: 34px;
       }
       * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; }
       body {
-        margin: 0;
-        min-height: 100dvh;
-        display: grid;
-        place-content: center;
-        gap: 1.25rem;
-        padding: 16px;
         background: var(--bg);
         color: var(--ink);
         font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+        font-size: 13px;
       }
-      h1 { margin: 0; font-size: 20px; letter-spacing: 0.04em; }
-      nav { display: grid; gap: 0.6rem; width: min(360px, 100%); }
-      a {
-        display: block;
-        padding: 0.8rem 1rem;
+      .bar {
+        height: var(--bar);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
         background: var(--panel);
-        border: 1px solid var(--track);
-        border-radius: 6px;
-        color: var(--ink);
-        text-decoration: none;
+        border-bottom: 1px solid var(--track);
       }
-      a:hover { border-color: var(--accent); }
-      a b { display: block; color: var(--accent); }
-      a span { color: var(--muted); font-size: 13px; }
+      .bar h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+      .seg { display: inline-flex; border: 1px solid var(--track); border-radius: 5px; overflow: hidden; }
+      .seg button {
+        border: 0;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        padding: 3px 12px;
+        cursor: pointer;
+      }
+      .seg button + button { border-left: 1px solid var(--track); }
+      .seg button:hover { color: var(--ink); }
+      .seg button.on { background: var(--accent); color: #1a1408; font-weight: 600; }
+      .controls { display: flex; align-items: center; gap: 8px; }
+      .swap {
+        border: 1px solid var(--track);
+        border-radius: 5px;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        padding: 3px 9px;
+        cursor: pointer;
+      }
+      .swap:hover { color: var(--ink); border-color: var(--muted); }
+      .swap:disabled { opacity: 0.35; cursor: default; }
+
+      /* Panes: stage on the left, console on the right (⇄ swaps them). Frames are absolutely
+         placed so a hidden console stays rendered (its fades and DMX output
+         keep running) underneath the stage in Stage view. */
+      .panes { position: relative; height: calc(100% - var(--bar)); }
+      .panes iframe {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        border: 0;
+        background: var(--bg);
+      }
+      .divider {
+        position: absolute;
+        top: 0;
+        width: 7px;
+        height: 100%;
+        margin-left: -3px;
+        cursor: col-resize;
+        z-index: 3;
+        background: transparent;
+      }
+      .divider::after {
+        content: "";
+        position: absolute;
+        left: 3px;
+        top: 0;
+        width: 1px;
+        height: 100%;
+        background: var(--track);
+      }
+      .divider:hover::after, body.dragging .divider::after { background: var(--accent); width: 2px; left: 2px; }
+      body.dragging iframe { pointer-events: none; }
+      body.dragging { cursor: col-resize; user-select: none; }
     </style>
   </head>
   <body>
-    <h1>UnnaturalLight</h1>
-    <nav>
-      <a href="console/console.html"><b>Console</b><span>DMX faders, tunes, patch, instruments</span></a>
-      <a href="stage/stage.html"><b>Stage</b><span>3D performance area, beams and walls</span></a>
-    </nav>
+    <header class="bar">
+      <h1>UnnaturalLight</h1>
+      <div class="controls">
+        <button type="button" class="swap" id="swapBtn" title="Swap sides (Both view)" aria-label="Swap sides">⇄</button>
+        <div class="seg" role="group" aria-label="Show">
+          <button type="button" data-mode="console" title="Show only the console">Console</button>
+          <button type="button" data-mode="both" title="Stage and console side by side">Both</button>
+          <button type="button" data-mode="stage" title="Show only the stage">Stage</button>
+        </div>
+      </div>
+    </header>
+    <main class="panes" id="panes">
+      <iframe id="stageFrame" src="stage/stage.html" title="Stage"></iframe>
+      <div class="divider" id="divider" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+      <iframe id="consoleFrame" src="console/console.html" title="Console" allow="serial"></iframe>
+    </main>
+
+    <script>
+      // Combined page: the console and the stage run in their own frames
+      // (unchanged, still linked live), and this page only lays them out.
+      const KEY = "unnaturallight.shell";
+      const MIN = 20; // % each side keeps in Both view
+      const panes = document.getElementById("panes");
+      const stage = document.getElementById("stageFrame");
+      const consoleFrame = document.getElementById("consoleFrame");
+      const divider = document.getElementById("divider");
+      const swapBtn = document.getElementById("swapBtn");
+
+      // split = width of the LEFT pane in Both view (%); swapped = console on the left.
+      let prefs = { mode: "both", split: 50, swapped: false };
+      try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") }; } catch { /* storage unavailable */ }
+      const save = () => { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ } };
+
+      function place(frame, left, width, z, shown = true) {
+        frame.style.left = `${left}%`;
+        frame.style.width = `${width}%`;
+        frame.style.zIndex = String(z);
+        frame.style.visibility = shown ? "visible" : "hidden";
+      }
+
+      function layout() {
+        const { mode, split } = prefs;
+        if (mode === "both") {
+          const [left, right] = prefs.swapped ? [consoleFrame, stage] : [stage, consoleFrame];
+          place(left, 0, split, 2);
+          place(right, split, 100 - split, 2);
+          divider.style.left = `${split}%`;
+          divider.hidden = false;
+        } else if (mode === "stage") {
+          // Console stays full-size and rendered underneath, so its fades keep running.
+          place(stage, 0, 100, 2);
+          place(consoleFrame, 0, 100, 1);
+          divider.hidden = true;
+        } else {
+          place(consoleFrame, 0, 100, 2);
+          place(stage, 0, 100, 1, false);
+          divider.hidden = true;
+        }
+        document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+        swapBtn.disabled = mode !== "both";
+        swapBtn.title = prefs.swapped ? "Swap sides: stage left, console right" : "Swap sides: console left, stage right";
+      }
+
+      // Swap keeps each pane's width: the left pane's share moves to the right.
+      swapBtn.addEventListener("click", () => {
+        prefs.swapped = !prefs.swapped;
+        prefs.split = 100 - prefs.split;
+        save();
+        layout();
+      });
+
+      document.querySelectorAll("[data-mode]").forEach((b) => {
+        b.addEventListener("click", () => {
+          prefs.mode = b.dataset.mode;
+          save();
+          layout();
+          (prefs.mode === "console" ? consoleFrame : stage).focus();
+        });
+      });
+
+      divider.addEventListener("pointerdown", (e) => {
+        divider.setPointerCapture(e.pointerId);
+        document.body.classList.add("dragging");
+      });
+      divider.addEventListener("pointermove", (e) => {
+        if (!divider.hasPointerCapture(e.pointerId)) return;
+        const r = panes.getBoundingClientRect();
+        prefs.split = Math.min(100 - MIN, Math.max(MIN, ((e.clientX - r.left) / r.width) * 100));
+        layout();
+      });
+      const endDrag = () => { document.body.classList.remove("dragging"); save(); };
+      divider.addEventListener("pointerup", endDrag);
+      divider.addEventListener("pointercancel", endDrag);
+      divider.addEventListener("dblclick", () => { prefs.split = 50; save(); layout(); });
+
+      layout();
+    </script>
   </body>
 </html>

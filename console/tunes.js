@@ -299,7 +299,10 @@ export function tunesFromLegacyRows(
  * @returns {Tune}
  */
 export function resolveActiveTune(tunes, activeTuneId) {
-  const list = normalizeTunes(tunes);
+  // Return the tune object from `tunes` itself, not from a normalized copy:
+  // the console edits the returned tune's transitions in place, and a copy
+  // would make those edits (fader moves, …) miss the saved setlist.
+  const list = Array.isArray(tunes) && tunes.length > 0 ? tunes : normalizeTunes(tunes);
   if (activeTuneId) {
     const found = list.find((tune) => tune.id === activeTuneId);
     if (found) return found;
