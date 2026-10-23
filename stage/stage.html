@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UnnaturalLight · Stage</title>
+    <link rel="stylesheet" href="stage.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>UnnaturalLight <span>· Stage</span></h1>
+        <div class="group" title="Performance area size in metres">
+          <label>Box W</label><input id="boxW" type="number" min="1" max="100" step="0.5" />
+          <label>D</label><input id="boxD" type="number" min="1" max="100" step="0.5" />
+          <label>H</label><input id="boxH" type="number" min="1" max="50" step="0.5" />
+          <label>m</label>
+        </div>
+        <div class="spacer"></div>
+        <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place instrument</button>
+        <button id="rigBtn" title="Place a rig: a preset group of instruments">+ Place rig</button>
+        <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
+        <button id="exportBtn" title="Download the stage as JSON">Export</button>
+        <button id="importBtn" title="Load a stage JSON file">Import</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden />
+      </header>
+
+      <div class="view" id="view">
+        <div class="hud" id="hud" hidden></div>
+        <div class="banner" id="banner" hidden>Click a surface (inside) · ⌥-click a wall (outside) · click the ground off the box · or click the plan · Esc cancels</div>
+        <div class="keys">
+          <span><kbd>←</kbd><kbd>→</kbd> pan</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> tilt</span>
+          <span><kbd>+</kbd><kbd>−</kbd> intensity</span>
+          <span><kbd>[</kbd><kbd>]</kbd> beam</span>
+          <span><kbd>⇧</kbd> ×10 · <kbd>⌥</kbd> fine</span>
+          <span><kbd>Tab</kbd> next</span>
+          <span><kbd>A</kbd> place</span>
+          <span>right-click an instrument for more</span>
+          <span><kbd>⌫</kbd> delete · <kbd>⌘Z</kbd> undo</span>
+        </div>
+      </div>
+
+      <aside>
+        <section>
+          <h2>
+            Plan
+            <span class="seg" role="group" aria-label="Plan view">
+              <button type="button" data-plan-view="top" title="From above, audience at the bottom">Top</button>
+              <button type="button" data-plan-view="front" title="From the audience, looking upstage">Front</button>
+              <button type="button" data-plan-view="sr" title="From stage right, audience on the right">SR</button>
+              <button type="button" data-plan-view="sl" title="From stage left, audience on the left">SL</button>
+            </span>
+          </h2>
+          <canvas id="plan"></canvas>
+          <p class="hint">Drag instruments to move them (in Front / SR / SL this changes height too). Shift-click to select several; keys act on every selected instrument.</p>
+        </section>
+        <section>
+          <h2>Instruments <span id="count"></span></h2>
+          <div class="list" id="list"></div>
+        </section>
+        <section id="inspector"></section>
+      </aside>
+    </div>
+
+    <div class="ctx-menu" id="ctxMenu" role="menu" hidden></div>
+
+    <dialog id="rigDlg" class="dlg">
+      <header class="dlg-head">
+        <h2>Place a rig</h2>
+        <button id="rigClose" type="button" aria-label="Close">✕</button>
+      </header>
+      <section>
+        <div class="fields">
+          <label for="rigType">Type</label>
+          <select id="rigType"></select>
+          <label for="rigSize" id="rigSizeLabel">Size (m)</label>
+          <input id="rigSize" type="number" min="0.5" max="50" step="0.5" value="4" />
+          <label for="rigCount">Instruments</label>
+          <input id="rigCount" type="number" min="2" max="32" step="1" value="8" />
+          <label for="rigTilt">Tilt °</label>
+          <input id="rigTilt" type="number" min="-90" max="90" step="5" value="0" />
+          <label for="rigYaw">Yaw °</label>
+          <input id="rigYaw" type="number" step="5" value="0" />
+        </div>
+        <p class="hint" id="rigHelp"></p>
+        <p class="hint" id="rigRoom"></p>
+        <div class="buttons">
+          <button id="rigPlace" class="primary" type="button">Place…</button>
+        </div>
+      </section>
+    </dialog>
+
+    <dialog id="settings" class="dlg">
+      <header class="dlg-head">
+        <h2>View settings</h2>
+        <button id="settingsClose" type="button" aria-label="Close">✕</button>
+      </header>
+      <section>
+        <h3>Transparent sides</h3>
+        <p class="hint">Ticked sides are see-through, so you can see instruments placed beyond them. Light from beams still shows on them. The floor is always solid.</p>
+        <div class="checks" id="surfaceRows"></div>
+        <div class="buttons">
+          <button type="button" data-all="transparent">All transparent</button>
+          <button type="button" data-all="solid">All solid</button>
+        </div>
+      </section>
+    </dialog>
+
+    <script type="module" src="stage.js"></script>
+  </body>
+</html>
