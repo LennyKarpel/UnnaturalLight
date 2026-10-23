@@ -1,6 +1,6 @@
 // Real fixtures from the Open Fixture Library (open-fixture-library.org):
 // browse manufacturers → fixtures → modes, and turn a mode into a channel
-// profile for a stage light and its console instrument.
+// profile for a stage light and its console fixture.
 //
 // Needs internet while browsing. A picked profile is saved with the light,
 // so placed lights keep working offline.
@@ -12,7 +12,7 @@
 const API = "https://open-fixture-library.org/api/v1";
 const RAW = "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-library/master/fixtures";
 const GITHUB_LIST = "https://api.github.com/repos/OpenLightingProject/open-fixture-library/contents/fixtures";
-/** Console instruments are capped at this many channels. */
+/** Console fixtures are capped at this many channels. */
 export const MAX_FIXTURE_CHANNELS = 64;
 
 /**

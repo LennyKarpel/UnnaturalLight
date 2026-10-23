@@ -22,30 +22,30 @@ import {
   parseAddress,
 } from "./patch.js";
 import {
-  createInstrument,
-  createInstrumentGroup,
+  createFixture,
+  createFixtureGroup,
   findRangeConflict,
   channelCount,
   formatChannelRange,
-  instrumentsInGroup,
-  MAX_INSTRUMENT_CHANNELS,
-  MAX_INSTRUMENT_GROUPS,
-  MAX_INSTRUMENT_QTY,
-  MAX_INSTRUMENTS,
+  fixturesInGroup,
+  MAX_FIXTURE_CHANNELS,
+  MAX_FIXTURE_GROUPS,
+  MAX_FIXTURE_QTY,
+  MAX_FIXTURES,
   nextAvailableRange,
   normalizeChannelSpan,
   normalizeColorMode,
-  normalizeInstrumentGroups,
-  normalizeInstruments,
+  normalizeFixtureGroups,
+  normalizeFixtures,
   normalizeMount,
-} from "./instruments.js";
+} from "./fixtures.js";
 import {
   DEFAULT_NAV_ORDER,
   defaultFaderName,
-  defaultSetlistName,
+  defaultSetName,
   defaultTuneName,
   defaultTransitionName,
-  downloadSetlist,
+  downloadSet,
   FADE_TIMES,
   createTune,
   createTransition,
@@ -59,15 +59,15 @@ import {
   normalizeNavOrder,
   normalizeTunes,
   normalizeTuneName,
-  normalizeSetlistName,
+  normalizeSetName,
   normalizeTransitionFadeTime,
-  parseSetlist,
+  parseSet,
   resolveActiveTune,
   saveSession,
-  setlistSnapshot,
+  setSnapshot,
   TRANSITION_FADE_TIMES,
   normalizeUniverses,
-} from "./setlist.js";
+} from "./set.js";
 
 /** One DMX USB Pro per universe (index 0 = universe 1). */
 const outputs = Array.from({ length: MAX_UNIVERSES }, () => new EnttecDmxPro());
@@ -91,11 +91,11 @@ function zeros() {
   return new Array(FADER_COUNT).fill(0);
 }
 
-/** @param {string} [setlistName] */
-function blankSetlistState(setlistName = defaultSetlistName()) {
+/** @param {string} [setName] */
+function blankSetState(setName = defaultSetName()) {
   const tune = createTune({ name: defaultTuneName(0) });
   return {
-    setlistName: normalizeSetlistName(setlistName),
+    setName: normalizeSetName(setName),
     navOrder: [...DEFAULT_NAV_ORDER],
     master: 100,
     cross: 0,
@@ -109,8 +109,8 @@ function blankSetlistState(setlistName = defaultSetlistName()) {
     tunes: [tune],
     activeTuneId: tune.id,
     faderNames: normalizeFaderNames(null),
-    instrumentGroups: [],
-    instruments: [],
+    fixtureGroups: [],
+    fixtures: [],
     patch: defaultPatch(),
   };
 }
@@ -118,15 +118,15 @@ function blankSetlistState(setlistName = defaultSetlistName()) {
 function initialState() {
   const session = loadSession();
   if (session) return session;
-  return blankSetlistState();
+  return blankSetState();
 }
 
 const boot = initialState();
 /** @type {string} */
-let setlistName = normalizeSetlistName(boot.setlistName);
+let setName = normalizeSetName(boot.setName);
 /** @type {string[]} */
 let navOrder = normalizeNavOrder(boot.navOrder);
-/** Universes in this setlist (1…MAX_UNIVERSES); channels go up to universes × 512. */
+/** Universes in this set (1…MAX_UNIVERSES); channels go up to universes × 512. */
 let universes = normalizeUniverses(boot.universes);
 setUniverseCount(universes);
 /** @type {import("./tunes.js").Tune[]} */
@@ -140,12 +140,12 @@ let rows = [];
 let names = [];
 /** @type {string[]} */
 let faderNames = normalizeFaderNames(boot.faderNames);
-/** @type {import("./instruments.js").InstrumentGroup[]} */
-let instrumentGroups = normalizeInstrumentGroups(boot.instrumentGroups);
-/** @type {import("./instruments.js").Instrument[]} */
-let instruments = normalizeInstruments(boot.instruments, instrumentGroups);
+/** @type {import("./fixtures.js").FixtureGroup[]} */
+let fixtureGroups = normalizeFixtureGroups(boot.fixtureGroups);
+/** @type {import("./fixtures.js").Fixture[]} */
+let fixtures = normalizeFixtures(boot.fixtures, fixtureGroups);
 /** @type {string | null} */
-let instrumentFormGroupId = null;
+let fixtureFormGroupId = null;
 let patch = boot.patch;
 let master = boot.master;
 let cross = boot.cross; // 0 = full From, 100 = full To
@@ -198,10 +198,10 @@ let fromSubBlackoutSnapshot = null;
 let toSubBlackoutSnapshot = null;
 
 /** @type {HTMLElement} */
-let setlistNameDisplay = requireEl("setlistNameDisplay", HTMLElement);
-const setlistMenuBtn = requireEl("setlistMenuBtn", HTMLButtonElement);
-const setlistMenu = requireEl("setlistMenu", HTMLElement);
-const setlistMenuList = requireEl("setlistMenuList", HTMLElement);
+let setNameDisplay = requireEl("setNameDisplay", HTMLElement);
+const setMenuBtn = requireEl("setMenuBtn", HTMLButtonElement);
+const setMenu = requireEl("setMenu", HTMLElement);
+const setMenuList = requireEl("setMenuList", HTMLElement);
 const rowsScroll = requireEl("rowsScroll", HTMLElement);
 const rowsEl = requireEl("rows", HTMLElement);
 const liveFadersEl = requireEl("liveFaders", HTMLElement);
@@ -247,10 +247,10 @@ const tuneScroll = requireEl("tuneScroll", HTMLElement);
 const tuneList = requireEl("tuneList", HTMLElement);
 const tuneEmpty = requireEl("tuneEmpty", HTMLElement);
 const activeTuneLabel = requireEl("activeTuneLabel", HTMLElement);
-const pageSetlist = requireEl("page-setlist", HTMLElement);
+const pageSet = requireEl("page-set", HTMLElement);
 const identityBtn = requireEl("identityBtn", HTMLButtonElement);
 const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
-const newSetlistBtn = requireEl("newSetlistBtn", HTMLButtonElement);
+const newSetBtn = requireEl("newSetBtn", HTMLButtonElement);
 const saveBtn = requireEl("saveBtn", HTMLButtonElement);
 const loadBtn = requireEl("loadBtn", HTMLButtonElement);
 const loadFile = requireEl("loadFile", HTMLInputElement);
@@ -271,52 +271,52 @@ const channelMenuSub = requireEl("channelMenuSub", HTMLElement);
 const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
 const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
 const CHANNEL_GROUP_SIZE = 32;
-/** Channel-picker groups of 32 across every universe in the setlist. */
+/** Channel-picker groups of 32 across every universe in the set. */
 const channelGroupCount = () => Math.ceil(channelLimit() / CHANNEL_GROUP_SIZE);
-const pageTunes = requireEl("page-tunes", HTMLElement);
+const pageTunes = requireEl("page-songs", HTMLElement);
 const pageChannels = requireEl("page-channels", HTMLElement);
-const pageInstruments = requireEl("page-instruments", HTMLElement);
+const pageFixtures = requireEl("page-fixtures", HTMLElement);
 const pagePatch = requireEl("page-patch", HTMLElement);
-const instrumentForm = requireEl("instrumentForm", HTMLFormElement);
-const instrumentNameInput = requireEl("instrumentNameInput", HTMLInputElement);
-const instrumentStartPicker = requireEl("instrumentStartPicker", HTMLElement);
-const instrumentCountPicker = requireEl("instrumentCountPicker", HTMLElement);
+const fixtureForm = requireEl("fixtureForm", HTMLFormElement);
+const fixtureNameInput = requireEl("fixtureNameInput", HTMLInputElement);
+const fixtureStartPicker = requireEl("fixtureStartPicker", HTMLElement);
+const fixtureCountPicker = requireEl("fixtureCountPicker", HTMLElement);
 const countMenu = requireEl("countMenu", HTMLElement);
 const countMenuList = requireEl("countMenuList", HTMLElement);
 /** @type {number} */
-let instrumentFormStart = 1;
+let fixtureFormStart = 1;
 /** @type {number} */
-let instrumentFormCount = 1;
+let fixtureFormCount = 1;
 /** @type {number} */
-let instrumentFormQty = 1;
+let fixtureFormQty = 1;
 /** @type {null | { sync: () => void }} */
-let instrumentFormStartPicker = null;
+let fixtureFormStartPicker = null;
 /** @type {null | { el: HTMLButtonElement, sync: () => void }} */
-let instrumentFormCountPicker = null;
+let fixtureFormCountPicker = null;
 /** @type {null | { el: HTMLButtonElement, sync: () => void }} */
-let instrumentFormQtyPicker = null;
-const instrumentQtyPicker = requireEl("instrumentQtyPicker", HTMLElement);
-const instrumentConflicts = requireEl("instrumentConflicts", HTMLElement);
-const instrumentScroll = requireEl("instrumentScroll", HTMLElement);
-const instrumentEmpty = requireEl("instrumentEmpty", HTMLElement);
-const instrumentList = requireEl("instrumentList", HTMLElement);
-const addInstrumentBtn = requireEl("addInstrumentBtn", HTMLButtonElement);
-const addInstrumentGroupBtn = requireEl("addInstrumentGroupBtn", HTMLButtonElement);
-const instrumentFormGroupPickerHost = requireEl(
-  "instrumentFormGroupPicker",
+let fixtureFormQtyPicker = null;
+const fixtureQtyPicker = requireEl("fixtureQtyPicker", HTMLElement);
+const fixtureConflicts = requireEl("fixtureConflicts", HTMLElement);
+const fixtureScroll = requireEl("fixtureScroll", HTMLElement);
+const fixtureEmpty = requireEl("fixtureEmpty", HTMLElement);
+const fixtureList = requireEl("fixtureList", HTMLElement);
+const addFixtureBtn = requireEl("addFixtureBtn", HTMLButtonElement);
+const addFixtureGroupBtn = requireEl("addFixtureGroupBtn", HTMLButtonElement);
+const fixtureFormGroupPickerHost = requireEl(
+  "fixtureFormGroupPicker",
   HTMLElement,
 );
-const instrumentGroupMenu = requireEl("instrumentGroupMenu", HTMLElement);
-const instrumentGroupMenuList = requireEl("instrumentGroupMenuList", HTMLElement);
+const fixtureGroupMenu = requireEl("fixtureGroupMenu", HTMLElement);
+const fixtureGroupMenuList = requireEl("fixtureGroupMenuList", HTMLElement);
 /** @type {null | { el: HTMLButtonElement, sync: () => void }} */
-let instrumentFormGroupPicker = null;
+let fixtureFormGroupPicker = null;
 const navEl = requireEl("nav", HTMLElement);
 /** @type {Record<string, HTMLElement>} */
 const pages = {
-  setlist: pageSetlist,
-  tunes: pageTunes,
+  set: pageSet,
+  songs: pageTunes,
   channels: pageChannels,
-  instruments: pageInstruments,
+  fixtures: pageFixtures,
   patch: pagePatch,
 };
 
@@ -324,7 +324,7 @@ function getNavLinks() {
   return [...navEl.querySelectorAll(".nav-link")];
 }
 
-/** Snapshot of last explicitly saved/loaded setlist (or boot state). */
+/** Snapshot of last explicitly saved/loaded set (or boot state). */
 let cleanSnapshot = "";
 
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }[]} */
@@ -337,15 +337,42 @@ let channelRowKey = "";
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }} */
 let selectedGroupUi = { valueEls: [], patchLabelEls: [], sliders: [] };
 
+/** A cue's own name ("" = none). */
 function transitionName(index) {
   const name = names[index];
-  if (typeof name === "string" && name.trim()) return name.trim();
-  return defaultTransitionName(index);
+  return typeof name === "string" ? name.trim() : "";
+}
+
+/** "Cue 3: Chorus": cues are numbered by their position in the song. */
+function cueLabel(index) {
+  const name = transitionName(index);
+  return `Cue ${index + 1}${name ? `: ${name}` : ""}`;
 }
 
 /** @deprecated */
 function sceneName(index) {
-  return transitionName(index);
+  return cueLabel(index);
+}
+
+/**
+ * Show "Cue N" (its position) and the cue's name in a title element.
+ * `editable` titles show a dim "name" placeholder while the cue has none.
+ */
+function fillCueTitle(el, index, editable = false) {
+  const num = document.createElement("span");
+  num.className = "cue-number";
+  num.textContent = `Cue ${index + 1}`;
+  const name = transitionName(index);
+  if (!name && !editable) {
+    el.replaceChildren(num);
+    return;
+  }
+  num.textContent += ":";
+  const label = document.createElement("span");
+  label.className = "cue-name";
+  label.classList.toggle("is-empty", !name);
+  label.textContent = name || "name";
+  el.replaceChildren(num, label);
 }
 
 function faderName(index) {
@@ -400,23 +427,23 @@ function makeFaderNameLabel(index) {
 function abortInlineEdits() {
   endInlineFaderRename?.();
   endInlineRename?.();
-  endInlineInstrumentRename?.();
+  endInlineFixtureRename?.();
   endInlineTuneRename?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 }
 
 /** @type {null | (() => void)} */
 let endInlineTuneRename = null;
 
 /** @type {null | (() => void)} */
-let endInlineInstrumentRename = null;
+let endInlineFixtureRename = null;
 
 async function renameFader(index, { preferInline = false } = {}) {
   if (index < 0 || index >= FADER_COUNT) return;
@@ -547,7 +574,7 @@ function beginInlineFaderRename(index, target) {
 /** @type {null | (() => void)} */
 let closeFaderNameMenu = null;
 /** @type {null | (() => void)} */
-let closeSetlistMenu = null;
+let closeSetMenu = null;
 
 /**
  * @param {HTMLElement} anchor
@@ -558,12 +585,12 @@ let closeSetlistMenu = null;
 function openFaderNameMenu(anchor, index, clientX, clientY) {
   closeFaderNameMenu?.();
   closeSceneRowMenu?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -696,7 +723,7 @@ function liveLevel(faderIndex) {
 
 function refreshLiveRow() {
   for (let i = 0; i < FADER_COUNT; i++) {
-    const level = liveLevel(i);
+    const level = outputLevel(i);
     liveUi.valueEls[i].textContent = String(level);
     liveUi.fillEls[i].style.height = `${(level / 255) * 100}%`;
     liveUi.patchLabelEls[i].textContent = formatChannelLabel(patch[i]);
@@ -706,12 +733,24 @@ function refreshLiveRow() {
 }
 
 /** @returns {Map<number, number>} DMX channel → output level */
+// Dimmer-fader overrides (output only, not saved), both momentary: while
+// held, blackout puts a fader's output at 0 and flash puts it at full.
+const blackedOutFaders = new Set();
+const flashingFaders = new Set();
+
+/** What a fader actually sends: its live level, unless flashed (full) or blacked out (0). */
+function outputLevel(i) {
+  if (flashingFaders.has(i)) return 255;
+  if (blackedOutFaders.has(i)) return 0;
+  return liveLevel(i);
+}
+
 function computeChannelLevels() {
   const byChannel = new Map();
   for (let i = 0; i < FADER_COUNT; i++) {
     const targets = patch[i];
     if (isUnpatched(targets)) continue;
-    const level = liveLevel(i);
+    const level = outputLevel(i);
     for (const target of targets) {
       const out = scaledLevel(level, target.max);
       const prev = byChannel.get(target.channel) ?? 0;
@@ -810,7 +849,7 @@ function ensureChannelRow() {
 }
 
 function persistSession() {
-  saveSession(currentSetlistState());
+  saveSession(currentSetState());
   savePatch(patch);
 }
 
@@ -819,7 +858,7 @@ function pushToDmx({ persist = true } = {}) {
 
   const byChannel = computeChannelLevels();
   for (const [channel, level] of byChannel) {
-    // Each universe has its own output; channels beyond the setlist's universes aren't sent.
+    // Each universe has its own output; channels beyond the set's universes aren't sent.
     const u = universeOf(channel);
     if (u <= universes) outputs[u - 1].setChannel(addressOf(channel), level);
   }
@@ -827,6 +866,8 @@ function pushToDmx({ persist = true } = {}) {
   refreshLiveRow();
   refreshChannelRow();
   refreshSelectedGroup();
+  refreshColorBars();
+  refreshDimmerButtons();
   notifyStage();
   if (persist) persistSession();
 }
@@ -871,6 +912,7 @@ function renderLiveRow() {
     liveFadersEl.append(wrap);
   }
 
+  addColorBars(liveFadersEl, null);
   liveUi = { valueEls, patchLabelEls, fillEls };
   refreshLiveRow();
 }
@@ -878,24 +920,24 @@ function renderLiveRow() {
 function refreshRowSelects() {
   selectedRow = Math.min(Math.max(0, selectedRow), rows.length - 1);
   syncPlaybackPair();
-  crossFromLabel.textContent = transitionName(fromRow);
-  crossToLabel.textContent = transitionName(toRow);
+  fillCueTitle(crossFromLabel, fromRow);
+  fillCueTitle(crossToLabel, toRow);
   const nextFade =
     getActiveTune().transitions[toRow]?.fadeTime ??
     normalizeTransitionFadeTime(fadeTime);
   goNextFade.textContent = `${nextFade}s`;
-  goBtn.title = `GO — fade to ${transitionName(toRow)} (${nextFade}s)`;
+  goBtn.title = `GO — transition to ${cueLabel(toRow)} (${nextFade}s)`;
   goBtn.setAttribute(
     "aria-label",
-    `GO to ${transitionName(toRow)} in ${nextFade} seconds`,
+    `GO to ${cueLabel(toRow)} in ${nextFade} seconds`,
   );
   syncSubmasterLabels();
   removeRowBtn.disabled = rows.length <= MIN_TRANSITIONS;
   removeRowBtn.setAttribute(
     "aria-label",
-    `Remove transition ${transitionName(selectedRow)}`,
+    `Remove ${cueLabel(selectedRow)}`,
   );
-  removeRowBtn.title = `Remove transition ${transitionName(selectedRow)}`;
+  removeRowBtn.title = `Remove ${cueLabel(selectedRow)}`;
   addRowBtn.disabled = rows.length >= MAX_TRANSITIONS;
   updateScenesButton();
   syncTuneUi();
@@ -903,13 +945,13 @@ function refreshRowSelects() {
 
 function updateScenesButton() {
   if (!currentSceneTitle) return;
-  currentSceneTitle.textContent = transitionName(selectedRow);
+  fillCueTitle(currentSceneTitle, selectedRow, true);
   currentSceneTitle.title = "Click to rename";
   channelsSceneMenuBtn.setAttribute(
     "aria-label",
-    `Options for transition ${transitionName(selectedRow)}`,
+    `Options for ${cueLabel(selectedRow)}`,
   );
-  channelsSceneMenuBtn.title = `Options for ${transitionName(selectedRow)}`;
+  channelsSceneMenuBtn.title = `Options for ${cueLabel(selectedRow)}`;
 }
 
 function setSelectedRow(index) {
@@ -945,12 +987,12 @@ let closeChannelsSceneMenu = null;
 function pickScene({ anchor, clientX, clientY }) {
   closeScenePicker?.();
   closeChannelsSceneMenu?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -1079,7 +1121,9 @@ function renderSelectedGroup() {
     selectedGroupFadersEl.append(wrap);
   }
 
+  addColorBars(selectedGroupFadersEl, selectedRow);
   selectedGroupUi = { valueEls, patchLabelEls, sliders };
+  refreshColorBars();
 }
 
 function refreshSelectedGroup() {
@@ -1109,9 +1153,9 @@ function adjustIndexAfterRemove(index, removed, lengthAfter) {
 function syncTuneUi() {
   const tune = getActiveTune();
   activeTuneLabel.textContent = tune.name;
-  activeTuneLabel.title = `${tune.name} · ${tune.transitions.length} transitions`;
+  activeTuneLabel.title = `${tune.name} · ${tune.transitions.length} cues`;
   addTuneBtn.disabled = tunes.length >= MAX_TUNES;
-  if (!pageSetlist.hidden) renderTunes();
+  if (!pageSet.hidden) renderTunes();
 }
 
 function clearTuneDropMarks() {
@@ -1177,7 +1221,7 @@ function startTuneDragSession(initialClientY) {
   stopTuneDragSession?.();
   tuneDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  pageSetlist.classList.add("is-dragging-tune");
+  pageSet.classList.add("is-dragging-tune");
 
   const onDragOver = (event) => {
     if (!dragTuneId) return;
@@ -1196,7 +1240,7 @@ function startTuneDragSession(initialClientY) {
       tuneDragScrollRaf = null;
     }
     tuneDragClientY = null;
-    pageSetlist.classList.remove("is-dragging-tune");
+    pageSet.classList.remove("is-dragging-tune");
     stopTuneDragSession = null;
   };
 }
@@ -1239,7 +1283,7 @@ function renderTunes() {
     const meta = document.createElement("span");
     meta.className = "tune-row-meta";
     const n = tune.transitions.length;
-    meta.textContent = `${n} transition${n === 1 ? "" : "s"}`;
+    meta.textContent = `${n} cue${n === 1 ? "" : "s"}`;
 
     const badge = document.createElement("span");
     badge.className = "tune-row-badge";
@@ -1247,7 +1291,7 @@ function renderTunes() {
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.className = "instrument-remove";
+    removeBtn.className = "fixture-remove";
     removeBtn.textContent = "×";
     removeBtn.title = `Remove ${tune.name}`;
     removeBtn.setAttribute("aria-label", `Remove ${tune.name}`);
@@ -1263,7 +1307,7 @@ function renderTunes() {
       if (
         event.target instanceof Element &&
         event.target.closest(
-          ".tune-drag-handle, .tune-row-name, .instrument-remove, .scene-title-input",
+          ".tune-drag-handle, .tune-row-name, .fixture-remove, .scene-title-input",
         )
       ) {
         return;
@@ -1364,7 +1408,7 @@ function beginInlineTuneRename(id, target) {
   input.className = "scene-title-input";
   input.maxLength = 40;
   input.value = tune.name;
-  input.setAttribute("aria-label", "Tune name");
+  input.setAttribute("aria-label", "Song name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
@@ -1450,7 +1494,7 @@ function setActiveTune(tuneId) {
 async function addTune() {
   if (tunes.length >= MAX_TUNES) return;
   const name = await promptName({
-    title: "New tune",
+    title: "New song",
     confirmLabel: "Create",
     initial: defaultTuneName(tunes.length),
   });
@@ -1468,8 +1512,8 @@ async function removeTune(id) {
   const tune = tunes.find((item) => item.id === id);
   if (!tune) return;
   const ok = await confirmAction({
-    title: "Remove tune?",
-    message: `Remove “${tune.name}” and all of its transitions?`,
+    title: "Remove song?",
+    message: `Remove “${tune.name}” and all of its cues?`,
     confirmLabel: "Remove",
   });
   if (!ok) return;
@@ -1682,7 +1726,7 @@ function renderRows() {
     head.tabIndex = 0;
     head.setAttribute("role", "button");
     head.setAttribute("aria-pressed", r === selectedRow ? "true" : "false");
-    head.title = "Click to set as Current";
+    head.title = "Click to make this the live cue";
 
     const dragHandle = document.createElement("div");
     dragHandle.className = "fader-row-drag-handle";
@@ -1695,15 +1739,15 @@ function renderRows() {
 
     const title = document.createElement("h3");
     title.className = "scene-title";
-    title.textContent = transitionName(r);
-    title.title = "Double-click to rename";
+    fillCueTitle(title, r, true);
+    title.title = "Double-click to name this cue";
 
     const menuBtn = document.createElement("button");
     menuBtn.type = "button";
     menuBtn.className = "scene-menu-btn";
     menuBtn.innerHTML = '<span class="scene-menu-dots" aria-hidden="true"></span>';
-    menuBtn.title = "Transition options";
-    menuBtn.setAttribute("aria-label", `Options for ${transitionName(r)}`);
+    menuBtn.title = "Cue options";
+    menuBtn.setAttribute("aria-label", `Options for ${cueLabel(r)}`);
     menuBtn.setAttribute("aria-haspopup", "menu");
     menuBtn.setAttribute("aria-expanded", "false");
     menuBtn.addEventListener("click", (event) => {
@@ -1719,7 +1763,7 @@ function renderRows() {
 
     const fadeGroup = document.createElement("div");
     fadeGroup.className = "transition-fade";
-    fadeGroup.title = "Fade time to arrive at this transition";
+    fadeGroup.title = "Transition time into this cue (how long GO takes to fade to it)";
     const fadeLabel = document.createElement("span");
     fadeLabel.className = "transition-fade-label";
     fadeLabel.textContent = "In";
@@ -1727,7 +1771,7 @@ function renderRows() {
     fadeSelect.className = "transition-fade-select";
     fadeSelect.setAttribute(
       "aria-label",
-      `Fade time into ${transitionName(r)}`,
+      `Transition time into ${cueLabel(r)}`,
     );
     const transition = getActiveTune().transitions[r];
     const fadeValue = normalizeTransitionFadeTime(transition?.fadeTime);
@@ -1753,10 +1797,10 @@ function renderRows() {
     hint.className = "fader-row-hint";
     hint.textContent =
       r === fromRow
-        ? "Current"
+        ? "Live"
         : r === toRow
-          ? "Next"
-          : "Click to set Current";
+          ? "Up next"
+          : "Click to make live";
 
     head.append(dragHandle, titleGroup, fadeGroup, hint);
     wireTransitionRowDrag(bank, dragHandle, r);
@@ -1832,15 +1876,380 @@ function renderRows() {
       grid.append(wrap);
     }
 
+    addColorBars(grid, r);
     bank.append(head, grid);
     rowsEl.append(bank);
     rowUi[r] = { valueEls, patchLabelEls, sliders };
   }
 
   refreshRowSelects();
+  refreshColorBars();
 }
 
+// ---------------------------------------------------------------------
+// R/G/B color bars: three side-by-side faders driving one light's red,
+// green and blue get a color bar under them. In a transition (and the
+// Channels-page strip) clicking it opens a color picker that sets all
+// three; on the Live strip it just shows the mix going out.
+// ---------------------------------------------------------------------
+
+/** What a fader drives, if it's a single channel with a known color role. */
+function faderColorRole(fader) {
+  const targets = patch[fader];
+  if (!targets || targets.length !== 1) return null;
+  const ch = targets[0].channel;
+  const owner = fixtures.find((i) => ch >= i.channelStart && ch <= i.channelEnd);
+  const role = owner?.roles?.[ch - owner.channelStart];
+  if (role) return { owner: owner.id, role };
+  // Hand-made fixtures: fall back to names ending in R / G / B or Red / Green / Blue.
+  const name = faderName(fader).trim();
+  const m = /(?:^|[\s·])(r|red|g|green|b|blue)$/i.exec(name);
+  if (!m) return null;
+  const c = m[1][0].toLowerCase();
+  return { owner: owner?.id ?? name.slice(0, -m[1].length).trim(), role: c === "r" ? "red" : c === "g" ? "green" : "blue" };
+}
+
+/** First fader of each R, G, B trio (side by side, same light). */
+function rgbTrios() {
+  const out = [];
+  for (let i = 0; i + 2 < FADER_COUNT; i++) {
+    const [r, g, b] = [faderColorRole(i), faderColorRole(i + 1), faderColorRole(i + 2)];
+    if (r?.role === "red" && g?.role === "green" && b?.role === "blue" && r.owner === g.owner && g.owner === b.owner) {
+      out.push(i);
+      i += 2;
+    }
+  }
+  return out;
+}
+
+/**
+ * Pan / tilt fader pairs of the same fixture (by role, or faders named
+ * "… Pan" / "… Tilt"): [{ pan, tilt }].
+ */
+function panTiltPairs() {
+  const roleOf = (i) => {
+    const r = faderColorRole(i);
+    if (r?.role === "pan" || r?.role === "tilt") return r;
+    const m = /(?:^|[\s·])(pan|tilt)$/i.exec(faderName(i).trim());
+    return m ? { owner: faderOwner(i)?.id ?? faderName(i).slice(0, -m[1].length).trim(), role: m[1].toLowerCase() } : null;
+  };
+  const roles = Array.from({ length: FADER_COUNT }, (_, i) => roleOf(i));
+  const out = [];
+  roles.forEach((r, pan) => {
+    if (r?.role !== "pan") return;
+    const tilt = roles.findIndex((t) => t?.role === "tilt" && t.owner === r.owner);
+    if (tilt >= 0) out.push({ pan, tilt });
+  });
+  return out;
+}
+
+const hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+
+// ---------------------------------------------------------------------
+// Fixture outlines: a line around each run of side-by-side faders that
+// control one fixture, labelled with its name.
+// ---------------------------------------------------------------------
+
+/** The fixture a fader controls (all its channels in one fixture), or null. */
+function faderOwner(fader) {
+  const targets = patch[fader];
+  if (!targets?.length) return null;
+  const owner = fixtures.find((i) => targets[0].channel >= i.channelStart && targets[0].channel <= i.channelEnd);
+  if (!owner) return null;
+  return targets.every((t) => t.channel >= owner.channelStart && t.channel <= owner.channelEnd) ? owner : null;
+}
+
+/** Runs of side-by-side faders with the same fixture: [{ start, length, fixture }]. */
+function fixtureRuns() {
+  const runs = [];
+  for (let i = 0; i < FADER_COUNT; ) {
+    const owner = faderOwner(i);
+    let j = i + 1;
+    if (owner) while (j < FADER_COUNT && faderOwner(j) === owner) j++;
+    if (owner) runs.push({ start: i, length: j - i, fixture: owner });
+    i = j;
+  }
+  return runs;
+}
+
+/** Outline colors, alternated so neighbouring fixtures look different. */
+const OUTLINE_COLORS = ["#e2a13a", "#5fb7d6", "#9cc76b", "#d68ab4", "#c9b458", "#8a9be0"];
+
+/**
+ * Grid columns for a fader block: a narrow spacer column follows each
+ * fixture's run of faders, so fixtures sit a little apart.
+ * `col[i]` is fader i's (1-based) grid column.
+ */
+function faderColumns(runs = fixtureRuns()) {
+  const ends = new Set(runs.map((run) => run.start + run.length - 1));
+  const col = [];
+  const template = [];
+  for (let i = 0; i < FADER_COUNT; i++) {
+    col.push(template.length + 1);
+    template.push("40px");
+    if (ends.has(i) && i < FADER_COUNT - 1) template.push("var(--fixture-gap)");
+  }
+  return { col, template: template.join(" ") };
+}
+
+function addFixtureOutlines(grid, { col, template } = faderColumns()) {
+  // Pin each fader to its own column so outlines can sit on top of them.
+  grid.style.gridTemplateColumns = template;
+  [...grid.children].filter((el) => el.classList.contains("fader")).forEach((el, i) => { el.style.gridColumn = String(col[i]); });
+  // When there's a second row (color bars, B / F buttons), outlines reach down
+  // over it too, so they sit inside the fixture's box (all outlines, for even heights).
+  const withBars = rgbTrios().length > 0 || dimmerFaderList().length > 0 || panTiltPairs().length > 0;
+  fixtureRuns().forEach((run, k) => {
+    const box = document.createElement("div");
+    box.className = "fixture-outline";
+    box.style.gridColumn = `${col[run.start]} / ${col[run.start + run.length - 1] + 1}`;
+    box.style.gridRow = withBars ? "1 / span 2" : "1";
+    box.style.setProperty("--outline", OUTLINE_COLORS[k % OUTLINE_COLORS.length]);
+    box.dataset.name = run.fixture.name;
+    box.dataset.fixtureId = run.fixture.id;
+    box.title = `${run.fixture.name} · ${formatChannelRange(run.fixture)}`;
+    grid.append(box);
+  });
+}
+
+/**
+ * Scroll the fader rows to show these fixtures' faders (they scroll
+ * together) and briefly highlight their outlines. Used when fixtures are
+ * selected on the stage.
+ */
+function revealFixtures(ids) {
+  const runs = fixtureRuns().filter((run) => ids.includes(run.fixture.id));
+  if (!runs.length) return;
+  const first = Math.min(...runs.map((r) => r.start));
+  const last = Math.max(...runs.map((r) => r.start + r.length - 1));
+  const strip = liveFadersEl;
+  const a = liveUi.valueEls[first]?.closest(".fader");
+  const b = liveUi.valueEls[last]?.closest(".fader");
+  if (strip && a && b) {
+    const left = a.offsetLeft - strip.offsetLeft;
+    const right = b.offsetLeft - strip.offsetLeft + b.offsetWidth;
+    const view = strip.clientWidth;
+    // Only scroll if the group isn't already fully in view; then centre it (or show its start).
+    if (left < strip.scrollLeft || right > strip.scrollLeft + view) {
+      const target = right - left <= view ? left - (view - (right - left)) / 2 : left - 8;
+      // Instant: a smooth scroll gets interrupted by the rows' scroll syncing.
+      strip.scrollLeft = Math.max(0, target);
+    }
+  }
+  for (const box of document.querySelectorAll(".fixture-outline")) {
+    const hit = ids.some((id) => box.dataset.fixtureId === id);
+    box.classList.toggle("is-revealed", hit);
+  }
+  clearTimeout(revealFixtures.timer);
+  revealFixtures.timer = setTimeout(() => {
+    for (const box of document.querySelectorAll(".fixture-outline.is-revealed")) box.classList.remove("is-revealed");
+  }, 1600);
+}
+
+// ---------------------------------------------------------------------
+// Blackout / flash buttons under dimmer faders
+// ---------------------------------------------------------------------
+
+/** Whether a fader drives a fixture's dimmer (roles, or a name ending in Dim / Dimmer / Intensity). */
+function isDimmerFader(fader) {
+  const targets = patch[fader];
+  if (!targets?.length) return false;
+  const ch = targets[0].channel;
+  const owner = fixtures.find((f) => ch >= f.channelStart && ch <= f.channelEnd);
+  if (owner?.roles?.[ch - owner.channelStart] === "dimmer") return true;
+  return /(?:^|[\s·])(dim|dimmer|intensity)$/i.test(faderName(fader).trim());
+}
+
+/**
+ * What a flash drives to full: the dimmer fader plus its fixture's red /
+ * green / blue faders (and any "white" one), so the fixture flashes white.
+ */
+function flashGroup(fader) {
+  const target = patch[fader]?.[0];
+  const owner = target && fixtures.find((f) => target.channel >= f.channelStart && target.channel <= f.channelEnd);
+  if (!owner) return [fader];
+  const group = [fader];
+  for (let j = 0; j < FADER_COUNT; j++) {
+    if (j === fader) continue;
+    const color = faderColorRole(j);
+    const isRgb = color?.owner === owner.id && ["red", "green", "blue"].includes(color.role);
+    if (isRgb || (faderOwner(j) === owner && /white$/i.test(faderName(j).trim()))) group.push(j);
+  }
+  return group;
+}
+
+const dimmerFaderList = () => Array.from({ length: FADER_COUNT }, (_, i) => i).filter(isDimmerFader);
+
+/** While `btn` is held, `faders()` are in `set` (blackout / flash); released, they're out. */
+function holdButton(btn, set, faders) {
+  let held = [];
+  const release = () => {
+    if (!held.length) return;
+    for (const f of held) set.delete(f);
+    held = [];
+    pushToDmx({ persist: false });
+  };
+  btn.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    btn.setPointerCapture(e.pointerId);
+    held = faders();
+    for (const f of held) set.add(f);
+    pushToDmx({ persist: false });
+  });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) btn.addEventListener(type, release);
+}
+
+/** B / F buttons for a dimmer fader, placed in the row under the faders (with the color bars). */
+function addDimmerButtons(grid, fader, col) {
+  const box = document.createElement("div");
+  box.className = "dim-btns";
+  box.style.gridColumn = String(col[fader]);
+  const blackout = document.createElement("button");
+  blackout.type = "button";
+  blackout.className = "dim-btn dim-blackout";
+  blackout.dataset.fader = String(fader);
+  blackout.textContent = "B";
+  blackout.title = `Blackout ${faderName(fader)}: output 0 while held`;
+  holdButton(blackout, blackedOutFaders, () => [fader]);
+  const flash = document.createElement("button");
+  flash.type = "button";
+  flash.className = "dim-btn dim-flash";
+  flash.dataset.fader = String(fader);
+  flash.textContent = "F";
+  flash.title = `Flash ${faderName(fader)}: full and white while held`;
+  holdButton(flash, flashingFaders, () => flashGroup(fader));
+  box.append(blackout, flash);
+  grid.append(box);
+}
+
+/** Light up the B / F buttons of every blacked-out / flashing fader (in every block). */
+function refreshDimmerButtons() {
+  for (const btn of document.querySelectorAll(".dim-btn")) {
+    const fader = Number(btn.dataset.fader);
+    btn.classList.toggle("on", btn.classList.contains("dim-blackout") ? blackedOutFaders.has(fader) : flashingFaders.has(fader));
+  }
+}
+
+/** DMX steps per pixel of mouse movement on a pan / tilt pad (⇧ = fine). */
+const PAD_SPEED = 0.5;
+const PAD_SPEED_FINE = 0.1;
+
+/**
+ * A pad under a pan / tilt pair: hold the mouse button on it and move the
+ * mouse: left / right = pan, up / down = tilt. The pointer is locked while
+ * held, so it can't run off the pad.
+ */
+function addPanTiltPad(grid, { pan, tilt }, row, col) {
+  const pad = document.createElement("div");
+  pad.className = "pt-pad";
+  pad.textContent = "✥";
+  pad.style.gridColumn = tilt === pan + 1 ? `${col[pan]} / ${col[tilt] + 1}` : String(col[pan]);
+  pad.title = `Hold and move the mouse: left / right = ${faderName(pan)}, up / down = ${faderName(tilt)} (⇧ = fine)`;
+  let held = null;
+  const move = (e) => {
+    const levels = rows[row];
+    if (!held || !levels) return;
+    const speed = e.shiftKey ? PAD_SPEED_FINE : PAD_SPEED;
+    held.pan = Math.max(0, Math.min(255, held.pan + e.movementX * speed));
+    held.tilt = Math.max(0, Math.min(255, held.tilt - e.movementY * speed));
+    const p = Math.round(held.pan);
+    const t = Math.round(held.tilt);
+    if (p === levels[pan] && t === levels[tilt]) return;
+    levels[pan] = p;
+    levels[tilt] = t;
+    syncSlidersFromState();
+    pushToDmx({ persist: false });
+  };
+  const release = () => {
+    if (!held) return;
+    held = null;
+    pad.classList.remove("is-held");
+    pad.removeEventListener("pointermove", move);
+    if (document.pointerLockElement === pad) document.exitPointerLock();
+    pushToDmx();
+  };
+  pad.addEventListener("pointerdown", (e) => {
+    const levels = rows[row];
+    if (e.button !== 0 || e.altKey || !levels) return;
+    e.preventDefault();
+    e.stopPropagation();
+    held = { pan: levels[pan], tilt: levels[tilt] };
+    pad.classList.add("is-held");
+    pad.setPointerCapture(e.pointerId);
+    pad.addEventListener("pointermove", move);
+    try {
+      pad.requestPointerLock()?.catch?.(() => {});
+    } catch {
+      // No pointer lock: pointer capture still tracks the drag.
+    }
+  });
+  pad.addEventListener("click", (e) => e.stopPropagation());
+  for (const type of ["pointerup", "pointercancel"]) pad.addEventListener(type, release);
+  grid.append(pad);
+}
+
+/** Add color bars to a fader grid: `row` = transition index, or null for Live. */
+function addColorBars(grid, row) {
+  const columns = faderColumns();
+  const { col } = columns;
+  addFixtureOutlines(grid, columns);
+  for (const fader of dimmerFaderList()) addDimmerButtons(grid, fader, col);
+  if (row != null) for (const pair of panTiltPairs()) addPanTiltPad(grid, pair, row, col);
+  for (const start of rgbTrios()) {
+    const bar = document.createElement("label");
+    bar.className = "rgb-bar";
+    bar.style.gridColumn = `${col[start]} / ${col[start + 2] + 1}`;
+    bar.dataset.start = String(start);
+    if (row == null) {
+      bar.dataset.live = "1";
+      bar.title = `${faderName(start)} / ${faderName(start + 1)} / ${faderName(start + 2)} · live color`;
+    } else {
+      bar.dataset.row = String(row);
+      bar.title = "Click to pick a color (sets these three faders)";
+      const input = document.createElement("input");
+      input.type = "color";
+      input.setAttribute("aria-label", `Color for ${faderName(start)}, ${faderName(start + 1)}, ${faderName(start + 2)}`);
+      input.addEventListener("input", () => {
+        const levels = rows[row];
+        if (!levels) return;
+        const v = input.value;
+        levels[start] = parseInt(v.slice(1, 3), 16);
+        levels[start + 1] = parseInt(v.slice(3, 5), 16);
+        levels[start + 2] = parseInt(v.slice(5, 7), 16);
+        syncSlidersFromState();
+        pushToDmx();
+      });
+      bar.append(input);
+    }
+    grid.append(bar);
+  }
+}
+
+/** Show each bar's current color (transition values, or live output). */
+function refreshColorBars() {
+  for (const bar of document.querySelectorAll(".rgb-bar")) {
+    const start = Number(bar.dataset.start);
+    const levels = bar.dataset.live ? [liveLevel(start), liveLevel(start + 1), liveLevel(start + 2)] : (rows[Number(bar.dataset.row)] ?? []).slice(start, start + 3);
+    const color = `#${hex2(levels[0] ?? 0)}${hex2(levels[1] ?? 0)}${hex2(levels[2] ?? 0)}`;
+    bar.style.setProperty("--rgb", color);
+    const input = bar.querySelector("input");
+    if (input && document.activeElement !== input) input.value = color;
+  }
+}
+
+/** Trio layout the fader rows were last drawn with (redraw when it changes). */
+let colorBarKey = "";
+
 function refreshFaderPatchLabels() {
+  // Patch / fixture edits can create or break an R/G/B trio: redraw the rows.
+  const key = `${rgbTrios().join(",")}|${fixtureRuns().map((r) => `${r.start}+${r.length}:${r.fixture.id}:${r.fixture.name}`).join(",")}|${dimmerFaderList().join(",")}|${panTiltPairs().map((p) => `${p.pan}:${p.tilt}`).join(",")}`;
+  if (key !== colorBarKey) {
+    colorBarKey = key;
+    renderLiveRow();
+    renderRows();
+    renderSelectedGroup();
+  }
   for (const ui of rowUi) {
     for (let i = 0; i < FADER_COUNT; i++) {
       const el = ui.patchLabelEls[i];
@@ -1906,7 +2315,7 @@ let closeChannelPicker = null;
 /** @type {null | (() => void)} */
 let closeCountPicker = null;
 /** @type {null | (() => void)} */
-let closeInstrumentGroupPicker = null;
+let closeFixtureGroupPicker = null;
 
 /**
  * @param {HTMLButtonElement} btn
@@ -2021,7 +2430,7 @@ function makeCountPickerButton({
 }
 
 /**
- * Instrument-group picker (Ungrouped + named groups).
+ * Fixture-group picker (Ungrouped + named groups).
  * @param {{
  *   getGroupId: () => string | null,
  *   setGroupId: (groupId: string | null) => void | Promise<void>,
@@ -2029,7 +2438,7 @@ function makeCountPickerButton({
  *   ariaLabel?: string | ((groupId: string | null, label: string) => string),
  * }} opts
  */
-function makeInstrumentGroupPickerButton({
+function makeFixtureGroupPickerButton({
   getGroupId,
   setGroupId,
   className = "channel-picker-btn",
@@ -2051,14 +2460,14 @@ function makeInstrumentGroupPickerButton({
         ? ariaLabel(groupId, label)
         : ariaLabel || `Group ${label}`;
     btn.setAttribute("aria-label", fullLabel);
-    btn.title = "Choose instrument group";
+    btn.title = "Choose fixture group";
   };
 
   sync();
   btn.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const groupId = await pickInstrumentGroup({
+    const groupId = await pickFixtureGroup({
       anchor: btn,
       current: getGroupId(),
     });
@@ -2073,7 +2482,7 @@ function makeInstrumentGroupPickerButton({
 /** @param {string | null | undefined} groupId */
 function groupLabel(groupId) {
   if (!groupId) return "Ungrouped";
-  return instrumentGroups.find((group) => group.id === groupId)?.name ?? "Ungrouped";
+  return fixtureGroups.find((group) => group.id === groupId)?.name ?? "Ungrouped";
 }
 
 /**
@@ -2081,11 +2490,11 @@ function groupLabel(groupId) {
  * @returns {Promise<string | null | undefined>}
  *   string = group id, null = Ungrouped, undefined = dismissed
  */
-function pickInstrumentGroup({ anchor, current }) {
-  closeInstrumentGroupPicker?.();
+function pickFixtureGroup({ anchor, current }) {
+  closeFixtureGroupPicker?.();
   closeCountPicker?.();
   closeChannelPicker?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2104,7 +2513,7 @@ function pickInstrumentGroup({ anchor, current }) {
     const onDocPointer = (event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (instrumentGroupMenu.contains(target) || anchor.contains(target)) return;
+      if (fixtureGroupMenu.contains(target) || anchor.contains(target)) return;
       finish(undefined);
     };
 
@@ -2113,18 +2522,18 @@ function pickInstrumentGroup({ anchor, current }) {
     };
 
     const cleanup = () => {
-      instrumentGroupMenu.hidden = true;
-      if (closeInstrumentGroupPicker === finishNull) {
-        closeInstrumentGroupPicker = null;
+      fixtureGroupMenu.hidden = true;
+      if (closeFixtureGroupPicker === finishNull) {
+        closeFixtureGroupPicker = null;
       }
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onDocKeydown, true);
     };
 
     const finishNull = () => finish(undefined);
-    closeInstrumentGroupPicker = finishNull;
+    closeFixtureGroupPicker = finishNull;
 
-    instrumentGroupMenuList.replaceChildren();
+    fixtureGroupMenuList.replaceChildren();
 
     const addItem = (label, value) => {
       const item = document.createElement("button");
@@ -2138,19 +2547,19 @@ function pickInstrumentGroup({ anchor, current }) {
         event.stopPropagation();
         finish(value);
       });
-      instrumentGroupMenuList.append(item);
+      fixtureGroupMenuList.append(item);
     };
 
     addItem("Ungrouped", null);
-    for (const group of instrumentGroups) {
+    for (const group of fixtureGroups) {
       addItem(group.name, group.id);
     }
 
-    instrumentGroupMenu.hidden = false;
+    fixtureGroupMenu.hidden = false;
 
     const anchorRect = anchor.getBoundingClientRect();
     const menuWidth = 180;
-    const menuHeight = Math.min(320, 48 + (instrumentGroups.length + 1) * 36);
+    const menuHeight = Math.min(320, 48 + (fixtureGroups.length + 1) * 36);
     let left = anchorRect.left;
     let top = anchorRect.bottom + 6;
     if (left + menuWidth > window.innerWidth - 8) {
@@ -2159,10 +2568,10 @@ function pickInstrumentGroup({ anchor, current }) {
     if (top + menuHeight > window.innerHeight - 8) {
       top = Math.max(8, anchorRect.top - menuHeight - 6);
     }
-    instrumentGroupMenu.style.left = `${left}px`;
-    instrumentGroupMenu.style.top = `${top}px`;
+    fixtureGroupMenu.style.left = `${left}px`;
+    fixtureGroupMenu.style.top = `${top}px`;
 
-    const currentEl = instrumentGroupMenuList.querySelector(".is-current");
+    const currentEl = fixtureGroupMenuList.querySelector(".is-current");
     if (currentEl) currentEl.scrollIntoView({ block: "nearest" });
 
     document.addEventListener("pointerdown", onDocPointer, true);
@@ -2177,15 +2586,15 @@ function pickInstrumentGroup({ anchor, current }) {
 function pickCount({ anchor, current }) {
   closeCountPicker?.();
   closeChannelPicker?.();
-  closeInstrumentGroupPicker?.();
-  closeSetlistMenu?.();
+  closeFixtureGroupPicker?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
 
   const clamped = Math.min(
-    MAX_INSTRUMENT_CHANNELS,
+    MAX_FIXTURE_CHANNELS,
     Math.max(1, Math.round(Number(current) || 1)),
   );
 
@@ -2221,7 +2630,7 @@ function pickCount({ anchor, current }) {
     closeCountPicker = finishNull;
 
     countMenuList.replaceChildren();
-    for (let n = 1; n <= MAX_INSTRUMENT_CHANNELS; n++) {
+    for (let n = 1; n <= MAX_FIXTURE_CHANNELS; n++) {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "popup-menu-item";
@@ -2266,8 +2675,8 @@ function pickCount({ anchor, current }) {
 function pickChannel({ anchor, current }) {
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
-  closeSetlistMenu?.();
+  closeFixtureGroupPicker?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2830,62 +3239,62 @@ function toggleFadePause() {
   fadeRaf = requestAnimationFrame(tickTimedFade);
 }
 
-function syncSetlistNameUi() {
-  const label = normalizeSetlistName(setlistName);
-  setlistName = label;
-  if (setlistNameDisplay.isConnected) {
-    setlistNameDisplay.hidden = false;
-    setlistNameDisplay.textContent = label;
-    setlistNameDisplay.title = "Click to rename";
+function syncSetNameUi() {
+  const label = normalizeSetName(setName);
+  setName = label;
+  if (setNameDisplay.isConnected) {
+    setNameDisplay.hidden = false;
+    setNameDisplay.textContent = label;
+    setNameDisplay.title = "Click to rename";
   }
-  setlistMenuBtn.hidden = false;
-  setlistMenuBtn.setAttribute("aria-label", `Options for setlist ${label}`);
+  setMenuBtn.hidden = false;
+  setMenuBtn.setAttribute("aria-label", `Options for set ${label}`);
   document.title = `${label} · UnnaturalLight`;
 }
 
-function applySetlistName(name) {
-  const next = normalizeSetlistName(name);
-  if (!next || next === setlistName) return false;
-  setlistName = next;
-  syncSetlistNameUi();
+function applySetName(name) {
+  const next = normalizeSetName(name);
+  if (!next || next === setName) return false;
+  setName = next;
+  syncSetNameUi();
   persistSession();
   return true;
 }
 
-function wireSetlistNameDisplay(el) {
+function wireSetNameDisplay(el) {
   el.title = "Click to rename";
   el.setAttribute("role", "button");
   el.tabIndex = 0;
   el.addEventListener("click", () => {
-    beginInlineSetlistRename();
+    beginInlineSetRename();
   });
   el.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      beginInlineSetlistRename();
+      beginInlineSetRename();
     }
   });
 }
 
-/** Edit the setlist name in place with a text input. */
-function beginInlineSetlistRename() {
+/** Edit the set name in place with a text input. */
+function beginInlineSetRename() {
   abortInlineEdits();
-  if (!(setlistNameDisplay instanceof HTMLElement) || !setlistNameDisplay.isConnected) {
-    const el = document.getElementById("setlistNameDisplay");
+  if (!(setNameDisplay instanceof HTMLElement) || !setNameDisplay.isConnected) {
+    const el = document.getElementById("setNameDisplay");
     if (!(el instanceof HTMLElement)) return;
-    setlistNameDisplay = el;
+    setNameDisplay = el;
   }
 
-  const title = setlistNameDisplay;
+  const title = setNameDisplay;
   const parent = title.parentElement;
   if (!parent) return;
 
   const input = document.createElement("input");
   input.type = "text";
-  input.className = "scene-title-input setlist-name-input";
+  input.className = "scene-title-input set-name-input";
   input.maxLength = 40;
-  input.value = setlistName;
-  input.setAttribute("aria-label", "Setlist name");
+  input.value = setName;
+  input.setAttribute("aria-label", "Set name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
@@ -2902,19 +3311,19 @@ function beginInlineSetlistRename() {
     input.removeEventListener("blur", onBlur);
 
     const next = input.value.trim();
-    if (commit && next) applySetlistName(next);
+    if (commit && next) applySetName(next);
 
     const restored = document.createElement("p");
-    restored.id = "setlistNameDisplay";
-    restored.className = "setlist-name";
-    restored.textContent = setlistName;
+    restored.id = "setNameDisplay";
+    restored.className = "set-name";
+    restored.textContent = setName;
 
     if (input.isConnected) input.replaceWith(restored);
     else parent.prepend(restored);
 
-    setlistNameDisplay = restored;
-    wireSetlistNameDisplay(restored);
-    syncSetlistNameUi();
+    setNameDisplay = restored;
+    wireSetNameDisplay(restored);
+    syncSetNameUi();
   };
 
   const finishAbort = () => finish(false);
@@ -2943,15 +3352,15 @@ function beginInlineSetlistRename() {
  * @param {HTMLElement} anchor
  * @returns {Promise<"rename" | null>}
  */
-function openSetlistMenu(anchor) {
-  closeSetlistMenu?.();
+function openSetMenu(anchor) {
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -2966,7 +3375,7 @@ function openSetlistMenu(anchor) {
     const onDocPointer = (event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (setlistMenu.contains(target) || anchor.contains(target)) return;
+      if (setMenu.contains(target) || anchor.contains(target)) return;
       finish(null);
     };
 
@@ -2975,17 +3384,17 @@ function openSetlistMenu(anchor) {
     };
 
     const cleanup = () => {
-      setlistMenu.hidden = true;
+      setMenu.hidden = true;
       anchor.setAttribute("aria-expanded", "false");
-      if (closeSetlistMenu === finishNull) closeSetlistMenu = null;
+      if (closeSetMenu === finishNull) closeSetMenu = null;
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onDocKeydown, true);
     };
 
     const finishNull = () => finish(null);
-    closeSetlistMenu = finishNull;
+    closeSetMenu = finishNull;
 
-    setlistMenuList.replaceChildren();
+    setMenuList.replaceChildren();
     const item = document.createElement("button");
     item.type = "button";
     item.className = "popup-menu-item";
@@ -2995,9 +3404,9 @@ function openSetlistMenu(anchor) {
       event.stopPropagation();
       finish("rename");
     });
-    setlistMenuList.append(item);
+    setMenuList.append(item);
 
-    setlistMenu.hidden = false;
+    setMenu.hidden = false;
     anchor.setAttribute("aria-expanded", "true");
 
     const anchorRect = anchor.getBoundingClientRect();
@@ -3011,25 +3420,25 @@ function openSetlistMenu(anchor) {
     if (top + menuHeight > window.innerHeight - 8) {
       top = Math.max(8, anchorRect.top - menuHeight - 6);
     }
-    setlistMenu.style.left = `${left}px`;
-    setlistMenu.style.top = `${top}px`;
+    setMenu.style.left = `${left}px`;
+    setMenu.style.top = `${top}px`;
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);
   }).then((action) => {
-    if (action === "rename") beginInlineSetlistRename();
+    if (action === "rename") beginInlineSetRename();
     return action;
   });
 }
 
-function currentSetlistState() {
+function currentSetState() {
   // Keep transition names in sync (rows share level array refs already).
   const tune = getActiveTune();
   for (let i = 0; i < tune.transitions.length; i++) {
     if (typeof names[i] === "string") tune.transitions[i].name = names[i];
   }
   return {
-    setlistName,
+    setName,
     navOrder,
     master,
     cross,
@@ -3043,8 +3452,8 @@ function currentSetlistState() {
     tunes,
     activeTuneId,
     faderNames,
-    instrumentGroups,
-    instruments,
+    fixtureGroups,
+    fixtures,
     patch,
   };
 }
@@ -3163,79 +3572,79 @@ function wireNavReorder() {
   }
 }
 
-function ensureInstrumentFormStartPicker() {
-  if (instrumentFormStartPicker) {
-    instrumentFormStartPicker.sync();
+function ensureFixtureFormStartPicker() {
+  if (fixtureFormStartPicker) {
+    fixtureFormStartPicker.sync();
     return;
   }
-  instrumentStartPicker.replaceChildren();
-  instrumentFormStartPicker = makeChannelPickerButton({
+  fixtureStartPicker.replaceChildren();
+  fixtureFormStartPicker = makeChannelPickerButton({
     className: "channel-picker-btn channel-picker-btn-lg",
-    getChannel: () => instrumentFormStart,
+    getChannel: () => fixtureFormStart,
     setChannel: (channel) => {
-      instrumentFormStart = channel;
+      fixtureFormStart = channel;
     },
-    ariaLabel: (ch) => `Instrument start channel ${ch}`,
+    ariaLabel: (ch) => `Fixture start channel ${ch}`,
   });
-  instrumentStartPicker.append(instrumentFormStartPicker.el);
+  fixtureStartPicker.append(fixtureFormStartPicker.el);
 }
 
-function ensureInstrumentFormCountPicker() {
-  if (instrumentFormCountPicker) {
-    instrumentFormCountPicker.sync();
+function ensureFixtureFormCountPicker() {
+  if (fixtureFormCountPicker) {
+    fixtureFormCountPicker.sync();
     return;
   }
-  instrumentCountPicker.replaceChildren();
-  instrumentFormCountPicker = makeCountPickerButton({
+  fixtureCountPicker.replaceChildren();
+  fixtureFormCountPicker = makeCountPickerButton({
     className: "channel-picker-btn channel-picker-btn-lg",
-    getCount: () => instrumentFormCount,
+    getCount: () => fixtureFormCount,
     setCount: (count) => {
-      instrumentFormCount = count;
+      fixtureFormCount = count;
     },
-    ariaLabel: (n) => `Instrument channel count ${n}`,
+    ariaLabel: (n) => `Fixture channel count ${n}`,
   });
-  instrumentCountPicker.append(instrumentFormCountPicker.el);
+  fixtureCountPicker.append(fixtureFormCountPicker.el);
 }
 
-function ensureInstrumentFormQtyPicker() {
-  if (instrumentFormQtyPicker) {
-    instrumentFormQtyPicker.sync();
+function ensureFixtureFormQtyPicker() {
+  if (fixtureFormQtyPicker) {
+    fixtureFormQtyPicker.sync();
     return;
   }
-  instrumentQtyPicker.replaceChildren();
-  instrumentFormQtyPicker = makeCountPickerButton({
+  fixtureQtyPicker.replaceChildren();
+  fixtureFormQtyPicker = makeCountPickerButton({
     className: "channel-picker-btn channel-picker-btn-lg",
-    getCount: () => instrumentFormQty,
+    getCount: () => fixtureFormQty,
     setCount: (count) => {
-      instrumentFormQty = Math.min(MAX_INSTRUMENT_QTY, Math.max(1, count));
-      syncInstrumentFormAddLabel();
+      fixtureFormQty = Math.min(MAX_FIXTURE_QTY, Math.max(1, count));
+      syncFixtureFormAddLabel();
     },
-    ariaLabel: (n) => `Add ${n} instruments`,
+    ariaLabel: (n) => `Add ${n} fixtures`,
   });
-  instrumentQtyPicker.append(instrumentFormQtyPicker.el);
+  fixtureQtyPicker.append(fixtureFormQtyPicker.el);
 }
 
-function ensureInstrumentFormGroupPicker() {
-  if (instrumentFormGroupPicker) {
-    instrumentFormGroupPicker.sync();
+function ensureFixtureFormGroupPicker() {
+  if (fixtureFormGroupPicker) {
+    fixtureFormGroupPicker.sync();
     return;
   }
-  instrumentFormGroupPickerHost.replaceChildren();
-  instrumentFormGroupPicker = makeInstrumentGroupPickerButton({
+  fixtureFormGroupPickerHost.replaceChildren();
+  fixtureFormGroupPicker = makeFixtureGroupPickerButton({
     className: "channel-picker-btn channel-picker-btn-lg",
-    getGroupId: () => instrumentFormGroupId,
+    getGroupId: () => fixtureFormGroupId,
     setGroupId: (groupId) => {
-      instrumentFormGroupId = groupId;
+      fixtureFormGroupId = groupId;
     },
-    ariaLabel: (_id, label) => `Instrument group ${label}`,
+    ariaLabel: (_id, label) => `Fixture group ${label}`,
   });
-  instrumentFormGroupPickerHost.append(instrumentFormGroupPicker.el);
+  fixtureFormGroupPickerHost.append(fixtureFormGroupPicker.el);
 }
 
-function syncInstrumentFormAddLabel() {
-  const qty = Math.max(1, Math.round(instrumentFormQty) || 1);
-  addInstrumentBtn.textContent =
-    qty === 1 ? "+ Instrument" : `+ ${qty} Instruments`;
+function syncFixtureFormAddLabel() {
+  const qty = Math.max(1, Math.round(fixtureFormQty) || 1);
+  addFixtureBtn.textContent =
+    qty === 1 ? "+ Fixture" : `+ ${qty} Fixtures`;
 }
 
 /**
@@ -3244,7 +3653,7 @@ function syncInstrumentFormAddLabel() {
  * @param {number} qty
  * @returns {string[]}
  */
-function batchInstrumentNames(base, qty) {
+function batchFixtureNames(base, qty) {
   const name = base.trim().slice(0, 40);
   if (qty <= 1) return [name];
   const match = name.match(/^(.*?)(\d+)$/);
@@ -3259,47 +3668,47 @@ function batchInstrumentNames(base, qty) {
   return Array.from({ length: qty }, (_, i) => `${name} ${i + 1}`.slice(0, 40));
 }
 
-function syncInstrumentForm() {
-  const full = instruments.length >= MAX_INSTRUMENTS;
-  const groupsFull = instrumentGroups.length >= MAX_INSTRUMENT_GROUPS;
-  addInstrumentBtn.disabled = full;
-  addInstrumentGroupBtn.disabled = groupsFull;
-  instrumentNameInput.disabled = full;
-  ensureInstrumentFormStartPicker();
-  ensureInstrumentFormCountPicker();
-  ensureInstrumentFormQtyPicker();
-  ensureInstrumentFormGroupPicker();
-  syncInstrumentFormAddLabel();
-  if (instrumentFormStartPicker) {
-    instrumentFormStartPicker.el.disabled = full;
+function syncFixtureForm() {
+  const full = fixtures.length >= MAX_FIXTURES;
+  const groupsFull = fixtureGroups.length >= MAX_FIXTURE_GROUPS;
+  addFixtureBtn.disabled = full;
+  addFixtureGroupBtn.disabled = groupsFull;
+  fixtureNameInput.disabled = full;
+  ensureFixtureFormStartPicker();
+  ensureFixtureFormCountPicker();
+  ensureFixtureFormQtyPicker();
+  ensureFixtureFormGroupPicker();
+  syncFixtureFormAddLabel();
+  if (fixtureFormStartPicker) {
+    fixtureFormStartPicker.el.disabled = full;
   }
-  if (instrumentFormCountPicker) {
-    instrumentFormCountPicker.el.disabled = full;
+  if (fixtureFormCountPicker) {
+    fixtureFormCountPicker.el.disabled = full;
   }
-  if (instrumentFormQtyPicker) {
-    instrumentFormQtyPicker.el.disabled = full;
+  if (fixtureFormQtyPicker) {
+    fixtureFormQtyPicker.el.disabled = full;
   }
-  if (instrumentFormGroupPicker) {
-    instrumentFormGroupPicker.el.disabled = full;
+  if (fixtureFormGroupPicker) {
+    fixtureFormGroupPicker.el.disabled = full;
   }
 }
 
 /** Suggest next free start for the add form (after add / first paint). */
-function suggestInstrumentFormStart() {
-  const width = Math.max(1, Math.round(instrumentFormCount) || 1);
-  const suggested = nextAvailableRange(instruments, width);
+function suggestFixtureFormStart() {
+  const width = Math.max(1, Math.round(fixtureFormCount) || 1);
+  const suggested = nextAvailableRange(fixtures, width);
   if (!suggested) return;
-  instrumentFormStart = suggested.channelStart;
-  instrumentFormStartPicker?.sync();
+  fixtureFormStart = suggested.channelStart;
+  fixtureFormStartPicker?.sync();
 }
 
-function updateInstrumentConflicts() {
+function updateFixtureConflicts() {
   /** @type {string[]} */
   const notes = [];
-  for (let i = 0; i < instruments.length; i++) {
-    const a = instruments[i];
-    for (let j = i + 1; j < instruments.length; j++) {
-      const b = instruments[j];
+  for (let i = 0; i < fixtures.length; i++) {
+    const a = fixtures[i];
+    for (let j = i + 1; j < fixtures.length; j++) {
+      const b = fixtures[j];
       if (
         findRangeConflict([b], a.channelStart, a.channelEnd)
       ) {
@@ -3309,48 +3718,48 @@ function updateInstrumentConflicts() {
       }
     }
   }
-  instrumentConflicts.hidden = notes.length === 0;
-  instrumentConflicts.textContent = notes.length
+  fixtureConflicts.hidden = notes.length === 0;
+  fixtureConflicts.textContent = notes.length
     ? `Channel conflicts: ${notes.join(" · ")}`
     : "";
-  for (const row of instrumentList.querySelectorAll(".instrument-row")) {
+  for (const row of fixtureList.querySelectorAll(".fixture-row")) {
     const id = row.getAttribute("data-id");
-    const instrument = instruments.find((item) => item.id === id);
-    if (!instrument) continue;
+    const fixture = fixtures.find((item) => item.id === id);
+    if (!fixture) continue;
     const conflict = findRangeConflict(
-      instruments,
-      instrument.channelStart,
-      instrument.channelEnd,
-      instrument.id,
+      fixtures,
+      fixture.channelStart,
+      fixture.channelEnd,
+      fixture.id,
     );
     row.classList.toggle("is-conflict", Boolean(conflict));
   }
 }
 
 /**
- * @param {import("./instruments.js").Instrument} instrument
+ * @param {import("./fixtures.js").Fixture} fixture
  * @param {number} start
  * @param {number} count
  * @param {{ sync: () => void } | null} startPicker
  * @param {{ sync: () => void } | null} countPicker
  * @returns {boolean}
  */
-function commitInstrumentRange(instrument, start, count, startPicker, countPicker) {
+function commitFixtureRange(fixture, start, count, startPicker, countPicker) {
   const range = normalizeChannelSpan(start, count);
   if (!range) {
     startPicker?.sync();
     countPicker?.sync();
     setStatus(
-      `Start + channel count (up to ${MAX_INSTRUMENT_CHANNELS}) must fit inside one universe`,
+      `Start + channel count (up to ${MAX_FIXTURE_CHANNELS}) must fit inside one universe`,
       "error",
     );
     return false;
   }
   const conflict = findRangeConflict(
-    instruments,
+    fixtures,
     range.channelStart,
     range.channelEnd,
-    instrument.id,
+    fixture.id,
   );
   if (conflict) {
     startPicker?.sync();
@@ -3359,30 +3768,30 @@ function commitInstrumentRange(instrument, start, count, startPicker, countPicke
       `Range overlaps ${conflict.name} (${formatChannelRange(conflict)})`,
       "error",
     );
-    updateInstrumentConflicts();
+    updateFixtureConflicts();
     return false;
   }
-  instrument.channelStart = range.channelStart;
-  instrument.channelEnd = range.channelEnd;
+  fixture.channelStart = range.channelStart;
+  fixture.channelEnd = range.channelEnd;
   startPicker?.sync();
   countPicker?.sync();
-  updateInstrumentConflicts();
+  updateFixtureConflicts();
   persistSession();
   setStatus(
-    `${instrument.name} → ${formatChannelRange(instrument)}`,
+    `${fixture.name} → ${formatChannelRange(fixture)}`,
     dmx.connected ? "connected" : "idle",
   );
   return true;
 }
 
 /** @type {string | null} */
-let dragInstrumentId = null;
+let dragFixtureId = null;
 /** @type {number | null} */
-let instrumentDragClientY = null;
+let fixtureDragClientY = null;
 /** @type {number | null} */
-let instrumentDragScrollRaf = null;
+let fixtureDragScrollRaf = null;
 /** @type {null | (() => void)} */
-let stopInstrumentDragSession = null;
+let stopFixtureDragSession = null;
 
 /**
  * @typedef {{
@@ -3393,16 +3802,16 @@ let stopInstrumentDragSession = null;
  * } | {
  *   kind: "group",
  *   groupId: string | null,
- * }} InstrumentDragHover
+ * }} FixtureDragHover
  */
-/** @type {InstrumentDragHover | null} */
-let instrumentDragHover = null;
+/** @type {FixtureDragHover | null} */
+let fixtureDragHover = null;
 
-const INSTRUMENT_DRAG_SCROLL_EDGE = 56;
-const INSTRUMENT_DRAG_SCROLL_MAX = 24;
+const FIXTURE_DRAG_SCROLL_EDGE = 56;
+const FIXTURE_DRAG_SCROLL_MAX = 24;
 
-function clearInstrumentDropMarks() {
-  for (const el of instrumentList.querySelectorAll(
+function clearFixtureDropMarks() {
+  for (const el of fixtureList.querySelectorAll(
     ".is-drop-before, .is-drop-after, .is-drop-target",
   )) {
     el.classList.remove("is-drop-before", "is-drop-after", "is-drop-target");
@@ -3410,13 +3819,13 @@ function clearInstrumentDropMarks() {
 }
 
 /** @param {HTMLElement} row @param {number} clientY */
-function instrumentDropAfter(row, clientY) {
+function fixtureDropAfter(row, clientY) {
   const rect = row.getBoundingClientRect();
   return clientY > rect.top + rect.height / 2;
 }
 
 /**
- * Move an instrument in list order and/or into another group.
+ * Move a fixture in list order and/or into another group.
  * @param {string} fromId
  * @param {{
  *   groupId: string | null,
@@ -3424,143 +3833,143 @@ function instrumentDropAfter(row, clientY) {
  *   afterId?: string | null,
  * }} opts
  */
-function placeInstrument(fromId, { groupId, beforeId = null, afterId = null }) {
-  const fromIndex = instruments.findIndex((item) => item.id === fromId);
+function placeFixture(fromId, { groupId, beforeId = null, afterId = null }) {
+  const fromIndex = fixtures.findIndex((item) => item.id === fromId);
   if (fromIndex < 0) return false;
   if (beforeId === fromId || afterId === fromId) return false;
 
-  const [item] = instruments.splice(fromIndex, 1);
+  const [item] = fixtures.splice(fromIndex, 1);
   item.groupId = groupId;
 
-  let insertAt = instruments.length;
+  let insertAt = fixtures.length;
   if (beforeId) {
-    const idx = instruments.findIndex((entry) => entry.id === beforeId);
+    const idx = fixtures.findIndex((entry) => entry.id === beforeId);
     if (idx >= 0) insertAt = idx;
   } else if (afterId) {
-    const idx = instruments.findIndex((entry) => entry.id === afterId);
+    const idx = fixtures.findIndex((entry) => entry.id === afterId);
     if (idx >= 0) insertAt = idx + 1;
   } else {
-    for (let i = instruments.length - 1; i >= 0; i--) {
-      if ((instruments[i].groupId ?? null) === groupId) {
+    for (let i = fixtures.length - 1; i >= 0; i--) {
+      if ((fixtures[i].groupId ?? null) === groupId) {
         insertAt = i + 1;
         break;
       }
     }
   }
 
-  instruments.splice(insertAt, 0, item);
+  fixtures.splice(insertAt, 0, item);
   return true;
 }
 
-function applyInstrumentDragHover() {
-  if (!dragInstrumentId || !instrumentDragHover) return false;
-  const fromId = dragInstrumentId;
-  const hover = instrumentDragHover;
+function applyFixtureDragHover() {
+  if (!dragFixtureId || !fixtureDragHover) return false;
+  const fromId = dragFixtureId;
+  const hover = fixtureDragHover;
   if (hover.kind === "row") {
-    return placeInstrument(fromId, {
+    return placeFixture(fromId, {
       groupId: hover.groupId,
       beforeId: hover.after ? null : hover.id,
       afterId: hover.after ? hover.id : null,
     });
   }
-  return placeInstrument(fromId, { groupId: hover.groupId });
+  return placeFixture(fromId, { groupId: hover.groupId });
 }
 
-function endInstrumentDrag() {
-  clearInstrumentDropMarks();
-  stopInstrumentDragSession?.();
-  dragInstrumentId = null;
-  instrumentDragHover = null;
+function endFixtureDrag() {
+  clearFixtureDropMarks();
+  stopFixtureDragSession?.();
+  dragFixtureId = null;
+  fixtureDragHover = null;
 }
 
 /** @param {string | null} groupId */
-function finishInstrumentDrop(groupId) {
-  const moved = applyInstrumentDragHover();
-  endInstrumentDrag();
+function finishFixtureDrop(groupId) {
+  const moved = applyFixtureDragHover();
+  endFixtureDrag();
   if (!moved) return;
-  instrumentFormGroupId = groupId;
-  renderInstruments();
+  fixtureFormGroupId = groupId;
+  renderFixtures();
   persistSession();
 }
 
-function tickInstrumentDragScroll() {
-  instrumentDragScrollRaf = null;
-  if (!dragInstrumentId) return;
+function tickFixtureDragScroll() {
+  fixtureDragScrollRaf = null;
+  if (!dragFixtureId) return;
 
-  if (instrumentDragClientY != null) {
-    const rect = instrumentScroll.getBoundingClientRect();
-    const y = instrumentDragClientY;
+  if (fixtureDragClientY != null) {
+    const rect = fixtureScroll.getBoundingClientRect();
+    const y = fixtureDragClientY;
     let dy = 0;
 
     if (y < rect.top) {
-      dy = -INSTRUMENT_DRAG_SCROLL_MAX;
+      dy = -FIXTURE_DRAG_SCROLL_MAX;
     } else if (y > rect.bottom) {
-      dy = INSTRUMENT_DRAG_SCROLL_MAX;
-    } else if (y < rect.top + INSTRUMENT_DRAG_SCROLL_EDGE) {
-      const distance = rect.top + INSTRUMENT_DRAG_SCROLL_EDGE - y;
-      const t = Math.min(1, distance / INSTRUMENT_DRAG_SCROLL_EDGE);
-      dy = -Math.ceil(Math.max(2, t * INSTRUMENT_DRAG_SCROLL_MAX));
-    } else if (y > rect.bottom - INSTRUMENT_DRAG_SCROLL_EDGE) {
-      const distance = y - (rect.bottom - INSTRUMENT_DRAG_SCROLL_EDGE);
-      const t = Math.min(1, distance / INSTRUMENT_DRAG_SCROLL_EDGE);
-      dy = Math.ceil(Math.max(2, t * INSTRUMENT_DRAG_SCROLL_MAX));
+      dy = FIXTURE_DRAG_SCROLL_MAX;
+    } else if (y < rect.top + FIXTURE_DRAG_SCROLL_EDGE) {
+      const distance = rect.top + FIXTURE_DRAG_SCROLL_EDGE - y;
+      const t = Math.min(1, distance / FIXTURE_DRAG_SCROLL_EDGE);
+      dy = -Math.ceil(Math.max(2, t * FIXTURE_DRAG_SCROLL_MAX));
+    } else if (y > rect.bottom - FIXTURE_DRAG_SCROLL_EDGE) {
+      const distance = y - (rect.bottom - FIXTURE_DRAG_SCROLL_EDGE);
+      const t = Math.min(1, distance / FIXTURE_DRAG_SCROLL_EDGE);
+      dy = Math.ceil(Math.max(2, t * FIXTURE_DRAG_SCROLL_MAX));
     }
 
     if (dy !== 0) {
       const maxScroll = Math.max(
         0,
-        instrumentScroll.scrollHeight - instrumentScroll.clientHeight,
+        fixtureScroll.scrollHeight - fixtureScroll.clientHeight,
       );
-      instrumentScroll.scrollTop = Math.max(
+      fixtureScroll.scrollTop = Math.max(
         0,
-        Math.min(maxScroll, instrumentScroll.scrollTop + dy),
+        Math.min(maxScroll, fixtureScroll.scrollTop + dy),
       );
     }
   }
 
   // Keep the loop alive for the whole drag — early frames often run before
   // any dragover has set clientY.
-  instrumentDragScrollRaf = requestAnimationFrame(tickInstrumentDragScroll);
+  fixtureDragScrollRaf = requestAnimationFrame(tickFixtureDragScroll);
 }
 
 /** @param {number} [initialClientY] */
-function startInstrumentDragSession(initialClientY) {
-  stopInstrumentDragSession?.();
-  instrumentDragClientY =
+function startFixtureDragSession(initialClientY) {
+  stopFixtureDragSession?.();
+  fixtureDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  instrumentDragHover = null;
-  pageInstruments.classList.add("is-dragging-instrument");
+  fixtureDragHover = null;
+  pageFixtures.classList.add("is-dragging-fixture");
 
   const onDragOver = (event) => {
-    if (!dragInstrumentId) return;
+    if (!dragFixtureId) return;
     // Keep the drag alive over page chrome above/below the list.
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    instrumentDragClientY = event.clientY;
+    fixtureDragClientY = event.clientY;
   };
 
   document.addEventListener("dragover", onDragOver, true);
-  instrumentDragScrollRaf = requestAnimationFrame(tickInstrumentDragScroll);
+  fixtureDragScrollRaf = requestAnimationFrame(tickFixtureDragScroll);
 
-  stopInstrumentDragSession = () => {
+  stopFixtureDragSession = () => {
     document.removeEventListener("dragover", onDragOver, true);
-    if (instrumentDragScrollRaf != null) {
-      cancelAnimationFrame(instrumentDragScrollRaf);
-      instrumentDragScrollRaf = null;
+    if (fixtureDragScrollRaf != null) {
+      cancelAnimationFrame(fixtureDragScrollRaf);
+      fixtureDragScrollRaf = null;
     }
-    instrumentDragClientY = null;
-    pageInstruments.classList.remove("is-dragging-instrument");
-    stopInstrumentDragSession = null;
+    fixtureDragClientY = null;
+    pageFixtures.classList.remove("is-dragging-fixture");
+    stopFixtureDragSession = null;
   };
 }
 
 /**
  * @param {HTMLElement} row
- * @param {import("./instruments.js").Instrument} instrument
+ * @param {import("./fixtures.js").Fixture} fixture
  */
-function wireInstrumentRowDrag(row, instrument) {
+function wireFixtureRowDrag(row, fixture) {
   const handle = document.createElement("div");
-  handle.className = "instrument-drag-handle";
+  handle.className = "fixture-drag-handle";
   handle.title = "Drag to reorder or move between groups";
   handle.setAttribute("aria-hidden", "true");
   handle.textContent = "⋮⋮";
@@ -3587,57 +3996,57 @@ function wireInstrumentRowDrag(row, instrument) {
     }
     delete row.dataset.dragArmed;
     abortInlineEdits();
-    dragInstrumentId = instrument.id;
-    instrumentDragHover = null;
+    dragFixtureId = fixture.id;
+    fixtureDragHover = null;
     row.classList.add("is-dragging");
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", instrument.id);
+      event.dataTransfer.setData("text/plain", fixture.id);
       try {
         event.dataTransfer.setDragImage(row, 24, 16);
       } catch {
         // some browsers reject setDragImage
       }
     }
-    startInstrumentDragSession(event.clientY);
+    startFixtureDragSession(event.clientY);
   });
 
   row.addEventListener("dragend", () => {
     delete row.dataset.dragArmed;
     row.classList.remove("is-dragging");
-    endInstrumentDrag();
+    endFixtureDrag();
   });
 
   row.addEventListener("dragover", (event) => {
-    if (!dragInstrumentId || dragInstrumentId === instrument.id) return;
+    if (!dragFixtureId || dragFixtureId === fixture.id) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    instrumentDragClientY = event.clientY;
-    const after = instrumentDropAfter(row, event.clientY);
-    clearInstrumentDropMarks();
+    fixtureDragClientY = event.clientY;
+    const after = fixtureDropAfter(row, event.clientY);
+    clearFixtureDropMarks();
     row.classList.add(after ? "is-drop-after" : "is-drop-before");
-    instrumentDragHover = {
+    fixtureDragHover = {
       kind: "row",
-      id: instrument.id,
-      groupId: instrument.groupId ?? null,
+      id: fixture.id,
+      groupId: fixture.groupId ?? null,
       after,
     };
   });
 
   row.addEventListener("drop", (event) => {
-    if (!dragInstrumentId || dragInstrumentId === instrument.id) return;
+    if (!dragFixtureId || dragFixtureId === fixture.id) return;
     event.preventDefault();
     event.stopPropagation();
-    const after = instrumentDropAfter(row, event.clientY);
-    const groupId = instrument.groupId ?? null;
-    instrumentDragHover = {
+    const after = fixtureDropAfter(row, event.clientY);
+    const groupId = fixture.groupId ?? null;
+    fixtureDragHover = {
       kind: "row",
-      id: instrument.id,
+      id: fixture.id,
       groupId,
       after,
     };
-    finishInstrumentDrop(groupId);
+    finishFixtureDrop(groupId);
   });
 
   row.prepend(handle);
@@ -3652,61 +4061,61 @@ function wireInstrumentRowDrag(row, instrument) {
  *   shouldDefer?: (event: DragEvent) => boolean,
  * }} [opts]
  */
-function wireInstrumentGroupDropTarget(el, groupId, opts = {}) {
+function wireFixtureGroupDropTarget(el, groupId, opts = {}) {
   const markEl = opts.markEl ?? el;
   const shouldDefer = opts.shouldDefer;
 
   el.addEventListener("dragover", (event) => {
-    if (!dragInstrumentId) return;
+    if (!dragFixtureId) return;
     if (shouldDefer?.(event)) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    instrumentDragClientY = event.clientY;
-    clearInstrumentDropMarks();
+    fixtureDragClientY = event.clientY;
+    clearFixtureDropMarks();
     markEl.classList.add("is-drop-target");
-    instrumentDragHover = { kind: "group", groupId };
+    fixtureDragHover = { kind: "group", groupId };
   });
 
   el.addEventListener("drop", (event) => {
-    if (!dragInstrumentId) return;
+    if (!dragFixtureId) return;
     if (shouldDefer?.(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    instrumentDragHover = { kind: "group", groupId };
-    finishInstrumentDrop(groupId);
+    fixtureDragHover = { kind: "group", groupId };
+    finishFixtureDrop(groupId);
   });
 }
 
 /**
- * @param {import("./instruments.js").Instrument} instrument
+ * @param {import("./fixtures.js").Fixture} fixture
  * @returns {HTMLElement}
  */
-function renderInstrumentRow(instrument) {
+function renderFixtureRow(fixture) {
   const row = document.createElement("div");
-  row.className = "instrument-row";
+  row.className = "fixture-row";
   row.setAttribute("role", "listitem");
-  row.dataset.id = instrument.id;
+  row.dataset.id = fixture.id;
 
   const name = document.createElement("h3");
-  name.className = "instrument-row-name";
-  name.textContent = instrument.name;
+  name.className = "fixture-row-name";
+  name.textContent = fixture.name;
   name.title = "Click to rename";
   name.setAttribute("role", "button");
   name.tabIndex = 0;
   name.addEventListener("click", (event) => {
     event.stopPropagation();
-    beginInlineInstrumentRename(instrument.id, name);
+    beginInlineFixtureRename(fixture.id, name);
   });
   name.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      beginInlineInstrumentRename(instrument.id, name);
+      beginInlineFixtureRename(fixture.id, name);
     }
   });
 
   const range = document.createElement("div");
-  range.className = "instrument-ch-range";
+  range.className = "fixture-ch-range";
 
   /** @type {{ el: HTMLButtonElement, sync: () => void } | null} */
   let startPicker = null;
@@ -3715,17 +4124,17 @@ function renderInstrumentRow(instrument) {
 
   startPicker = makeChannelPickerButton({
     className: "channel-picker-btn",
-    getChannel: () => instrument.channelStart,
+    getChannel: () => fixture.channelStart,
     setChannel: (channel) => {
-      commitInstrumentRange(
-        instrument,
+      commitFixtureRange(
+        fixture,
         channel,
-        channelCount(instrument),
+        channelCount(fixture),
         startPicker,
         countPicker,
       );
     },
-    ariaLabel: (ch) => `${instrument.name} start channel ${ch}`,
+    ariaLabel: (ch) => `${fixture.name} start channel ${ch}`,
   });
 
   const sep = document.createElement("span");
@@ -3733,80 +4142,80 @@ function renderInstrumentRow(instrument) {
 
   countPicker = makeCountPickerButton({
     className: "channel-picker-btn",
-    getCount: () => channelCount(instrument),
+    getCount: () => channelCount(fixture),
     setCount: (count) => {
-      commitInstrumentRange(
-        instrument,
-        instrument.channelStart,
+      commitFixtureRange(
+        fixture,
+        fixture.channelStart,
         count,
         startPicker,
         countPicker,
       );
     },
-    ariaLabel: (n) => `${instrument.name} channel count ${n}`,
+    ariaLabel: (n) => `${fixture.name} channel count ${n}`,
   });
   range.append(startPicker.el, sep, countPicker.el);
 
-  const groupPicker = makeInstrumentGroupPickerButton({
-    className: "channel-picker-btn instrument-row-group",
-    getGroupId: () => instrument.groupId,
+  const groupPicker = makeFixtureGroupPickerButton({
+    className: "channel-picker-btn fixture-row-group",
+    getGroupId: () => fixture.groupId,
     setGroupId: (groupId) => {
-      instrument.groupId = groupId;
-      instrumentFormGroupId = groupId;
-      renderInstruments();
+      fixture.groupId = groupId;
+      fixtureFormGroupId = groupId;
+      renderFixtures();
       persistSession();
     },
-    ariaLabel: (_id, label) => `${instrument.name} group ${label}`,
+    ariaLabel: (_id, label) => `${fixture.name} group ${label}`,
   });
 
   const mount = document.createElement("select");
-  mount.setAttribute("aria-label", `${instrument.name} mount`);
+  mount.setAttribute("aria-label", `${fixture.name} mount`);
   for (const value of ["fixed", "movable"]) {
     const opt = document.createElement("option");
     opt.value = value;
     opt.textContent = value === "movable" ? "Movable" : "Fixed";
     mount.append(opt);
   }
-  mount.value = instrument.mount;
+  mount.value = fixture.mount;
   mount.addEventListener("change", () => {
-    instrument.mount = normalizeMount(mount.value);
+    fixture.mount = normalizeMount(mount.value);
     persistSession();
   });
 
   const color = document.createElement("select");
-  color.setAttribute("aria-label", `${instrument.name} color`);
+  color.setAttribute("aria-label", `${fixture.name} color`);
   for (const value of ["single", "multi"]) {
     const opt = document.createElement("option");
     opt.value = value;
     opt.textContent = value === "multi" ? "Multi-color" : "Single color";
     color.append(opt);
   }
-  color.value = instrument.color;
+  color.value = fixture.color;
   color.addEventListener("change", () => {
-    instrument.color = normalizeColorMode(color.value);
+    fixture.color = normalizeColorMode(color.value);
     persistSession();
   });
 
   const remove = document.createElement("button");
   remove.type = "button";
-  remove.className = "instrument-remove";
+  remove.className = "fixture-remove";
   remove.textContent = "×";
-  remove.title = `Remove ${instrument.name}`;
-  remove.setAttribute("aria-label", `Remove ${instrument.name}`);
+  remove.title = `Remove ${fixture.name}`;
+  remove.setAttribute("aria-label", `Remove ${fixture.name}`);
   remove.addEventListener("click", async () => {
     const ok = await confirmAction({
-      title: "Remove instrument?",
-      message: `Remove “${instrument.name}” from this setlist?`,
+      title: "Remove fixture?",
+      message: `Remove “${fixture.name}” from this set?`,
       confirmLabel: "Remove",
     });
     if (!ok) return;
-    instruments = instruments.filter((item) => item.id !== instrument.id);
-    renderInstruments();
+    fixtures = fixtures.filter((item) => item.id !== fixture.id);
+    renderFixtures();
     persistSession();
   });
 
   row.append(name, range, groupPicker.el, mount, color, remove);
-  wireInstrumentRowDrag(row, instrument);
+  wireFixtureRowDrag(row, fixture);
   return row;
 }
 
@@ -3818,12 +4227,12 @@ function renderInstrumentRow(instrument) {
  *   onRemove?: () => void,
  * }} opts
  */
-function renderInstrumentGroupHeader({ title, count, groupId = null, onRemove }) {
+function renderFixtureGroupHeader({ title, count, groupId = null, onRemove }) {
   const header = document.createElement("div");
-  header.className = "instrument-group-header";
+  header.className = "fixture-group-header";
 
   const label = document.createElement("h3");
-  label.className = "instrument-group-name";
+  label.className = "fixture-group-name";
   label.textContent = title;
   if (groupId) {
     label.title = "Click to rename";
@@ -3831,26 +4240,26 @@ function renderInstrumentGroupHeader({ title, count, groupId = null, onRemove })
     label.tabIndex = 0;
     label.addEventListener("click", (event) => {
       event.stopPropagation();
-      beginInlineInstrumentGroupRename(groupId, label);
+      beginInlineFixtureGroupRename(groupId, label);
     });
     label.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        beginInlineInstrumentGroupRename(groupId, label);
+        beginInlineFixtureGroupRename(groupId, label);
       }
     });
   }
 
   const meta = document.createElement("span");
-  meta.className = "instrument-group-meta";
-  meta.textContent = count === 1 ? "1 instrument" : `${count} instruments`;
+  meta.className = "fixture-group-meta";
+  meta.textContent = count === 1 ? "1 fixture" : `${count} fixtures`;
 
   header.append(label, meta);
 
   if (onRemove) {
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "instrument-remove";
+    remove.className = "fixture-remove";
     remove.textContent = "×";
     remove.title = `Remove group ${title}`;
     remove.setAttribute("aria-label", `Remove group ${title}`);
@@ -3868,10 +4277,10 @@ function renderInstrumentGroupHeader({ title, count, groupId = null, onRemove })
  *   groupId?: string | null,
  *   ungrouped?: boolean,
  *   onRemove?: () => void,
- *   members: import("./instruments.js").Instrument[],
+ *   members: import("./fixtures.js").Fixture[],
  * }} opts
  */
-function renderInstrumentGroupCard({
+function renderFixtureGroupCard({
   title,
   count,
   groupId = null,
@@ -3880,15 +4289,15 @@ function renderInstrumentGroupCard({
   members,
 }) {
   const card = document.createElement("div");
-  card.className = "instrument-group-card";
-  if (ungrouped) card.classList.add("instrument-group-card-ungrouped");
+  card.className = "fixture-group-card";
+  if (ungrouped) card.classList.add("fixture-group-card-ungrouped");
   if (groupId) card.dataset.groupId = groupId;
   if (ungrouped) card.dataset.ungrouped = "true";
 
   const dropGroupId = ungrouped ? null : groupId;
 
   card.append(
-    renderInstrumentGroupHeader({
+    renderFixtureGroupHeader({
       title,
       count,
       groupId: ungrouped ? null : groupId,
@@ -3897,12 +4306,12 @@ function renderInstrumentGroupCard({
   );
 
   const body = document.createElement("div");
-  body.className = "instrument-group-body";
-  wireInstrumentGroupDropTarget(body, dropGroupId, {
+  body.className = "fixture-group-body";
+  wireFixtureGroupDropTarget(body, dropGroupId, {
     shouldDefer: (event) => {
       const overRow =
         event.target instanceof Element
-          ? event.target.closest(".instrument-row")
+          ? event.target.closest(".fixture-row")
           : null;
       return Boolean(overRow && body.contains(overRow));
     },
@@ -3910,54 +4319,54 @@ function renderInstrumentGroupCard({
   if (members.length === 0) {
     card.classList.add("is-empty");
     const empty = document.createElement("div");
-    empty.className = "instrument-group-empty";
+    empty.className = "fixture-group-empty";
     empty.textContent = ungrouped
-      ? "No ungrouped instruments"
-      : "No instruments in this group";
+      ? "No ungrouped fixtures"
+      : "No fixtures in this group";
     body.append(empty);
   } else {
-    for (const instrument of members) {
-      body.append(renderInstrumentRow(instrument));
+    for (const fixture of members) {
+      body.append(renderFixtureRow(fixture));
     }
   }
   card.append(body);
 
   // Header / empty chrome around the body still accepts drops into the group.
-  wireInstrumentGroupDropTarget(card, dropGroupId, {
+  wireFixtureGroupDropTarget(card, dropGroupId, {
     markEl: body,
     shouldDefer: (event) =>
       event.target instanceof Element &&
-      Boolean(event.target.closest(".instrument-row, .instrument-group-body")),
+      Boolean(event.target.closest(".fixture-row, .fixture-group-body")),
   });
 
   return card;
 }
 
-function renderInstruments() {
-  instrumentList.replaceChildren();
-  const hasContent = instruments.length > 0 || instrumentGroups.length > 0;
-  instrumentEmpty.hidden = hasContent;
+function renderFixtures() {
+  fixtureList.replaceChildren();
+  const hasContent = fixtures.length > 0 || fixtureGroups.length > 0;
+  fixtureEmpty.hidden = hasContent;
 
   // Always render every group card, including empty ones.
-  for (const group of instrumentGroups) {
-    const members = instrumentsInGroup(instruments, group.id);
-    instrumentList.append(
-      renderInstrumentGroupCard({
+  for (const group of fixtureGroups) {
+    const members = fixturesInGroup(fixtures, group.id);
+    fixtureList.append(
+      renderFixtureGroupCard({
         title: group.name,
         count: members.length,
         groupId: group.id,
         members,
         onRemove: () => {
-          void removeInstrumentGroup(group.id);
+          void removeFixtureGroup(group.id);
         },
       }),
     );
   }
 
-  const ungrouped = instrumentsInGroup(instruments, null);
-  if (instrumentGroups.length > 0) {
-    instrumentList.append(
-      renderInstrumentGroupCard({
+  const ungrouped = fixturesInGroup(fixtures, null);
+  if (fixtureGroups.length > 0) {
+    fixtureList.append(
+      renderFixtureGroupCard({
         title: "Ungrouped",
         count: ungrouped.length,
         ungrouped: true,
@@ -3965,29 +4374,29 @@ function renderInstruments() {
       }),
     );
   } else {
-    for (const instrument of ungrouped) {
-      instrumentList.append(renderInstrumentRow(instrument));
+    for (const fixture of ungrouped) {
+      fixtureList.append(renderFixtureRow(fixture));
     }
   }
 
-  syncInstrumentForm();
-  updateInstrumentConflicts();
+  syncFixtureForm();
+  updateFixtureConflicts();
 }
 
 /**
  * @param {string} id
  * @param {HTMLElement} [target]
  */
-function beginInlineInstrumentRename(id, target) {
-  const instrument = instruments.find((item) => item.id === id);
-  if (!instrument) return;
+function beginInlineFixtureRename(id, target) {
+  const fixture = fixtures.find((item) => item.id === id);
+  if (!fixture) return;
 
   abortInlineEdits();
 
   const title =
     target ??
-    instrumentList.querySelector(
-      `.instrument-row[data-id="${CSS.escape(id)}"] .instrument-row-name`,
+    fixtureList.querySelector(
+      `.fixture-row[data-id="${CSS.escape(id)}"] .fixture-row-name`,
     );
   if (!(title instanceof HTMLElement) || !title.isConnected) return;
 
@@ -3996,10 +4405,10 @@ function beginInlineInstrumentRename(id, target) {
 
   const input = document.createElement("input");
   input.type = "text";
-  input.className = "scene-title-input instrument-name-input";
+  input.className = "scene-title-input fixture-name-input";
   input.maxLength = 40;
-  input.value = instrument.name;
-  input.setAttribute("aria-label", "Instrument name");
+  input.value = fixture.name;
+  input.setAttribute("aria-label", "Fixture name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
@@ -4011,38 +4420,38 @@ function beginInlineInstrumentRename(id, target) {
   const finish = (commit) => {
     if (finished) return;
     finished = true;
-    if (endInlineInstrumentRename === finishAbort) {
-      endInlineInstrumentRename = null;
+    if (endInlineFixtureRename === finishAbort) {
+      endInlineFixtureRename = null;
     }
     input.removeEventListener("keydown", onKeydown);
     input.removeEventListener("blur", onBlur);
 
     const next = input.value.trim().slice(0, 40);
-    const changed = Boolean(commit && next && next !== instrument.name);
+    const changed = Boolean(commit && next && next !== fixture.name);
     if (changed) {
-      instrument.name = next;
+      fixture.name = next;
       persistSession();
     }
 
     if (changed) {
-      renderInstruments();
+      renderFixtures();
       return;
     }
 
     const restored = document.createElement("h3");
-    restored.className = "instrument-row-name";
-    restored.textContent = instrument.name;
+    restored.className = "fixture-row-name";
+    restored.textContent = fixture.name;
     restored.title = "Click to rename";
     restored.setAttribute("role", "button");
     restored.tabIndex = 0;
     restored.addEventListener("click", (event) => {
       event.stopPropagation();
-      beginInlineInstrumentRename(id, restored);
+      beginInlineFixtureRename(id, restored);
     });
     restored.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        beginInlineInstrumentRename(id, restored);
+        beginInlineFixtureRename(id, restored);
       }
     });
 
@@ -4051,7 +4460,7 @@ function beginInlineInstrumentRename(id, target) {
   };
 
   const finishAbort = () => finish(false);
-  endInlineInstrumentRename = finishAbort;
+  endInlineFixtureRename = finishAbort;
 
   const onKeydown = (event) => {
     event.stopPropagation();
@@ -4075,16 +4484,16 @@ function beginInlineInstrumentRename(id, target) {
  * @param {string} id
  * @param {HTMLElement} [target]
  */
-function beginInlineInstrumentGroupRename(id, target) {
-  const group = instrumentGroups.find((item) => item.id === id);
+function beginInlineFixtureGroupRename(id, target) {
+  const group = fixtureGroups.find((item) => item.id === id);
   if (!group) return;
 
   abortInlineEdits();
 
   const title =
     target ??
-    instrumentList.querySelector(
-      `.instrument-group-card[data-group-id="${CSS.escape(id)}"] .instrument-group-name`,
+    fixtureList.querySelector(
+      `.fixture-group-card[data-group-id="${CSS.escape(id)}"] .fixture-group-name`,
     );
   if (!(title instanceof HTMLElement) || !title.isConnected) return;
 
@@ -4093,7 +4502,7 @@ function beginInlineInstrumentGroupRename(id, target) {
 
   const input = document.createElement("input");
   input.type = "text";
-  input.className = "scene-title-input instrument-group-name-input";
+  input.className = "scene-title-input fixture-group-name-input";
   input.maxLength = 40;
   input.value = group.name;
   input.setAttribute("aria-label", "Group name");
@@ -4108,8 +4517,8 @@ function beginInlineInstrumentGroupRename(id, target) {
   const finish = (commit) => {
     if (finished) return;
     finished = true;
-    if (endInlineInstrumentRename === finishAbort) {
-      endInlineInstrumentRename = null;
+    if (endInlineFixtureRename === finishAbort) {
+      endInlineFixtureRename = null;
     }
     input.removeEventListener("keydown", onKeydown);
     input.removeEventListener("blur", onBlur);
@@ -4119,24 +4528,24 @@ function beginInlineInstrumentGroupRename(id, target) {
     if (changed) {
       group.name = next;
       persistSession();
-      renderInstruments();
+      renderFixtures();
       return;
     }
 
     const restored = document.createElement("h3");
-    restored.className = "instrument-group-name";
+    restored.className = "fixture-group-name";
     restored.textContent = group.name;
     restored.title = "Click to rename";
     restored.setAttribute("role", "button");
     restored.tabIndex = 0;
     restored.addEventListener("click", (event) => {
       event.stopPropagation();
-      beginInlineInstrumentGroupRename(id, restored);
+      beginInlineFixtureGroupRename(id, restored);
     });
     restored.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        beginInlineInstrumentGroupRename(id, restored);
+        beginInlineFixtureGroupRename(id, restored);
       }
     });
 
@@ -4145,7 +4554,7 @@ function beginInlineInstrumentGroupRename(id, target) {
   };
 
   const finishAbort = () => finish(false);
-  endInlineInstrumentRename = finishAbort;
+  endInlineFixtureRename = finishAbort;
 
   const onKeydown = (event) => {
     event.stopPropagation();
@@ -4165,18 +4574,18 @@ function beginInlineInstrumentGroupRename(id, target) {
   input.addEventListener("pointerdown", (event) => event.stopPropagation());
 }
 
-async function addInstrumentGroup() {
-  if (instrumentGroups.length >= MAX_INSTRUMENT_GROUPS) return;
+async function addFixtureGroup() {
+  if (fixtureGroups.length >= MAX_FIXTURE_GROUPS) return;
   const name = await promptName({
     title: "New group",
     confirmLabel: "Create",
     initial: "",
   });
   if (!name) return;
-  const group = createInstrumentGroup({ name });
-  instrumentGroups.push(group);
-  instrumentFormGroupId = group.id;
-  renderInstruments();
+  const group = createFixtureGroup({ name });
+  fixtureGroups.push(group);
+  fixtureFormGroupId = group.id;
+  renderFixtures();
   persistSession();
   setStatus(
     `Group “${group.name}” created`,
@@ -4184,34 +4593,34 @@ async function addInstrumentGroup() {
   );
 }
 
-async function removeInstrumentGroup(id) {
-  const group = instrumentGroups.find((item) => item.id === id);
+async function removeFixtureGroup(id) {
+  const group = fixtureGroups.find((item) => item.id === id);
   if (!group) return;
-  const members = instrumentsInGroup(instruments, id);
+  const members = fixturesInGroup(fixtures, id);
   const ok = await confirmAction({
     title: "Remove group?",
     message:
       members.length > 0
-        ? `Remove group “${group.name}”? Its ${members.length} instrument${members.length === 1 ? "" : "s"} will become ungrouped.`
+        ? `Remove group “${group.name}”? Its ${members.length} fixture${members.length === 1 ? "" : "s"} will become ungrouped.`
         : `Remove empty group “${group.name}”?`,
     confirmLabel: "Remove",
   });
   if (!ok) return;
-  for (const instrument of instruments) {
-    if (instrument.groupId === id) instrument.groupId = null;
+  for (const fixture of fixtures) {
+    if (fixture.groupId === id) fixture.groupId = null;
   }
-  instrumentGroups = instrumentGroups.filter((item) => item.id !== id);
-  if (instrumentFormGroupId === id) instrumentFormGroupId = null;
-  renderInstruments();
+  fixtureGroups = fixtureGroups.filter((item) => item.id !== id);
+  if (fixtureFormGroupId === id) fixtureFormGroupId = null;
+  renderFixtures();
   persistSession();
 }
 
 function markClean() {
-  cleanSnapshot = setlistSnapshot(currentSetlistState());
+  cleanSnapshot = setSnapshot(currentSetState());
 }
 
 function isDirty() {
-  return setlistSnapshot(currentSetlistState()) !== cleanSnapshot;
+  return setSnapshot(currentSetState()) !== cleanSnapshot;
 }
 
 function confirmDiscardLoad() {
@@ -4247,7 +4656,7 @@ function confirmAction({ title, message, confirmLabel = "Confirm" }) {
 
 function confirmRemoveScene(name) {
   return confirmAction({
-    title: "Remove transition?",
+    title: "Remove cue?",
     message: `Remove “${name}”? Its fader levels will be lost.`,
     confirmLabel: "Remove",
   });
@@ -4311,8 +4720,9 @@ function promptName({ title, confirmLabel, initial }) {
 let endInlineRename = null;
 
 function applySceneName(index, name) {
+  // An empty name is fine: the cue is then just "Cue N".
   const next = name.trim();
-  if (!next || next === transitionName(index)) return false;
+  if (next === transitionName(index)) return false;
   names[index] = next;
   const tune = getActiveTune();
   if (tune.transitions[index]) tune.transitions[index].name = next;
@@ -4344,17 +4754,16 @@ function beginInlineRename(index, target) {
     input.classList.add("scene-title-input-lg");
   }
   input.maxLength = 40;
-  input.value = sceneName(index);
-  input.setAttribute("aria-label", "Transition name");
+  input.value = transitionName(index);
+  input.placeholder = `Cue ${index + 1} name`;
+  input.setAttribute("aria-label", "Cue name");
   input.autocomplete = "off";
   input.spellcheck = false;
 
-  const titleId = title.id;
-  const isRowTitle = title.classList.contains("scene-title");
-  const parent = title.parentElement;
-  if (!parent) return;
-
-  title.replaceWith(input);
+  // Only the name is edited: "Cue N" stays in place in front of it.
+  fillCueTitle(title, index, true);
+  title.querySelector(".cue-name")?.replaceWith(input);
+  for (const type of ["click", "dblclick", "pointerdown"]) input.addEventListener(type, (event) => event.stopPropagation());
   input.focus();
   input.select();
 
@@ -4367,28 +4776,9 @@ function beginInlineRename(index, target) {
     input.removeEventListener("blur", onBlur);
 
     const next = input.value.trim();
-    const changed = Boolean(commit && next && applySceneName(index, next));
+    const changed = Boolean(commit && applySceneName(index, next));
 
-    const restored = document.createElement("h3");
-    if (isRowTitle) restored.className = "scene-title";
-    if (titleId) restored.id = titleId;
-    restored.textContent = sceneName(index);
-
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-
-    if (isRowTitle) {
-      restored.title = "Double-click to rename";
-      restored.addEventListener("dblclick", (event) => {
-        event.stopPropagation();
-        beginInlineRename(index);
-      });
-    }
-
-    if (restored.id === "currentSceneTitle") {
-      currentSceneTitle = restored;
-      wireCurrentSceneTitle(restored);
-    }
+    fillCueTitle(title, index, true);
 
     if (changed) {
       // Rebuild row UI so every label picks up the new name
@@ -4441,12 +4831,12 @@ function wireCurrentSceneTitle(el) {
 function openChannelsSceneMenu(anchor) {
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -4485,7 +4875,7 @@ function openChannelsSceneMenu(anchor) {
     item.type = "button";
     item.className = "popup-menu-item";
     item.setAttribute("role", "menuitem");
-    item.textContent = "Select transition";
+    item.textContent = "Select cue";
     item.addEventListener("click", (event) => {
       event.stopPropagation();
       finish("select");
@@ -4549,12 +4939,12 @@ let closeSceneRowMenu = null;
 function openSceneRowMenu(anchor, index) {
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
-  closeSetlistMenu?.();
+  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
   closeCountPicker?.();
-  closeInstrumentGroupPicker?.();
+  closeFixtureGroupPicker?.();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -4653,7 +5043,7 @@ function renderOutputs() {
   universeControls.replaceChildren();
   const count = document.createElement("select");
   count.className = "universe-count";
-  count.title = "Universes in this setlist (one DMX USB Pro each)";
+  count.title = "Universes in this set (one DMX USB Pro each)";
   for (let n = 1; n <= MAX_UNIVERSES; n++) {
     const opt = document.createElement("option");
     opt.value = String(n);
@@ -4713,7 +5103,7 @@ function setUniverses(n) {
   if (next < universes) {
     const limit = next * UNIVERSE_SIZE;
     const usedPatch = patch.some((targets) => targets.some((t) => t.channel > limit));
-    const usedBy = instruments.find((i) => i.channelEnd > limit);
+    const usedBy = fixtures.find((i) => i.channelEnd > limit);
     if (usedPatch || usedBy) {
       setStatus(
         `Universe ${next + 1}+ is in use (${usedBy ? usedBy.name : "patched faders"}) — move or remove that first`,
@@ -4728,12 +5118,12 @@ function setUniverses(n) {
   setUniverseCount(universes);
   if (meterUniverse > universes) meterUniverse = universes;
   renderOutputs();
-  renderInstruments();
-  suggestInstrumentFormStart();
+  renderFixtures();
+  suggestFixtureFormStart();
   renderPatchTable();
   refreshFaderPatchLabels();
   renderChannelRow();
-  ensureInstrumentFormStartPicker();
+  ensureFixtureFormStartPicker();
   pushToDmx();
   setStatus(universes === 1 ? "1 universe" : `${universes} universes · channels shown as universe/channel`, "idle");
 }
@@ -4762,7 +5152,7 @@ function syncMeterUniverse() {
 }
 
 function showPage(name) {
-  const page = pages[name] ? name : "tunes";
+  const page = pages[name] ? name : "songs";
   abortInlineEdits();
 
   for (const [key, el] of Object.entries(pages)) {
@@ -4776,8 +5166,8 @@ function showPage(name) {
   }
 
   if (page === "patch") renderPatchTable();
-  if (page === "instruments") renderInstruments();
-  if (page === "setlist") renderTunes();
+  if (page === "fixtures") renderFixtures();
+  if (page === "set") renderTunes();
   if (page === "channels") {
     refreshChannelRow();
     renderSelectedGroup();
@@ -4786,24 +5176,30 @@ function showPage(name) {
 
 function routeFromHash() {
   const hash = location.hash.replace("#", "");
-  if (hash === "faders" || hash === "songs") {
-    showPage("tunes");
+  // The Songs page was called Tunes for a while.
+  if (hash === "faders" || hash === "tunes") {
+    showPage("songs");
     return;
   }
-  if (hash === "show") {
-    showPage("setlist");
+  if (hash === "show" || hash === "setlist") {
+    showPage("set");
+    return;
+  }
+  // The Fixtures page used to be called Instruments.
+  if (hash === "instruments") {
+    showPage("fixtures");
     return;
   }
   if (
-    hash === "setlist" ||
-    hash === "tunes" ||
+    hash === "set" ||
+    hash === "songs" ||
     hash === "patch" ||
     hash === "channels" ||
-    hash === "instruments"
+    hash === "fixtures"
   ) {
     showPage(hash);
   } else {
-    showPage("tunes");
+    showPage("songs");
   }
 }
 
@@ -4897,14 +5293,8 @@ channelsSceneMenuBtn.addEventListener("click", (event) => {
 addRowBtn.addEventListener("click", async () => {
   const tune = getActiveTune();
   if (tune.transitions.length >= MAX_TRANSITIONS) return;
-  const name = await promptName({
-    title: "New transition",
-    confirmLabel: "Add",
-    initial: defaultTransitionName(tune.transitions.length),
-  });
-  if (!name) return;
-  if (tune.transitions.length >= MAX_TRANSITIONS) return;
-  tune.transitions.push(createTransition({ name }));
+  // New cues are just numbered; double-click one to give it a name.
+  tune.transitions.push(createTransition({ name: "" }));
   bindActiveTune();
   selectedRow = rows.length - 1;
   fromRow = selectedRow;
@@ -4937,10 +5327,12 @@ clearPatchBtn.addEventListener("click", async () => {
   renderPatchTable();
 });
 
-function applySetlist(state) {
+function applySet(state) {
   stopTimedFade();
   clearBlackoutSnapshots();
-  setlistName = normalizeSetlistName(state.setlistName);
+  blackedOutFaders.clear();
+  flashingFaders.clear();
+  setName = normalizeSetName(state.setName);
   navOrder = normalizeNavOrder(state.navOrder);
   master = state.master;
   cross = state.cross;
@@ -4957,18 +5349,18 @@ function applySetlist(state) {
   activeTuneId = resolveActiveTune(tunes, state.activeTuneId).id;
   bindActiveTune();
   faderNames = normalizeFaderNames(state.faderNames);
-  instrumentGroups = normalizeInstrumentGroups(state.instrumentGroups);
-  instruments = normalizeInstruments(state.instruments, instrumentGroups);
+  fixtureGroups = normalizeFixtureGroups(state.fixtureGroups);
+  fixtures = normalizeFixtures(state.fixtures, fixtureGroups);
   if (
-    instrumentFormGroupId &&
-    !instrumentGroups.some((group) => group.id === instrumentFormGroupId)
+    fixtureFormGroupId &&
+    !fixtureGroups.some((group) => group.id === fixtureFormGroupId)
   ) {
-    instrumentFormGroupId = null;
+    fixtureFormGroupId = null;
   }
   patch = state.patch;
 
   applyNavOrder(navOrder);
-  syncSetlistNameUi();
+  syncSetNameUi();
   syncTuneUi();
   syncMasterUi();
   syncSubmasterUi();
@@ -4980,7 +5372,7 @@ function applySetlist(state) {
   renderChannelRow();
   renderSelectedGroup();
   renderTunes();
-  renderInstruments();
+  renderFixtures();
   renderPatchTable();
   pushToDmx();
 }
@@ -4993,42 +5385,42 @@ function syncTransportFromState() {
   updateFadePauseButton();
 }
 
-setlistMenuBtn.addEventListener("click", (event) => {
+setMenuBtn.addEventListener("click", (event) => {
   event.stopPropagation();
-  if (setlistMenuBtn.getAttribute("aria-expanded") === "true") {
-    closeSetlistMenu?.();
+  if (setMenuBtn.getAttribute("aria-expanded") === "true") {
+    closeSetMenu?.();
     return;
   }
-  void openSetlistMenu(setlistMenuBtn);
+  void openSetMenu(setMenuBtn);
 });
 
-newSetlistBtn.addEventListener("click", async () => {
+newSetBtn.addEventListener("click", async () => {
   if (isDirty()) {
     const ok = await confirmAction({
-      title: "New setlist?",
-      message: "Discard unsaved changes and start a blank setlist?",
+      title: "New set?",
+      message: "Discard unsaved changes and start a blank set?",
       confirmLabel: "Continue",
     });
     if (!ok) return;
   }
 
   const name = await promptName({
-    title: "New setlist",
+    title: "New set",
     confirmLabel: "Create",
     initial: "",
   });
   if (!name) return;
 
-  applySetlist(blankSetlistState(name));
+  applySet(blankSetState(name));
   markClean();
   persistSession();
-  setStatus(`New setlist · ${setlistName}`, dmx.connected ? "connected" : "idle");
+  setStatus(`New set · ${setName}`, dmx.connected ? "connected" : "idle");
 });
 
 saveBtn.addEventListener("click", () => {
-  downloadSetlist(currentSetlistState());
+  downloadSet(currentSetState());
   markClean();
-  setStatus("Setlist saved", dmx.connected ? "connected" : "idle");
+  setStatus("Set saved", dmx.connected ? "connected" : "idle");
 });
 
 loadBtn.addEventListener("click", () => {
@@ -5048,11 +5440,11 @@ loadFile.addEventListener("change", async () => {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    applySetlist(parseSetlist(data));
+    applySet(parseSet(data));
     markClean();
-    setStatus(`Setlist loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
+    setStatus(`Set loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load setlist";
+    const message = err instanceof Error ? err.message : "Failed to load set";
     setStatus(message, "error");
     console.error(err);
   }
@@ -5060,39 +5452,39 @@ loadFile.addEventListener("change", async () => {
 
 window.addEventListener("hashchange", routeFromHash);
 
-instrumentForm.addEventListener("submit", (event) => {
+fixtureForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (instruments.length >= MAX_INSTRUMENTS) return;
-  const name = instrumentNameInput.value.trim();
+  if (fixtures.length >= MAX_FIXTURES) return;
+  const name = fixtureNameInput.value.trim();
   if (!name) {
-    instrumentNameInput.reportValidity();
+    fixtureNameInput.reportValidity();
     return;
   }
-  const width = Math.max(1, Math.round(instrumentFormCount) || 1);
+  const width = Math.max(1, Math.round(fixtureFormCount) || 1);
   const qty = Math.min(
-    MAX_INSTRUMENT_QTY,
-    Math.max(1, Math.round(instrumentFormQty) || 1),
-    MAX_INSTRUMENTS - instruments.length,
+    MAX_FIXTURE_QTY,
+    Math.max(1, Math.round(fixtureFormQty) || 1),
+    MAX_FIXTURES - fixtures.length,
   );
   if (qty < 1) return;
 
   /** @type {{ channelStart: number, channelEnd: number }[]} */
   const ranges = [];
-  let cursor = instrumentFormStart;
+  let cursor = fixtureFormStart;
   for (let i = 0; i < qty; i++) {
     const range = normalizeChannelSpan(cursor, width);
     if (!range) {
       setStatus(
         qty > 1
-          ? `Only room for ${i} of ${qty} — each instrument must fit inside one universe`
-          : `Start + channel count (up to ${MAX_INSTRUMENT_CHANNELS}) must fit inside one universe`,
+          ? `Only room for ${i} of ${qty} — each fixture must fit inside one universe`
+          : `Start + channel count (up to ${MAX_FIXTURE_CHANNELS}) must fit inside one universe`,
         "error",
       );
-      instrumentFormStartPicker?.el.focus();
+      fixtureFormStartPicker?.el.focus();
       return;
     }
     const conflict = findRangeConflict(
-      instruments,
+      fixtures,
       range.channelStart,
       range.channelEnd,
     );
@@ -5101,23 +5493,23 @@ instrumentForm.addEventListener("submit", (event) => {
         `Range overlaps ${conflict.name} (${formatChannelRange(conflict)})`,
         "error",
       );
-      instrumentFormStartPicker?.el.focus();
+      fixtureFormStartPicker?.el.focus();
       return;
     }
     ranges.push(range);
     cursor = range.channelEnd + 1;
   }
 
-  const mountRadio = instrumentForm.querySelector(
-    'input[name="instrumentMount"]:checked',
+  const mountRadio = fixtureForm.querySelector(
+    'input[name="fixtureMount"]:checked',
   );
-  const colorRadio = instrumentForm.querySelector(
-    'input[name="instrumentColor"]:checked',
+  const colorRadio = fixtureForm.querySelector(
+    'input[name="fixtureColor"]:checked',
   );
   const groupId =
-    instrumentFormGroupId &&
-    instrumentGroups.some((group) => group.id === instrumentFormGroupId)
-      ? instrumentFormGroupId
+    fixtureFormGroupId &&
+    fixtureGroups.some((group) => group.id === fixtureFormGroupId)
+      ? fixtureFormGroupId
       : null;
   const mount = normalizeMount(
     mountRadio instanceof HTMLInputElement ? mountRadio.value : "fixed",
@@ -5125,10 +5517,10 @@ instrumentForm.addEventListener("submit", (event) => {
   const color = normalizeColorMode(
     colorRadio instanceof HTMLInputElement ? colorRadio.value : "single",
   );
-  const names = batchInstrumentNames(name, qty);
+  const names = batchFixtureNames(name, qty);
   for (let i = 0; i < qty; i++) {
-    instruments.push(
-      createInstrument({
+    fixtures.push(
+      createFixture({
         name: names[i],
         mount,
         color,
@@ -5138,11 +5530,11 @@ instrumentForm.addEventListener("submit", (event) => {
       }),
     );
   }
-  instrumentFormGroupId = groupId;
-  instrumentNameInput.value = "";
-  renderInstruments();
-  suggestInstrumentFormStart();
-  instrumentNameInput.focus();
+  fixtureFormGroupId = groupId;
+  fixtureNameInput.value = "";
+  renderFixtures();
+  suggestFixtureFormStart();
+  fixtureNameInput.focus();
   persistSession();
   const first = ranges[0];
   const last = ranges[ranges.length - 1];
@@ -5154,23 +5546,23 @@ instrumentForm.addEventListener("submit", (event) => {
   );
 });
 
-addInstrumentGroupBtn.addEventListener("click", () => {
-  void addInstrumentGroup();
+addFixtureGroupBtn.addEventListener("click", () => {
+  void addFixtureGroup();
 });
 
 addTuneBtn.addEventListener("click", () => {
   void addTune();
 });
 
-ensureInstrumentFormStartPicker();
-ensureInstrumentFormCountPicker();
-ensureInstrumentFormQtyPicker();
-ensureInstrumentFormGroupPicker();
-suggestInstrumentFormStart();
+ensureFixtureFormStartPicker();
+ensureFixtureFormCountPicker();
+ensureFixtureFormQtyPicker();
+ensureFixtureFormGroupPicker();
+suggestFixtureFormStart();
 wireNavReorder();
 applyNavOrder(navOrder);
-wireSetlistNameDisplay(setlistNameDisplay);
-syncSetlistNameUi();
+wireSetNameDisplay(setNameDisplay);
+syncSetNameUi();
 syncTuneUi();
 syncTransportFromState();
 renderLiveRow();
@@ -5178,7 +5570,7 @@ renderChannelRow();
 renderSelectedGroup();
 renderRows();
 renderTunes();
-renderInstruments();
+renderFixtures();
 renderPatchTable();
 renderOutputs();
 routeFromHash();
@@ -5186,9 +5578,9 @@ persistSession();
 markClean();
 
 // ---------------------------------------------------------------------
-// Instruments registered from the Stage page (see stage-link.js)
+// Fixtures registered from the Stage page (see stage-link.js)
 // ---------------------------------------------------------------------
-// Placing a light on the stage registers it here: a console instrument at
+// Placing a light on the stage registers it here: a console fixture at
 // the next free DMX block, one free fader patched 1:1 per channel and named
 // after the light. Deleting it on the stage removes it and frees the faders.
 
@@ -5200,10 +5592,10 @@ function registerFromStage(requests) {
   const results = [];
   for (const req of requests) {
     const fail = (error) => results.push({ stageId: req.stageId, ok: false, error });
-    const width = Math.max(1, Math.min(MAX_INSTRUMENT_CHANNELS, Math.round(req.width) || 1));
-    if (instruments.length >= MAX_INSTRUMENTS) { fail(`the console already has its maximum of ${MAX_INSTRUMENTS} instruments`); continue; }
+    const width = Math.max(1, Math.min(MAX_FIXTURE_CHANNELS, Math.round(req.width) || 1));
+    if (fixtures.length >= MAX_FIXTURES) { fail(`the console already has its maximum of ${MAX_FIXTURES} fixtures`); continue; }
     const universe = Number.isInteger(req.universe) && req.universe >= 1 && req.universe <= universes ? req.universe : null;
-    const range = nextAvailableRange(instruments, width, universe);
+    const range = nextAvailableRange(fixtures, width, universe);
     if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left${universe ? ` in universe ${universe}` : ""}`); continue; }
     const free = [];
     for (let i = 0; i < FADER_COUNT && free.length < width; i++) if (isUnpatched(patch[i])) free.push(i);
@@ -5211,39 +5603,40 @@ function registerFromStage(requests) {
 
     let groupId = null;
     if (req.group) {
-      let group = instrumentGroups.find((g) => g.name === req.group);
-      if (!group && instrumentGroups.length < MAX_INSTRUMENT_GROUPS) {
-        group = createInstrumentGroup({ name: req.group });
-        instrumentGroups.push(group);
+      let group = fixtureGroups.find((g) => g.name === req.group);
+      if (!group && fixtureGroups.length < MAX_FIXTURE_GROUPS) {
+        group = createFixtureGroup({ name: req.group });
+        fixtureGroups.push(group);
       }
       groupId = group?.id ?? null;
     }
-    const instrument = createInstrument({
+    const fixture = createFixture({
       name: req.name,
       mount: normalizeMount(req.mount),
       color: normalizeColorMode(req.color),
       channelStart: range.channelStart,
       channelEnd: range.channelEnd,
       groupId,
+      roles: req.roles,
     });
-    instruments.push(instrument);
+    fixtures.push(fixture);
     free.forEach((fader, k) => {
       patch[fader] = [makeTarget(range.channelStart + k, 255)];
       faderNames[fader] = `${req.name} ${req.labels[k] ?? k + 1}`.slice(0, 40);
     });
-    results.push({ stageId: req.stageId, ok: true, consoleId: instrument.id, start: range.channelStart, faders: free.map((f) => f + 1) });
+    results.push({ stageId: req.stageId, ok: true, consoleId: fixture.id, start: range.channelStart, faders: free.map((f) => f + 1) });
   }
-  if (results.some((r) => r.ok)) afterStageInstrumentsChanged();
+  if (results.some((r) => r.ok)) afterStageFixturesChanged();
   return results;
 }
 
-/** Remove stage-registered instruments: unpatch, rename and zero their faders. */
+/** Remove stage-registered fixtures: unpatch, rename and zero their faders. */
 function unregisterFromStage(consoleIds) {
   let removed = 0;
   for (const id of consoleIds) {
-    const instrument = instruments.find((item) => item.id === id);
-    if (!instrument) continue;
-    const inBlock = (t) => t.channel >= instrument.channelStart && t.channel <= instrument.channelEnd;
+    const fixture = fixtures.find((item) => item.id === id);
+    if (!fixture) continue;
+    const inBlock = (t) => t.channel >= fixture.channelStart && t.channel <= fixture.channelEnd;
     for (let i = 0; i < FADER_COUNT; i++) {
       if (!patch[i].some(inBlock)) continue;
       patch[i] = patch[i].filter((t) => !inBlock(t));
@@ -5252,20 +5645,20 @@ function unregisterFromStage(consoleIds) {
       faderNames[i] = "";
       for (const tune of tunes) for (const transition of tune.transitions) transition.levels[i] = 0;
     }
-    instruments = instruments.filter((item) => item.id !== id);
-    const { groupId } = instrument;
-    if (groupId && !instruments.some((item) => item.groupId === groupId)) {
-      instrumentGroups = instrumentGroups.filter((g) => g.id !== groupId);
-      if (instrumentFormGroupId === groupId) instrumentFormGroupId = null;
+    fixtures = fixtures.filter((item) => item.id !== id);
+    const { groupId } = fixture;
+    if (groupId && !fixtures.some((item) => item.groupId === groupId)) {
+      fixtureGroups = fixtureGroups.filter((g) => g.id !== groupId);
+      if (fixtureFormGroupId === groupId) fixtureFormGroupId = null;
     }
     removed++;
   }
-  if (removed) afterStageInstrumentsChanged();
+  if (removed) afterStageFixturesChanged();
 }
 
-function afterStageInstrumentsChanged() {
-  renderInstruments();
-  suggestInstrumentFormStart();
+function afterStageFixturesChanged() {
+  renderFixtures();
+  suggestFixtureFormStart();
   renderLiveRow();
   renderRows();
   renderSelectedGroup();
@@ -5297,8 +5690,8 @@ startStageLink({
   levels: computeChannelLevels,
   patch: () => patch,
   live: () => ({ rows, fromRow, toRow, fromSub, toSub, cross, master }),
-  instruments: () => instruments,
-  groups: () => instrumentGroups,
+  fixtures: () => fixtures,
+  groups: () => fixtureGroups,
   faderInfo: () => Array.from({ length: FADER_COUNT }, (_, i) => ({
     num: i + 1,
     name: faderName(i),
@@ -5309,14 +5702,14 @@ startStageLink({
   })),
   mix: () => ({ master, fromSub, toSub, cross, fromName: sceneName(fromRow), toName: sceneName(toRow) }),
   universes: () => universes,
-  // Which fader / channel meter / Patch card / instrument row an element
+  // Which fader / channel meter / Patch card / fixture row an element
   // belongs to (for ⌥-click trace).
   traceTarget: (el) => {
     if (!(el instanceof Element)) return null;
     const card = el.closest(".patch-card[data-fader]");
     if (card) return { kind: "fader", fader: Number(card.dataset.fader) + 1 };
-    const instrumentRow = el.closest(".instrument-row[data-id]");
-    if (instrumentRow) return { kind: "instrument", id: instrumentRow.dataset.id };
+    const fixtureRow = el.closest(".fixture-row[data-id]");
+    if (fixtureRow) return { kind: "fixture", id: fixtureRow.dataset.id };
     const wrap = el.closest(".fader");
     if (!wrap) return null;
     for (const [channel, w] of channelUi.wrapEls) if (w === wrap) return { kind: "channel", channel };
@@ -5333,6 +5726,7 @@ startStageLink({
   },
   register: registerFromStage,
   unregister: unregisterFromStage,
+  reveal: revealFixtures,
 });
 
 if (!("serial" in navigator)) {

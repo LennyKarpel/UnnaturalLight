@@ -2,12 +2,12 @@ import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart
 
 export const MOUNT_TYPES = /** @type {const} */ (["fixed", "movable"]);
 export const COLOR_MODES = /** @type {const} */ (["single", "multi"]);
-export const MAX_INSTRUMENTS = 64;
-export const MAX_INSTRUMENT_GROUPS = 32;
-/** Max DMX channels per instrument (UI picker 1…64; real moving lights often use 20–40). */
-export const MAX_INSTRUMENT_CHANNELS = 64;
-/** Max instruments to create in one add-form submit. */
-export const MAX_INSTRUMENT_QTY = 16;
+export const MAX_FIXTURES = 64;
+export const MAX_FIXTURE_GROUPS = 32;
+/** Max DMX channels per fixture (UI picker 1…64; real moving lights often use 20–40). */
+export const MAX_FIXTURE_CHANNELS = 64;
+/** Max fixtures to create in one add-form submit. */
+export const MAX_FIXTURE_QTY = 16;
 
 /**
  * @typedef {"fixed" | "movable"} MountType
@@ -15,7 +15,7 @@ export const MAX_INSTRUMENT_QTY = 16;
  * @typedef {{
  *   id: string,
  *   name: string,
- * }} InstrumentGroup
+ * }} FixtureGroup
  * @typedef {{
  *   id: string,
  *   name: string,
@@ -24,8 +24,20 @@ export const MAX_INSTRUMENT_QTY = 16;
  *   channelStart: number,
  *   channelEnd: number,
  *   groupId: string | null,
- * }} Instrument
+ *   roles?: (ChannelRole | null)[],
+ * }} Fixture
+ * @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} ChannelRole
+ * roles: what each channel of the block does, when known (lights registered
+ * from the stage); used e.g. to show R/G/B faders as a color picker.
  */
+
+const CHANNEL_ROLES = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];
+
+/** @param {unknown} list @returns {(ChannelRole | null)[]} */
+export function normalizeRoles(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MAX_FIXTURE_CHANNELS).map((r) => (CHANNEL_ROLES.includes(r) ? r : null));
+}
 
 /** @param {string} prefix @returns {string} */
 function newId(prefix) {
@@ -40,7 +52,7 @@ function newId(prefix) {
 }
 
 /** @returns {string} */
-export function newInstrumentId() {
+export function newFixtureId() {
   return newId("inst");
 }
 
@@ -95,7 +107,7 @@ export function normalizeChannelSpan(start, count) {
     channelStart == null ||
     !Number.isFinite(n) ||
     n < 1 ||
-    n > MAX_INSTRUMENT_CHANNELS
+    n > MAX_FIXTURE_CHANNELS
   ) {
     return null;
   }
@@ -106,9 +118,9 @@ export function normalizeChannelSpan(start, count) {
   return { channelStart, channelEnd };
 }
 
-/** @param {Pick<Instrument, "channelStart" | "channelEnd">} instrument */
-export function channelCount(instrument) {
-  return instrument.channelEnd - instrument.channelStart + 1;
+/** @param {Pick<Fixture, "channelStart" | "channelEnd">} fixture */
+export function channelCount(fixture) {
+  return fixture.channelEnd - fixture.channelStart + 1;
 }
 
 /**
@@ -122,24 +134,24 @@ export function rangesOverlap(startA, endA, startB, endB) {
 }
 
 /**
- * @param {Pick<Instrument, "channelStart" | "channelEnd" | "id">[]} instruments
+ * @param {Pick<Fixture, "channelStart" | "channelEnd" | "id">[]} fixtures
  * @param {number} start
  * @param {number} end
  * @param {string} [excludeId]
- * @returns {Instrument | null}
+ * @returns {Fixture | null}
  */
-export function findRangeConflict(instruments, start, end, excludeId) {
-  for (const instrument of instruments) {
-    if (excludeId && instrument.id === excludeId) continue;
+export function findRangeConflict(fixtures, start, end, excludeId) {
+  for (const fixture of fixtures) {
+    if (excludeId && fixture.id === excludeId) continue;
     if (
       rangesOverlap(
         start,
         end,
-        instrument.channelStart,
-        instrument.channelEnd,
+        fixture.channelStart,
+        fixture.channelEnd,
       )
     ) {
-      return /** @type {Instrument} */ (instrument);
+      return /** @type {Fixture} */ (fixture);
     }
   }
   return null;
@@ -148,15 +160,15 @@ export function findRangeConflict(instruments, start, end, excludeId) {
 /**
  * First free contiguous block of `width` channels, inside one universe
  * (only `universe` if given; else the first universe with room).
- * @param {Pick<Instrument, "channelStart" | "channelEnd">[]} instruments
+ * @param {Pick<Fixture, "channelStart" | "channelEnd">[]} fixtures
  * @param {number} [width]
  * @returns {{ channelStart: number, channelEnd: number } | null}
  */
-export function nextAvailableRange(instruments, width = 1, universe = null) {
+export function nextAvailableRange(fixtures, width = 1, universe = null) {
   const size = Math.max(1, Math.min(UNIVERSE_SIZE, Math.round(Number(width) || 1)));
   const occupied = new Array(DMX_CHANNEL_MAX + 1).fill(false);
-  for (const instrument of instruments) {
-    for (let ch = instrument.channelStart; ch <= instrument.channelEnd; ch++) {
+  for (const fixture of fixtures) {
+    for (let ch = fixture.channelStart; ch <= fixture.channelEnd; ch++) {
       if (ch >= 1 && ch <= DMX_CHANNEL_MAX) occupied[ch] = true;
     }
   }
@@ -187,9 +199,9 @@ export function normalizeGroupName(name, index = 0) {
 /**
  * @param {unknown} value
  * @param {number} [index]
- * @returns {InstrumentGroup | null}
+ * @returns {FixtureGroup | null}
  */
-export function normalizeInstrumentGroup(value, index = 0) {
+export function normalizeFixtureGroup(value, index = 0) {
   if (!value || typeof value !== "object") return null;
   const obj = /** @type {Record<string, unknown>} */ (value);
   const id =
@@ -202,15 +214,15 @@ export function normalizeInstrumentGroup(value, index = 0) {
 
 /**
  * @param {unknown} list
- * @returns {InstrumentGroup[]}
+ * @returns {FixtureGroup[]}
  */
-export function normalizeInstrumentGroups(list) {
+export function normalizeFixtureGroups(list) {
   if (!Array.isArray(list)) return [];
-  /** @type {InstrumentGroup[]} */
+  /** @type {FixtureGroup[]} */
   const out = [];
   const seen = new Set();
-  for (let i = 0; i < list.length && out.length < MAX_INSTRUMENT_GROUPS; i++) {
-    const raw = normalizeInstrumentGroup(list[i], i);
+  for (let i = 0; i < list.length && out.length < MAX_FIXTURE_GROUPS; i++) {
+    const raw = normalizeFixtureGroup(list[i], i);
     if (!raw) continue;
     let id = raw.id;
     while (seen.has(id)) id = newGroupId();
@@ -222,9 +234,9 @@ export function normalizeInstrumentGroups(list) {
 
 /**
  * @param {{ name: string }} opts
- * @returns {InstrumentGroup}
+ * @returns {FixtureGroup}
  */
-export function createInstrumentGroup({ name }) {
+export function createFixtureGroup({ name }) {
   return {
     id: newGroupId(),
     name: normalizeGroupName(name),
@@ -232,31 +244,31 @@ export function createInstrumentGroup({ name }) {
 }
 
 /**
- * @param {Pick<Instrument, "groupId">[]} instruments
+ * @param {Pick<Fixture, "groupId">[]} fixtures
  * @param {string | null} groupId
  */
-export function instrumentsInGroup(instruments, groupId) {
-  return instruments.filter((item) => (item.groupId ?? null) === groupId);
+export function fixturesInGroup(fixtures, groupId) {
+  return fixtures.filter((item) => (item.groupId ?? null) === groupId);
 }
 
 /**
  * @param {unknown} value
  * @param {number} [index]
- * @returns {(Omit<Instrument, "channelStart" | "channelEnd" | "groupId"> & {
+ * @returns {(Omit<Fixture, "channelStart" | "channelEnd" | "groupId"> & {
  *   channelStart?: number,
  *   channelEnd?: number,
  *   groupId?: string | null,
  * }) | null}
  */
-export function normalizeInstrument(value, index = 0) {
+export function normalizeFixture(value, index = 0) {
   if (!value || typeof value !== "object") return null;
   const obj = /** @type {Record<string, unknown>} */ (value);
   const name =
     typeof obj.name === "string" && obj.name.trim()
       ? obj.name.trim().slice(0, 40)
-      : `Instrument ${index + 1}`;
+      : `Fixture ${index + 1}`;
   const id =
-    typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : newInstrumentId();
+    typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : newFixtureId();
   const range = normalizeChannelRange(
     obj.channelStart ?? obj.start,
     obj.channelEnd ?? obj.end,
@@ -271,27 +283,28 @@ export function normalizeInstrument(value, index = 0) {
     mount: normalizeMount(obj.mount),
     color: normalizeColorMode(obj.color),
     groupId,
+    roles: normalizeRoles(obj.roles),
     ...(range ?? {}),
   };
 }
 
 /**
  * @param {unknown} list
- * @param {InstrumentGroup[]} [groups]
- * @returns {Instrument[]}
+ * @param {FixtureGroup[]} [groups]
+ * @returns {Fixture[]}
  */
-export function normalizeInstruments(list, groups = []) {
+export function normalizeFixtures(list, groups = []) {
   if (!Array.isArray(list)) return [];
   const groupIds = new Set(groups.map((group) => group.id));
-  /** @type {Instrument[]} */
+  /** @type {Fixture[]} */
   const out = [];
   const seen = new Set();
 
-  for (let i = 0; i < list.length && out.length < MAX_INSTRUMENTS; i++) {
-    const raw = normalizeInstrument(list[i], i);
+  for (let i = 0; i < list.length && out.length < MAX_FIXTURES; i++) {
+    const raw = normalizeFixture(list[i], i);
     if (!raw) continue;
     let id = raw.id;
-    while (seen.has(id)) id = newInstrumentId();
+    while (seen.has(id)) id = newFixtureId();
     seen.add(id);
 
     const width =
@@ -322,6 +335,7 @@ export function normalizeInstruments(list, groups = []) {
       channelStart: range.channelStart,
       channelEnd: range.channelEnd,
       groupId,
+      roles: raw.roles.slice(0, range.channelEnd - range.channelStart + 1),
     });
   }
 
@@ -336,38 +350,41 @@ export function normalizeInstruments(list, groups = []) {
  *   channelStart: number,
  *   channelEnd: number,
  *   groupId?: string | null,
+ *   roles?: unknown,
  * }} opts
- * @returns {Instrument}
+ * @returns {Fixture}
  */
-export function createInstrument({
+export function createFixture({
   name,
   mount = "fixed",
   color = "single",
   channelStart,
   channelEnd,
   groupId = null,
+  roles = [],
 }) {
   const text = typeof name === "string" ? name.trim().slice(0, 40) : "";
   const range = normalizeChannelRange(channelStart, channelEnd);
   if (!range) {
-    throw new Error("Instrument needs a valid channel range.");
+    throw new Error("Fixture needs a valid channel range.");
   }
   return {
-    id: newInstrumentId(),
-    name: text || "Instrument",
+    id: newFixtureId(),
+    name: text || "Fixture",
     mount: normalizeMount(mount),
     color: normalizeColorMode(color),
     channelStart: range.channelStart,
     channelEnd: range.channelEnd,
     groupId: typeof groupId === "string" && groupId ? groupId : null,
+    roles: normalizeRoles(roles),
   };
 }
 
-/** @param {Pick<Instrument, "channelStart" | "channelEnd">} instrument */
-export function formatChannelRange(instrument) {
-  const count = channelCount(instrument);
-  if (count === 1) return `Ch${formatAddress(instrument.channelStart)}`;
-  return `Ch${formatAddress(instrument.channelStart)}×${count}`;
+/** @param {Pick<Fixture, "channelStart" | "channelEnd">} fixture */
+export function formatChannelRange(fixture) {
+  const count = channelCount(fixture);
+  if (count === 1) return `Ch${formatAddress(fixture.channelStart)}`;
+  return `Ch${formatAddress(fixture.channelStart)}×${count}`;
 }
 
 /** @param {MountType} mount */

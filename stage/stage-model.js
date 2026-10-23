@@ -1,4 +1,4 @@
-// Stage model: instruments, their zero frames, pan/tilt maths, and the save
+// Stage model: fixtures, their zero frames, pan/tilt maths, and the save
 // format. No DOM or rendering here; stage.js owns the view and UI state.
 
 import * as THREE from "three";
@@ -10,13 +10,13 @@ import { normalizeProfile } from "./fixture-library.js";
 //   y: floor (0) → up
 //   z: upstage (−) → downstage / audience (+)
 //
-// Each instrument has a "zero" frame (base yaw / pitch / roll). Pan and
+// Each fixture has a "zero" frame (base yaw / pitch / roll). Pan and
 // tilt are measured inside that frame, so ← → and ↑ ↓ always mean the
-// instrument's own left/right and up/down. Forward is local −Z.
+// fixture's own left/right and up/down. Forward is local −Z.
 // ---------------------------------------------------------------------
 
 export const STORAGE_KEY = "unnaturallight.stage.v1";
-export const MAX_INSTRUMENTS = 32;
+export const MAX_FIXTURES = 32;
 export const DEG = Math.PI / 180;
 export const FORWARD = new THREE.Vector3(0, 0, -1);
 export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "#ffe066", "#7fffe0", "#ffb070"];
@@ -31,8 +31,8 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
  *   fixture?: import("./fixture-library.js").FixtureProfile | null,
  * }} Link
  * fixture: a real fixture mode (Open Fixture Library) this light is; its
- * channels set the console instrument's channels and fader names.
- * owned: the stage registered this console instrument (deleting the light
+ * channels set the console fixture's channels and fader names.
+ * owned: the stage registered this console fixture (deleting the light
  * removes it there too); type: its console type; register: waiting to be
  * registered in the console (e.g. placed while the console was closed).
  */
@@ -45,7 +45,7 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
  *   link: Link,
  *   color: string, pan: number, tilt: number, intensity: number, beam: number,
  *   rigId: string | null, rigIndex: number,
- * }} Instrument
+ * }} Fixture
  * `dmx` (0–255 per attribute) is the source of truth, like a real fixture's
  * channels. color / pan / tilt (°) / intensity (0–1) / beam (°) are derived
  * from it by deriveFromDmx() and only read by the drawing code.
@@ -87,7 +87,7 @@ export function rgbFromHex(hex) {
   return Number.isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
 }
 
-/** Recompute the derived look / angles from the instrument's DMX values. */
+/** Recompute the derived look / angles from the fixture's DMX values. */
 export function deriveFromDmx(inst) {
   const d = inst.dmx;
   inst.intensity = d.dimmer / 255;
@@ -111,7 +111,7 @@ export function setColorHex(inst, hex) {
 }
 
 /**
- * Channel layouts. Presets follow the console's instrument types
+ * Channel layouts. Presets follow the console's fixture types
  * (Fixed / Movable × Single / Multi-color); `null` = channel not used.
  */
 export const LAYOUT_PRESETS = {
@@ -138,13 +138,13 @@ export function consoleTypeFromKey(key) {
 
 export const consoleTypeKey = (t) => (t ? `${t.mount}/${t.color}` : "none");
 
-/** Preset layout for a console instrument, fitted to its channel count. */
+/** Preset layout for a console fixture, fitted to its channel count. */
 export function layoutFor(mount, color, count) {
   const preset = LAYOUT_PRESETS[`${mount === "movable" ? "movable" : "fixed"}/${color === "multi" ? "multi" : "single"}`];
   return Array.from({ length: Math.max(1, count) }, (_, k) => preset[k] ?? null);
 }
 
-/** [{ channel, attr }] an instrument listens on / sends to (none if unlinked). */
+/** [{ channel, attr }] a fixture listens on / sends to (none if unlinked). */
 export function linkChannels(inst) {
   const { start, layout } = inst.link;
   if (!start) return [];
@@ -179,13 +179,13 @@ export function frameFacing(v) {
   return { yaw: round(Math.atan2(-v.x, -v.z) / DEG), pitch: round(Math.atan2(v.y, h) / DEG), roll: 0 };
 }
 
-/** Where a new instrument's zero points: stage floor centre (box centre if it sits on the floor). */
+/** Where a new fixture's zero points: stage floor centre (box centre if it sits on the floor). */
 export function defaultTarget(inst, box) {
   return inst.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
 }
 
 /** Pan / tilt back to zero (DMX 128). */
-export function homeInstrument(inst) {
+export function homeFixture(inst) {
   inst.dmx.pan = DMX_CENTRE;
   inst.dmx.tilt = DMX_CENTRE;
   deriveFromDmx(inst);
@@ -195,17 +195,17 @@ export function aimZeroAt(inst, target) {
   const v = target.clone().sub(new THREE.Vector3(inst.x, inst.y, inst.z));
   if (v.lengthSq() < 1e-6) v.set(0, -1, 0);
   inst.base = frameFacing(v);
-  homeInstrument(inst);
+  homeFixture(inst);
 }
 
 export function setZeroHere(inst) {
   const e = new THREE.Euler().setFromQuaternion(fullQuat(inst), "YXZ");
   inst.base = { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) };
-  homeInstrument(inst);
+  homeFixture(inst);
 }
 
 /**
- * Set pan/tilt (inside the instrument's zero frame) so the beam's centre
+ * Set pan/tilt (inside the fixture's zero frame) so the beam's centre
  * points at `target`. The zero frame is left alone. Pan picks whichever
  * equivalent angle (±360°) is closest to the current pan. Clamped to the
  * limits; returns false if the target is out of reach. The result is
@@ -274,13 +274,13 @@ export function axisHits(inst, box) {
   return hits;
 }
 
-/** `n` is the instrument's index, used for its default name and color. */
-export function createInstrument(x, y, z, n, box) {
+/** `n` is the fixture's index, used for its default name and color. */
+export function createFixture(x, y, z, n, box) {
   const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
-  /** @type {Instrument} */
+  /** @type {Fixture} */
   const inst = {
     id: newId(),
-    name: `Inst ${n + 1}`,
+    name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
     dmx: { dimmer: 191, pan: DMX_CENTRE, tilt: DMX_CENTRE, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
@@ -337,7 +337,7 @@ export function applyFixture(inst, p) {
   deriveFromDmx(inst);
 }
 
-export function normalizeInstrument(raw, i) {
+export function normalizeFixture(raw, i) {
   const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
   const b = raw.base || {};
   const panLimit = clamp(num(raw.panLimit, 270), 0, 360);
@@ -362,7 +362,7 @@ export function normalizeInstrument(raw, i) {
   }
   const inst = {
     id: typeof raw.id === "string" ? raw.id : newId(),
-    name: typeof raw.name === "string" ? raw.name : `Inst ${i + 1}`,
+    name: typeof raw.name === "string" ? raw.name : `Fixture ${i + 1}`,
     x: num(raw.x, 0), y: num(raw.y, 3), z: num(raw.z, 0),
     base: { yaw: num(b.yaw, 0), pitch: num(b.pitch, -45), roll: num(b.roll, 0) },
     dmx,
@@ -375,17 +375,17 @@ export function normalizeInstrument(raw, i) {
   return inst;
 }
 
-/** What gets saved for an instrument (the derived look is left out). */
-export function serializeInstrument(inst) {
+/** What gets saved for a fixture (the derived look is left out). */
+export function serializeFixture(inst) {
   const { color, pan, tilt, intensity, beam, ...saved } = inst;
   return saved;
 }
 
 // ---------------------------------------------------------------------
-// Rigs: a group of instruments with fixed placement relative to the rig.
+// Rigs: a group of fixtures with fixed placement relative to the rig.
 // Members carry `rigId` / `rigIndex`; their position and zero frame come
 // from the rig and are recomputed whenever the rig changes. Pan / tilt,
-// intensity, color and beam stay per instrument.
+// intensity, color and beam stay per fixture.
 // ---------------------------------------------------------------------
 
 /** @typedef {{
@@ -404,17 +404,17 @@ export const RIG_TYPES = {
   circle: {
     name: "Circle", prefix: "Ring", sizeLabel: "Diameter", aim: "centre",
     defaults: { size: 4, count: 8, tilt: 0, yaw: 0 },
-    help: "Instruments evenly spaced around the ring, each one's zero pointing at the centre of the rig. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
+    help: "Fixtures evenly spaced around the ring, each one's zero pointing at the centre of the rig. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
   },
   square: {
     name: "Square", prefix: "Square", sizeLabel: "Side", aim: "centre",
     defaults: { size: 4, count: 8, tilt: 0, yaw: 0 },
-    help: "Instruments evenly spaced around the square's edges (4 = one mid-side each, 8 = two per side), each one's zero pointing at the centre. Tilt 0 = flat; 90 = upright, facing the audience. Yaw turns it about the vertical.",
+    help: "Fixtures evenly spaced around the square's edges (4 = one mid-side each, 8 = two per side), each one's zero pointing at the centre. Tilt 0 = flat; 90 = upright, facing the audience. Yaw turns it about the vertical.",
   },
   line: {
     name: "Line", prefix: "Line", sizeLabel: "Length", aim: "parallel",
     defaults: { size: 6, count: 6, tilt: 0, yaw: 0 },
-    help: "Instruments evenly spaced from end to end, all pointing the same way: straight down at tilt 0. Tilt turns the line about its length (+90 = beams aimed upstage, −90 = at the audience). Yaw turns the line about the vertical (0 = running stage right to stage left).",
+    help: "Fixtures evenly spaced from end to end, all pointing the same way: straight down at tilt 0. Tilt turns the line about its length (+90 = beams aimed upstage, −90 = at the audience). Yaw turns the line about the vertical (0 = running stage right to stage left).",
   },
 };
 
@@ -522,7 +522,7 @@ export function normalizeRig(raw, i) {
     tilt: clamp(num(raw?.tilt, d.tilt), -90, 90),
     // `diameter` is the older name for a circle's size.
     size: clamp(num(raw?.size ?? raw?.diameter, d.size), 0.5, 50),
-    count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_INSTRUMENTS),
+    count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_FIXTURES),
     /** Console type its members are registered as (null = stage only). */
     consoleType: normalizeType(raw?.consoleType),
     /** Real fixture its members are (null = generic). */
@@ -560,7 +560,7 @@ export function normalizeTransparent(raw) {
   return out;
 }
 
-/** Parse saved/imported JSON into a clean `{ box, instruments, transparent, rigs }`. */
+/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs }`. */
 export function parseStage(data) {
   const raw = data?.box || {};
   const box = {
@@ -568,23 +568,24 @@ export function parseStage(data) {
     d: clamp(Number(raw.d) || 8, 1, 100),
     h: clamp(Number(raw.h) || 6, 1, 50),
   };
-  const list = Array.isArray(data?.instruments) ? data.instruments : [];
-  const instruments = list.slice(0, MAX_INSTRUMENTS).map(normalizeInstrument);
+  // Older stage files called fixtures "instruments".
+  const list = Array.isArray(data?.fixtures) ? data.fixtures : Array.isArray(data?.instruments) ? data.instruments : [];
+  const fixtures = list.slice(0, MAX_FIXTURES).map(normalizeFixture);
   const rigs = (Array.isArray(data?.rigs) ? data.rigs : []).map(normalizeRig);
-  // A member whose rig is gone becomes a free instrument; a rig keeps the
+  // A member whose rig is gone becomes a free fixture; a rig keeps the
   // count of members it actually has, and they're re-laid-out to match.
-  for (const inst of instruments) if (inst.rigId && !rigs.some((r) => r.id === inst.rigId)) inst.rigId = null;
+  for (const inst of fixtures) if (inst.rigId && !rigs.some((r) => r.id === inst.rigId)) inst.rigId = null;
   const kept = rigs.filter((rig) => {
-    const members = instruments.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
+    const members = fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
     if (members.length < 2) { members.forEach((m) => { m.rigId = null; }); return false; }
     members.forEach((m, k) => { m.rigIndex = k; });
     rig.count = members.length;
     applyRig(rig, members);
     return true;
   });
-  return { box, instruments, transparent: normalizeTransparent(data?.transparent), rigs: kept };
+  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept };
 }
 
-export function serializeStage(box, instruments, transparent, rigs) {
-  return { app: "UnnaturalLight.stage", version: 2, box, transparent, rigs, instruments: instruments.map(serializeInstrument) };
+export function serializeStage(box, fixtures, transparent, rigs) {
+  return { app: "UnnaturalLight.stage", version: 2, box, transparent, rigs, fixtures: fixtures.map(serializeFixture) };
 }

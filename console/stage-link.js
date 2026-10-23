@@ -3,7 +3,7 @@
  * (same origin, other tabs; works whether or not the DMX Pro is connected).
  *
  * Console → stage: the 512 output levels, which fader(s) each patched
- * channel comes from, and the console's instruments — on every output change, when the
+ * channel comes from, and the console's fixtures — on every output change, when the
  * stage says hello, and as a heartbeat.
  *
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
@@ -11,10 +11,10 @@
  * becomes V, allowing for the patch max, master, submasters and crossfade.
  * The stage also sends its lights, so ⌥-click traces here can show them, and
  * asks to register / unregister lights placed / deleted there (app.js creates
- * the console instrument, patches free faders and names them).
+ * the console fixture, patches free faders and names them).
  *
  * Trace: ⌥-click a fader (rows, Live meters, Patch cards), a channel meter or
- * an instrument row for a card showing what controls it, what it controls
+ * a fixture row for a card showing what controls it, what it controls
  * and the current values (../shared/trace.js).
  */
 
@@ -29,15 +29,16 @@ const HEARTBEAT_MS = 1000;
  *   levels: () => Map<number, number>,
  *   patch: () => { channel: number, max: number }[][],
  *   live: () => { rows: number[][], fromRow: number, toRow: number, fromSub: number, toSub: number, cross: number, master: number },
- *   instruments: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
+ *   fixtures: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
  *   groups: () => { id: string, name: string }[],
  *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
  *   mix: () => { master: number, fromSub: number, toSub: number, cross: number, fromName: string, toName: string },
  *   universes: () => number,
- *   traceTarget: (el: EventTarget | null) => ({ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "instrument", id: string } | null),
+ *   traceTarget: (el: EventTarget | null) => ({ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "fixture", id: string } | null),
  *   afterSet: () => void,
- *   register: (requests: { stageId: string, name: string, mount: string, color: string, labels: string[], width: number, group: string | null }[]) => { stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[],
+ *   register: (requests: { stageId: string, name: string, mount: string, color: string, labels: string[], roles?: (string | null)[], width: number, group: string | null, universe?: number | null }[]) => { stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[],
  *   unregister: (consoleIds: string[]) => void,
+ *   reveal: (consoleIds: string[]) => void,
  * }} StageLinkApi
  */
 
@@ -47,7 +48,7 @@ let bus = null;
 let api = null;
 let queued = false;
 /** The stage's lights, as last sent by the stage (null = stage not open). */
-let stageInstruments = null;
+let stageFixtures = null;
 /** @type {ReturnType<typeof createTracePopover> | null} */
 let trace = null;
 
@@ -64,7 +65,7 @@ export function notifyStage() {
 }
 
 function outputLevels() {
-  // Every universe in the setlist, end to end (channel 513 = universe 2/1).
+  // Every universe in the set, end to end (channel 513 = universe 2/1).
   const levels = new Array(api.universes() * UNIVERSE_SIZE).fill(0);
   for (const [channel, level] of api.levels()) if (channel <= levels.length) levels[channel - 1] = level;
   return levels;
@@ -78,8 +79,8 @@ function traceSnapshot() {
     faders: api.faderInfo(),
     mix: api.mix(),
     universes: api.universes(),
-    consoleInstruments: api.instruments(),
-    stageInstruments,
+    consoleFixtures: api.fixtures(),
+    stageFixtures,
   };
 }
 
@@ -96,7 +97,7 @@ function send() {
     type: "levels",
     levels,
     faders: [...faders.entries()],
-    instruments: api.instruments().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
+    fixtures: api.fixtures().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
       id, name, mount, color, channelStart, channelEnd, groupId,
     })),
     groups: api.groups().map(({ id, name }) => ({ id, name })),
@@ -149,8 +150,9 @@ export function startStageLink(linkApi) {
       send();
     }
     if (msg?.type === "unregister" && Array.isArray(msg.consoleIds)) api.unregister(msg.consoleIds);
-    if (msg?.type === "stage" && Array.isArray(msg.instruments)) {
-      stageInstruments = msg.instruments;
+    if (msg?.type === "stage-select" && Array.isArray(msg.consoleIds)) api.reveal(msg.consoleIds);
+    if (msg?.type === "stage" && Array.isArray(msg.fixtures)) {
+      stageFixtures = msg.fixtures;
       trace?.refresh();
     }
   });
@@ -158,7 +160,7 @@ export function startStageLink(linkApi) {
   send();
   bus.postMessage({ type: "stage-hello" });
 
-  // ⌥-click a fader, channel meter, Patch card or instrument row: show its
+  // ⌥-click a fader, channel meter, Patch card or fixture row: show its
   // trace (instead of moving / renaming / dragging it).
   trace = createTracePopover();
   const onAltPress = (e) => {

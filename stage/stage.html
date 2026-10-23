@@ -26,8 +26,8 @@
         </div>
         <div class="spacer"></div>
         <span id="consoleStatus" class="pill">Console · offline</span>
-        <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place instrument</button>
-        <button id="rigBtn" title="Place a rig: a preset group of instruments">+ Place rig</button>
+        <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place fixture</button>
+        <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
         <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
         <button id="exportBtn" title="Download the stage as JSON">Export</button>
         <button id="importBtn" title="Load a stage JSON file">Import</button>
@@ -43,12 +43,12 @@
           <span><button type="button" class="kbd" data-key="ArrowUp" data-code="ArrowUp" data-repeat title="Tilt up (hold to repeat · ⇧-click ×10)">↑</button><button type="button" class="kbd" data-key="ArrowDown" data-code="ArrowDown" data-repeat title="Tilt down (hold to repeat · ⇧-click ×10)">↓</button> tilt</span>
           <span><button type="button" class="kbd" data-key="=" data-code="Equal" data-repeat title="Dimmer up (hold to repeat · ⇧-click ×10)">+</button><button type="button" class="kbd" data-key="-" data-code="Minus" data-repeat title="Dimmer down (hold to repeat · ⇧-click ×10)">−</button> intensity</span>
           <span><button type="button" class="kbd" data-key="[" data-code="BracketLeft" data-repeat title="Beam narrower (hold to repeat · ⇧-click ×10)">[</button><button type="button" class="kbd" data-key="]" data-code="BracketRight" data-repeat title="Beam wider (hold to repeat · ⇧-click ×10)">]</button> beam</span>
-          <span><label class="keys-color" title="Color of the selected instrument(s)"><input type="color" id="keysColor" disabled /> color</label></span>
+          <span><label class="keys-color" title="Color of the selected fixture(s)"><input type="color" id="keysColor" disabled /> color</label></span>
           <span>0–255 · <kbd>⇧</kbd> ×10</span>
-          <span><button type="button" class="kbd" data-key="Tab" data-code="Tab" title="Select the next instrument">Tab</button> next</span>
-          <span><button type="button" class="kbd" data-key="a" data-code="KeyA" title="Place an instrument">A</button> place</span>
-          <span>right-click an instrument for more</span>
-          <span><button type="button" class="kbd" data-key="Backspace" data-code="Backspace" title="Delete the selected instrument(s)">⌫</button> delete · <button type="button" class="kbd" data-key="z" data-code="KeyZ" data-meta title="Undo the last delete">⌘Z</button> undo</span>
+          <span><button type="button" class="kbd" data-key="Tab" data-code="Tab" title="Select the next fixture">Tab</button> next</span>
+          <span><button type="button" class="kbd" data-key="a" data-code="KeyA" title="Place a fixture">A</button> place</span>
+          <span>right-click a fixture for more</span>
+          <span><button type="button" class="kbd" data-key="Backspace" data-code="Backspace" title="Delete the selected fixture(s)">⌫</button> delete · <button type="button" class="kbd" data-key="z" data-code="KeyZ" data-meta title="Undo the last delete">⌘Z</button> undo</span>
         </div>
       </div>
 
@@ -64,10 +64,10 @@
             </span>
           </h2>
           <canvas id="plan"></canvas>
-          <p class="hint">Drag instruments to move them (in Front / SR / SL this changes height too). Shift-click to select several; keys act on every selected instrument.</p>
+          <p class="hint">Drag fixtures to move them (in Front / SR / SL this changes height too). Shift-click to select several; keys act on every selected fixture.</p>
         </section>
         <section>
-          <h2>Instruments <span id="count"></span></h2>
+          <h2>Fixtures <span id="count"></span></h2>
           <div class="list" id="list"></div>
         </section>
         <section id="inspector"></section>
@@ -78,7 +78,7 @@
 
     <dialog id="placeDlg" class="dlg">
       <header class="dlg-head">
-        <h2>Place an instrument</h2>
+        <h2>Place a fixture</h2>
         <button id="placeClose" type="button" aria-label="Close">✕</button>
       </header>
       <section>
@@ -93,7 +93,7 @@
           </div>
           <div class="lib" id="placeLib" hidden></div>
           <p class="hint warn" id="placeLibMsg"></p>
-          <p class="hint">The console gets a matching instrument at the next free DMX block, with free faders patched to its channels and named after the light. "Stage only" doesn't touch the console.</p>
+          <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the light. "Stage only" doesn't touch the console.</p>
           <div class="buttons">
             <button class="primary" type="submit">Place…</button>
           </div>
@@ -112,14 +112,14 @@
           <select id="rigType"></select>
           <label for="rigSize" id="rigSizeLabel">Size (m)</label>
           <input id="rigSize" type="number" min="0.5" max="50" step="0.5" value="4" />
-          <label for="rigCount">Instruments</label>
+          <label for="rigCount">Fixtures</label>
           <input id="rigCount" type="number" min="2" max="32" step="1" value="8" />
           <label for="rigTilt">Tilt °</label>
           <input id="rigTilt" type="number" min="-90" max="90" step="5" value="0" />
           <label for="rigYaw">Yaw °</label>
           <input id="rigYaw" type="number" step="5" value="0" />
           <label for="rigConsoleType">Console type</label>
-          <select id="rigConsoleType" title="Each instrument in the rig gets a console instrument of this type (grouped under the rig's name)"></select>
+          <select id="rigConsoleType" title="Each fixture in the rig gets a console fixture of this type (grouped under the rig's name)"></select>
         </div>
         <div class="fields" data-universe-row hidden>
           <label for="rigUniverse">Universe</label>
@@ -141,7 +141,7 @@
       </header>
       <section>
         <h3>Transparent sides</h3>
-        <p class="hint">Ticked sides are see-through, so you can see instruments placed beyond them. Light from beams still shows on them. The floor is always solid.</p>
+        <p class="hint">Ticked sides are see-through, so you can see fixtures placed beyond them. Light from beams still shows on them. The floor is always solid.</p>
         <div class="checks" id="surfaceRows"></div>
         <div class="buttons">
           <button type="button" data-all="transparent">All transparent</button>

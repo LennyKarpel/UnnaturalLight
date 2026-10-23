@@ -1,13 +1,13 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
-  STORAGE_KEY, MAX_INSTRUMENTS, DEG, FORWARD,
+  STORAGE_KEY, MAX_FIXTURES, DEG, FORWARD,
   clamp, round, newId,
   baseQuat, fullQuat, beamDir, defaultTarget, aimZeroAt, setZeroHere, aimAt,
-  isInside, axisHits, createInstrument, parseStage, serializeStage,
+  isInside, axisHits, createFixture, parseStage, serializeStage,
   SURFACES, TRANSPARENT_OPACITY, DEFAULT_TRANSPARENT,
   RIG_TYPES, PALETTE, applyRig, rigLowestY, rigOutline, normalizeRig,
-  DMX_ATTRS, DMX_LABELS, setDmx, setColorHex, deriveFromDmx, homeInstrument,
+  DMX_ATTRS, DMX_LABELS, setDmx, setColorHex, deriveFromDmx, homeFixture,
   rgbFromHex, zoomFromBeam, layoutFor, linkChannels, LAYOUT_PRESETS,
   CONSOLE_TYPES, consoleTypeFromKey, consoleTypeKey,
   registerLayout, registerLabels, applyFixture,
@@ -16,13 +16,13 @@ import { createConsoleLink } from "./console-link.js";
 import { createFixturePicker } from "./fixture-library.js";
 import { createTracePopover } from "../shared/trace.js";
 
-/** @typedef {import("./stage-model.js").Instrument} Instrument */
+/** @typedef {import("./stage-model.js").Fixture} Fixture */
 /** @typedef {import("./stage-model.js").Rig} Rig */
 
 const state = {
   box: { w: 12, d: 8, h: 6 },
-  /** @type {Instrument[]} */
-  instruments: [],
+  /** @type {Fixture[]} */
+  fixtures: [],
   /** @type {string[]} */
   selected: [],
   /** Which box sides are transparent (floor is always solid). */
@@ -37,24 +37,24 @@ let placingRig = null;
 let aiming = false;
 
 function loadData(data) {
-  const { box, instruments, transparent, rigs } = parseStage(data);
+  const { box, fixtures, transparent, rigs } = parseStage(data);
   state.box = box;
   state.transparent = transparent;
   state.rigs = rigs;
-  state.instruments = instruments;
-  state.selected = instruments.length ? [instruments[0].id] : [];
+  state.fixtures = fixtures;
+  state.selected = fixtures.length ? [fixtures[0].id] : [];
 }
 
-const serialize = () => serializeStage(state.box, state.instruments, state.transparent, state.rigs);
+const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs);
 
-// Flash: while held, the flashed instruments draw white at full intensity.
+// Flash: while held, the flashed fixtures draw white at full intensity.
 // Display-only: their saved color / intensity are untouched.
 const FLASH_MIN_MS = 150;
 const flashing = new Set();
 let flashStart = 0;
 let flashTimer = 0;
 
-/** What an instrument looks like right now (its own settings, or white/full while flashing). */
+/** What a fixture looks like right now (its own settings, or white/full while flashing). */
 const look = (inst) => (flashing.has(inst.id) ? { color: "#ffffff", intensity: 1 } : inst);
 
 function redrawLook() {
@@ -63,10 +63,10 @@ function redrawLook() {
   renderHud();
 }
 
-/** Flash the selected instruments, or every instrument if none is selected. */
+/** Flash the selected fixtures, or every fixture if none is selected. */
 function startFlash() {
   clearTimeout(flashTimer);
-  const ids = state.selected.length ? state.selected : state.instruments.map((i) => i.id);
+  const ids = state.selected.length ? state.selected : state.fixtures.map((i) => i.id);
   flashing.clear();
   for (const id of ids) flashing.add(id);
   flashStart = performance.now();
@@ -96,14 +96,14 @@ function restore() {
   } catch { /* fall through to demo */ }
   loadData({ box: { w: 12, d: 8, h: 6 } });
   for (const [x, y, z] of [[-3, 5.7, 2.5], [3, 5.7, 2.5], [0, 4.5, 7]]) {
-    state.instruments.push(createInstrument(x, y, z, state.instruments.length, state.box));
+    state.fixtures.push(createFixture(x, y, z, state.fixtures.length, state.box));
   }
-  state.instruments[2].name = "FOH";
-  state.selected = [state.instruments[0].id];
+  state.fixtures[2].name = "FOH";
+  state.selected = [state.fixtures[0].id];
 }
 
-const byId = (id) => state.instruments.find((i) => i.id === id);
-const selectedInstruments = () => state.selected.map(byId).filter(Boolean);
+const byId = (id) => state.fixtures.find((i) => i.id === id);
+const selectedFixtures = () => state.selected.map(byId).filter(Boolean);
 
 // ---------------------------------------------------------------------
 // Rigs
@@ -113,20 +113,20 @@ const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", 
 
 const rigById = (id) => state.rigs.find((r) => r.id === id);
 const rigOf = (inst) => (inst?.rigId ? rigById(inst.rigId) : null);
-const rigMembers = (rig) => state.instruments.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
+const rigMembers = (rig) => state.fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
 const syncRig = (rig) => applyRig(rig, rigMembers(rig));
 
-/** The rig every selected instrument belongs to, if they all share one. */
+/** The rig every selected fixture belongs to, if they all share one. */
 function commonRig(sel) {
   const rig = rigOf(sel[0]);
   return rig && sel.every((i) => i.rigId === rig.id) ? rig : null;
 }
 
 /**
- * Move an instrument. A rig member can't move on its own, so the whole rig
+ * Move a fixture. A rig member can't move on its own, so the whole rig
  * shifts by the same amount instead.
  */
-function moveInstrument(inst, x, y, z) {
+function moveFixture(inst, x, y, z) {
   const rig = rigOf(inst);
   if (!rig) { inst.x = x; inst.y = y; inst.z = z; return; }
   rig.x = round(rig.x + x - inst.x, 3);
@@ -135,9 +135,9 @@ function moveInstrument(inst, x, y, z) {
   syncRig(rig);
 }
 
-/** Make a member instrument for `rig` at slot `k`, copying the look of `like`. */
+/** Make a member fixture for `rig` at slot `k`, copying the look of `like`. */
 function makeRigMember(rig, k, like) {
-  const inst = createInstrument(0, 0, 0, state.instruments.length, state.box);
+  const inst = createFixture(0, 0, 0, state.fixtures.length, state.box);
   Object.assign(inst, {
     name: `${rig.name} · ${k + 1}`,
     rigId: rig.id, rigIndex: k,
@@ -154,10 +154,10 @@ function makeRigMember(rig, k, like) {
 
 /** Create a rig centred at (x, y, z) from the Place rig dialog's settings. */
 function addRigAt(cfg, x, y, z) {
-  const room = MAX_INSTRUMENTS - state.instruments.length;
+  const room = MAX_FIXTURES - state.fixtures.length;
   if (cfg.count > room) {
     setPlacing(false);
-    setBanner(`Not enough room: this rig needs ${cfg.count} instruments, ${room} left (max ${MAX_INSTRUMENTS})`, 4000);
+    setBanner(`Not enough room: this rig needs ${cfg.count} fixtures, ${room} left (max ${MAX_FIXTURES})`, 4000);
     return;
   }
   const n = state.rigs.length;
@@ -174,7 +174,7 @@ function addRigAt(cfg, x, y, z) {
   };
   const members = Array.from({ length: rig.count }, (_, k) => makeRigMember(rig, k, like));
   state.rigs.push(rig);
-  state.instruments.push(...members);
+  state.fixtures.push(...members);
   syncRig(rig);
   setPlacing(false);
   state.selected = members.map((m) => m.id);
@@ -183,20 +183,20 @@ function addRigAt(cfg, x, y, z) {
   requestRegistrations();
 }
 
-/** Change how many instruments a rig has; extras copy the first member's look. */
+/** Change how many fixtures a rig has; extras copy the first member's look. */
 function setRigCount(rig, n) {
   const members = rigMembers(rig);
-  const max = MAX_INSTRUMENTS - state.instruments.length + members.length;
+  const max = MAX_FIXTURES - state.fixtures.length + members.length;
   n = clamp(Math.round(n), 2, max);
   if (n === members.length) return;
   if (n < members.length) {
     const dropped = members.slice(n);
     const drop = new Set(dropped.map((m) => m.id));
-    state.instruments = state.instruments.filter((i) => !drop.has(i.id));
+    state.fixtures = state.fixtures.filter((i) => !drop.has(i.id));
     state.selected = state.selected.filter((id) => !drop.has(id));
     consoleLink.unregister(dropped.filter((m) => m.link.owned).map((m) => m.link.consoleId));
   } else {
-    for (let k = members.length; k < n; k++) state.instruments.push(makeRigMember(rig, k, members[0]));
+    for (let k = members.length; k < n; k++) state.fixtures.push(makeRigMember(rig, k, members[0]));
   }
   rig.count = n;
   syncRig(rig);
@@ -249,12 +249,12 @@ scene.add(ground);
 
 const uniforms = {
   uCount: { value: 0 },
-  uPos: { value: Array.from({ length: MAX_INSTRUMENTS }, () => new THREE.Vector3()) },
-  uDir: { value: Array.from({ length: MAX_INSTRUMENTS }, () => new THREE.Vector3()) },
-  uColor: { value: Array.from({ length: MAX_INSTRUMENTS }, () => new THREE.Vector3()) },
-  uCosOuter: { value: new Float32Array(MAX_INSTRUMENTS) },
-  uCosInner: { value: new Float32Array(MAX_INSTRUMENTS) },
-  uInt: { value: new Float32Array(MAX_INSTRUMENTS) },
+  uPos: { value: Array.from({ length: MAX_FIXTURES }, () => new THREE.Vector3()) },
+  uDir: { value: Array.from({ length: MAX_FIXTURES }, () => new THREE.Vector3()) },
+  uColor: { value: Array.from({ length: MAX_FIXTURES }, () => new THREE.Vector3()) },
+  uCosOuter: { value: new Float32Array(MAX_FIXTURES) },
+  uCosInner: { value: new Float32Array(MAX_FIXTURES) },
+  uInt: { value: new Float32Array(MAX_FIXTURES) },
   uFaceAlpha: { value: new Float32Array(6) },
   uPass: { value: 0 },
   uAlpha: { value: 0.03 },
@@ -272,7 +272,7 @@ const vertexShader = /* glsl */ `
 `;
 
 const fragmentShader = /* glsl */ `
-  #define MAX ${MAX_INSTRUMENTS}
+  #define MAX ${MAX_FIXTURES}
   uniform int uCount;
   uniform vec3 uPos[MAX];
   uniform vec3 uDir[MAX];
@@ -408,7 +408,7 @@ lensGeom.translate(0, 0, -0.181);
 const ringGeom = new THREE.TorusGeometry(0.28, 0.02, 8, 40);
 const pickGeom = new THREE.SphereGeometry(0.4, 12, 8);
 
-// Place-mode preview: where the next instrument will land.
+// Place-mode preview: where the next fixture will land.
 const ghost = new THREE.Mesh(
   new THREE.SphereGeometry(0.18, 16, 12),
   new THREE.MeshBasicMaterial({ color: 0x00dddd, transparent: true, opacity: 0.8, depthTest: false }),
@@ -436,14 +436,14 @@ function setOutline(line, rig) {
   line.geometry = new THREE.BufferGeometry().setFromPoints(rigOutline(rig));
 }
 
-// Aim-mode preview: target marker + a line from each selected instrument.
+// Aim-mode preview: target marker + a line from each selected fixture.
 const aimMarker = new THREE.Mesh(
   new THREE.TorusGeometry(0.25, 0.03, 8, 32),
   new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }),
 );
 aimMarker.renderOrder = 10;
 const aimLines = new THREE.LineSegments(
-  new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_INSTRUMENTS * 6), 3)),
+  new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_FIXTURES * 6), 3)),
   new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.2, gapSize: 0.12, transparent: true, opacity: 0.8, depthTest: false }),
 );
 aimLines.renderOrder = 10;
@@ -497,7 +497,7 @@ function makeVisual(inst) {
 }
 
 function syncScene() {
-  const ids = new Set(state.instruments.map((i) => i.id));
+  const ids = new Set(state.fixtures.map((i) => i.id));
   for (const [id, v] of visuals) {
     if (!ids.has(id)) {
       scene.remove(v.group, v.axis);
@@ -508,7 +508,7 @@ function syncScene() {
   for (const [id, line] of rigVisuals) {
     if (!rigIds.has(id)) { scene.remove(line); rigVisuals.delete(id); }
   }
-  const selRigs = new Set(selectedInstruments().map((i) => i.rigId).filter(Boolean));
+  const selRigs = new Set(selectedFixtures().map((i) => i.rigId).filter(Boolean));
   for (const rig of state.rigs) {
     let line = rigVisuals.get(rig.id);
     if (!line) {
@@ -522,9 +522,9 @@ function syncScene() {
 
   const { w, d, h } = state.box;
   const diag = Math.hypot(w, d, h);
-  uniforms.uCount.value = state.instruments.length;
+  uniforms.uCount.value = state.fixtures.length;
 
-  state.instruments.forEach((inst, i) => {
+  state.fixtures.forEach((inst, i) => {
     const v = visuals.get(inst.id) || makeVisual(inst);
     const q = fullQuat(inst);
     const dir = FORWARD.clone().applyQuaternion(q);
@@ -541,8 +541,8 @@ function syncScene() {
     const hits = axisHits(inst, state.box);
     const len = hits.length ? hits[hits.length - 1].t : diag * 0.6;
     // The visible cone is drawn long and clipped by every wall the
-    // instrument is on the inside of, so it ends exactly where it lands
-    // on the walls (an outside instrument's beam passes in through the
+    // fixture is on the inside of, so it ends exactly where it lands
+    // on the walls (an outside fixture's beam passes in through the
     // near wall and stops at the far ones).
     const p = new THREE.Vector3(inst.x, inst.y, inst.z);
     const coneLen = p.length() + diag * 1.5;
@@ -586,12 +586,12 @@ renderer.setAnimationLoop(() => {
 });
 
 // 3D picking, placing and dragging.
-//   click instrument      select (⇧ adds/removes)
-//   drag instrument       slide it horizontally at its current height
-//   ⇧-drag instrument     raise / lower it
+//   click fixture      select (⇧ adds/removes)
+//   drag fixture       slide it horizontally at its current height
+//   ⇧-drag fixture     raise / lower it
 //   drag empty space      orbit (OrbitControls)
 // Listeners sit on the parent in the capture phase so we can switch
-// OrbitControls off before it sees a press that lands on an instrument.
+// OrbitControls off before it sees a press that lands on a fixture.
 const raycaster = new THREE.Raycaster();
 const DRAG_THRESHOLD = 4;
 let downAt = null;
@@ -608,13 +608,13 @@ function rayFromEvent(e) {
   return raycaster.ray;
 }
 
-function pickInstrument(e) {
+function pickFixture(e) {
   rayFromEvent(e);
   const targets = [...visuals.values()].map((v) => v.pick);
   return raycaster.intersectObjects(targets)[0]?.object.userData.instId ?? null;
 }
 
-/** Horizontal plane through the instrument, or (⇧) a vertical one facing the camera. */
+/** Horizontal plane through the fixture, or (⇧) a vertical one facing the camera. */
 function dragPlane(inst, vertical) {
   const p = new THREE.Vector3(inst.x, inst.y, inst.z);
   if (!vertical) return new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), p);
@@ -629,7 +629,7 @@ const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const PLACE_OFFSET = 0.3;
 
 /**
- * Where a place-mode click puts the new instrument (uses the current ray).
+ * Where a place-mode click puts the new fixture (uses the current ray).
  *   click a wall/floor/ceiling   on its inside surface
  *   ⌥-click a wall               on the outside of the nearest wall
  *   click the ground off the box  standing on the ground, outside
@@ -677,7 +677,7 @@ function aimPoint() {
   return g && Math.hypot(g.x, g.z) <= 100 ? g : null;
 }
 
-/** Show the aim marker at `p` (or hide it) with lines from the selected instruments. */
+/** Show the aim marker at `p` (or hide it) with lines from the selected fixtures. */
 function showAimPreview(p) {
   aimMarker.visible = aimLines.visible = !!p;
   if (!p) return;
@@ -685,7 +685,7 @@ function showAimPreview(p) {
   // Face the camera so the ring always reads as a target.
   aimMarker.quaternion.copy(camera.quaternion);
   const pts = aimLines.geometry.attributes.position;
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   sel.forEach((inst, k) => {
     pts.setXYZ(k * 2, inst.x, inst.y, inst.z);
     pts.setXYZ(k * 2 + 1, p.x, p.y, p.z);
@@ -700,7 +700,7 @@ view.addEventListener("pointerdown", (e) => {
   if (e.target !== renderer.domElement || e.button !== 0) return;
   downAt = { x: e.clientX, y: e.clientY };
   if (placing || aiming) return;
-  const id = pickInstrument(e);
+  const id = pickFixture(e);
   if (!id) return;
   const inst = byId(id);
   const plane = dragPlane(inst, e.shiftKey);
@@ -716,7 +716,7 @@ view.addEventListener("pointermove", (e) => {
   if (!drag3d) {
     if (placing) updateGhost(e);
     else if (aiming) { rayFromEvent(e); showAimPreview(aimPoint()); }
-    else if (!e.buttons) renderer.domElement.style.cursor = pickInstrument(e) ? "grab" : "";
+    else if (!e.buttons) renderer.domElement.style.cursor = pickFixture(e) ? "grab" : "";
     return;
   }
   if (!drag3d.active) {
@@ -733,10 +733,10 @@ view.addEventListener("pointermove", (e) => {
   const snap = e.altKey ? 0.01 : 0.1;
   const s = (v) => round(Math.round(v / snap) * snap);
   if (drag3d.shift) {
-    moveInstrument(inst, inst.x, clamp(s(hit.y), 0, 50), inst.z);
+    moveFixture(inst, inst.x, clamp(s(hit.y), 0, 50), inst.z);
   } else {
     // Keep the camera from flinging it off to the horizon at grazing angles.
-    moveInstrument(inst, clamp(s(hit.x), -100, 100), inst.y, clamp(s(hit.z), -100, 100));
+    moveFixture(inst, clamp(s(hit.x), -100, 100), inst.y, clamp(s(hit.z), -100, 100));
   }
   changed({ list: false });
 }, true);
@@ -754,7 +754,7 @@ view.addEventListener("contextmenu", (e) => {
   const still = rightDownAt ? Math.hypot(e.clientX - rightDownAt.x, e.clientY - rightDownAt.y) <= DRAG_THRESHOLD : e.ctrlKey;
   rightDownAt = null;
   if (!still || placing || aiming) return;
-  const id = pickInstrument(e);
+  const id = pickFixture(e);
   if (id) openContextMenu(id, e.clientX, e.clientY);
 }, true);
 
@@ -776,7 +776,7 @@ view.addEventListener("pointerup", (e) => {
 
   if (placing) {
     const p = placePoint(e.altKey);
-    if (p) (placingRig ? addRigAt(placingRig, p.x, p.y, p.z) : addInstrumentAt(p.x, p.y, p.z));
+    if (p) (placingRig ? addRigAt(placingRig, p.x, p.y, p.z) : addFixtureAt(p.x, p.y, p.z));
     return;
   }
   if (aiming) {
@@ -845,7 +845,7 @@ function toAB(p) {
   return [(V.hSign ?? 1) * p[V.h], V.vSign * p[V.v]];
 }
 
-/** Write plan axes [a, b] back into a world point / instrument. */
+/** Write plan axes [a, b] back into a world point / fixture. */
 function setAB(p, a, b) {
   const V = pv();
   p[V.h] = (V.hSign ?? 1) * a;
@@ -874,12 +874,12 @@ function boxRangeB() {
 
 function computeFit() {
   const { w, d, h } = state.box;
-  // Generous margin so there's room to place instruments outside the box.
+  // Generous margin so there's room to place fixtures outside the box.
   const margin = Math.max(4, Math.max(w, d, h) * 0.6);
   let [minA, maxA] = boxRangeA();
   let [minB, maxB] = boxRangeB();
   minA -= margin; maxA += margin; minB -= margin; maxB += margin;
-  for (const i of state.instruments) {
+  for (const i of state.fixtures) {
     const [a, b] = toAB(i);
     minA = Math.min(minA, a - 1); maxA = Math.max(maxA, a + 1);
     minB = Math.min(minB, b - 1); maxB = Math.max(maxB, b + 1);
@@ -969,7 +969,7 @@ function drawPlan() {
   ctx.fillText(V.caption, 6, 13);
 
   // Rig outlines
-  const selRigIds = new Set(selectedInstruments().map((i) => i.rigId).filter(Boolean));
+  const selRigIds = new Set(selectedFixtures().map((i) => i.rigId).filter(Boolean));
   for (const rig of state.rigs) {
     ctx.strokeStyle = selRigIds.has(rig.id) ? "#00dddd88" : "#8a93a688";
     ctx.lineWidth = 1.5;
@@ -982,7 +982,7 @@ function drawPlan() {
   }
 
   // Beam axis hit points
-  for (const inst of state.instruments) {
+  for (const inst of state.fixtures) {
     const hits = axisHits(inst, state.box);
     if (!hits.length || look(inst).intensity <= 0) continue;
     const last = hits[hits.length - 1].point;
@@ -999,8 +999,8 @@ function drawPlan() {
     ctx.globalAlpha = 1;
   }
 
-  // Instruments
-  for (const inst of state.instruments) {
+  // Fixtures
+  for (const inst of state.fixtures) {
     const [px, py] = instPlan(inst);
     const [da, db] = toAB(beamDir(inst));
     const sel = state.selected.includes(inst.id);
@@ -1054,10 +1054,10 @@ function planPoint(e) {
   return [e.clientX - r.left, e.clientY - r.top];
 }
 
-/** Instrument under a plan-canvas point (within 14 px), or null. */
-function planInstrumentAt(px, py) {
+/** Fixture under a plan-canvas point (within 14 px), or null. */
+function planFixtureAt(px, py) {
   let best = null, bestD = 14;
-  for (const inst of state.instruments) {
+  for (const inst of state.fixtures) {
     const [ix, iy] = instPlan(inst);
     const d = Math.hypot(ix - px, iy - py);
     if (d < bestD) { bestD = d; best = inst; }
@@ -1067,7 +1067,7 @@ function planInstrumentAt(px, py) {
 
 plan.addEventListener("contextmenu", (e) => {
   planFit = planFit || computeFit();
-  const inst = planInstrumentAt(...planPoint(e));
+  const inst = planFixtureAt(...planPoint(e));
   if (!inst) return;
   e.preventDefault();
   openContextMenu(inst.id, e.clientX, e.clientY);
@@ -1082,7 +1082,7 @@ plan.addEventListener("pointerdown", (e) => {
     const p = { x: 0, y: 0, z: 0, ...pv().placeDefault(state.box) };
     setAB(p, a, b);
     if (placingRig) addRigAt(placingRig, p.x, clamp(p.y, 0, 50), p.z);
-    else addInstrumentAt(p.x, clamp(p.y, 0, 50), p.z);
+    else addFixtureAt(p.x, clamp(p.y, 0, 50), p.z);
     return;
   }
   if (aiming) {
@@ -1091,7 +1091,7 @@ plan.addEventListener("pointerdown", (e) => {
     applyAim(new THREE.Vector3(p.x, p.y, p.z));
     return;
   }
-  const best = planInstrumentAt(px, py);
+  const best = planFixtureAt(px, py);
   if (e.altKey && best) { showTrace({ kind: "light", id: best.id }, e); return; }
   if (!best) { if (!e.shiftKey) select(null); return; }
   if (e.shiftKey) { select(best.id, true); return; }
@@ -1110,7 +1110,7 @@ plan.addEventListener("pointermove", (e) => {
   const s = (v) => round(Math.round(v / snap) * snap);
   const p = { x: inst.x, y: inst.y, z: inst.z };
   setAB(p, s(a + planDrag.da), s(b + planDrag.db));
-  moveInstrument(inst, p.x, clamp(p.y, 0, 50), p.z);
+  moveFixture(inst, p.x, clamp(p.y, 0, 50), p.z);
   changed({ list: false });
 });
 
@@ -1128,13 +1128,13 @@ const inspectorEl = document.getElementById("inspector");
 const hudEl = document.getElementById("hud");
 
 function renderList() {
-  document.getElementById("count").textContent = `${state.instruments.length} / ${MAX_INSTRUMENTS}`;
-  if (!state.instruments.length) {
-    listEl.innerHTML = `<div class="empty">None yet — press <kbd>A</kbd> or “+ Place instrument”.</div>`;
+  document.getElementById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
+  if (!state.fixtures.length) {
+    listEl.innerHTML = `<div class="empty">None yet — press <kbd>A</kbd> or “+ Place fixture”.</div>`;
     return;
   }
   listEl.innerHTML = "";
-  for (const inst of state.instruments) {
+  for (const inst of state.fixtures) {
     const row = document.createElement("div");
     row.className = "item" + (state.selected.includes(inst.id) ? " sel" : "");
     row.innerHTML = `
@@ -1162,7 +1162,7 @@ function rigSectionHtml(rig) {
         <input type="number" step="0.1" data-r="z" title="z (− upstage · + audience)" />
       </div>
       <label>${RIG_TYPES[rig.type].sizeLabel} m</label><input type="number" min="0.5" max="50" step="0.1" data-r="size" />
-      <label>Instruments</label><input type="number" min="2" max="${MAX_INSTRUMENTS}" step="1" data-r="count" />
+      <label>Fixtures</label><input type="number" min="2" max="${MAX_FIXTURES}" step="1" data-r="count" />
       <label>Tilt / Yaw °</label>
       <div class="xyz">
         <input type="number" min="-90" max="90" step="5" data-r="tilt" title="tilt: 0 = flat, 90 = upright facing the audience" />
@@ -1173,9 +1173,9 @@ function rigSectionHtml(rig) {
 
 /** Rebuild the inspector for the current selection (none, one, or several). */
 function renderInspector() {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   if (!sel.length) {
-    inspectorEl.innerHTML = `<h2>Inspector</h2><div class="empty">Select an instrument.</div>`;
+    inspectorEl.innerHTML = `<h2>Inspector</h2><div class="empty">Select a fixture.</div>`;
     return;
   }
   if (sel.length > 1) {
@@ -1187,7 +1187,7 @@ function renderInspector() {
         <label>Color</label>
         <input type="color" data-multi="color" />
       </div>
-      <p class="hint">Sets every selected instrument. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
+      <p class="hint">Sets every selected fixture. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
       ${commonRig(sel) ? rigSectionHtml(commonRig(sel)) + rigLinkHtml() : ""}
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
@@ -1253,10 +1253,10 @@ function renderInspector() {
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
       <button data-act="aimSpot" title="Point the beam at a spot you click (T)">Aim at spot</button>
       <button data-act="home" title="Pan/tilt back to 0 (H)">Home</button>
-      ${rig ? `<button data-act="selectRig" title="Select every instrument in this rig">Select whole rig</button>` : `
+      ${rig ? `<button data-act="selectRig" title="Select every fixture in this rig">Select whole rig</button>` : `
       <button data-act="zero" title="Make the current direction the new zero (Z)">Set zero here</button>
       <button data-act="aim" title="Point zero at the stage centre">Aim zero at stage</button>`}
-      <button data-act="dup" title="${rig ? "Copy as a free instrument (not part of the rig)" : "Copy"}">Duplicate</button>
+      <button data-act="dup" title="${rig ? "Copy as a free fixture (not part of the rig)" : "Copy"}">Duplicate</button>
       <button data-act="del" class="danger" title="${rig ? "Delete the whole rig" : "Delete"} (⌫ or right-click) · ⌘Z to undo">${rig ? "Delete rig" : "Delete"}</button>
     </div>`;
   bindInspector();
@@ -1285,7 +1285,7 @@ function setField(inst, k, raw) {
 function bindInspector() {
   inspectorEl.querySelectorAll("[data-k]").forEach((el) => {
     el.addEventListener("input", () => {
-      const inst = selectedInstruments()[0];
+      const inst = selectedFixtures()[0];
       if (!inst) return;
       setField(inst, el.dataset.k, el.value);
       changed({ inspector: el.dataset.k !== "name" });
@@ -1294,7 +1294,7 @@ function bindInspector() {
   });
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     el.addEventListener("input", () => {
-      const inst = selectedInstruments()[0];
+      const inst = selectedFixtures()[0];
       const v = Number(el.value);
       if (!inst || el.value === "" || !Number.isFinite(v)) return;
       setDmx(inst, el.dataset.d, v);
@@ -1305,13 +1305,13 @@ function bindInspector() {
   inspectorEl.querySelectorAll("[data-multi]").forEach((el) => {
     el.addEventListener("input", () => {
       if (el.dataset.multi === "color") {
-        for (const inst of selectedInstruments()) setColorHex(inst, el.value);
+        for (const inst of selectedFixtures()) setColorHex(inst, el.value);
         changed();
         return;
       }
       const v = Number(el.value);
       if (el.value === "" || !Number.isFinite(v)) return;
-      for (const inst of selectedInstruments()) setDmx(inst, "dimmer", v);
+      for (const inst of selectedFixtures()) setDmx(inst, "dimmer", v);
       changed();
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
@@ -1319,7 +1319,7 @@ function bindInspector() {
   bindLinkControls();
   inspectorEl.querySelectorAll("[data-r]").forEach((el) => {
     el.addEventListener("input", () => {
-      const rig = commonRig(selectedInstruments());
+      const rig = commonRig(selectedFixtures());
       if (!rig) return;
       const before = rig.count;
       setRigField(rig, el.dataset.r, el.value);
@@ -1348,7 +1348,7 @@ function syncRigFields(rig) {
 }
 
 function syncInspector() {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   const rig = commonRig(sel);
   if (rig) syncRigFields(rig);
   if (sel.length > 1) {
@@ -1383,7 +1383,7 @@ function syncInspector() {
 }
 
 function renderHud() {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   // Keep the keys-bar color picker on the selection's color.
   const kc = document.getElementById("keysColor");
   if (kc) {
@@ -1394,7 +1394,7 @@ function renderHud() {
   hudEl.hidden = false;
   const flashRow = sel.some((i) => flashing.has(i.id)) ? `<div class="row flash-on"><span>FLASH</span><span>white · 100%</span></div>` : "";
   if (sel.length > 1) {
-    hudEl.innerHTML = `<div class="name">${sel.length} instruments</div><div class="row"><span>keys act on all</span></div>${flashRow}`;
+    hudEl.innerHTML = `<div class="name">${sel.length} fixtures</div><div class="row"><span>keys act on all</span></div>${flashRow}`;
     return;
   }
   const i = sel[0];
@@ -1413,9 +1413,19 @@ function renderHud() {
 // Actions
 // ---------------------------------------------------------------------
 
+/** Selection last told to the console. */
+let lastSelectionKey = "";
+
 function changed({ list = true, inspector = true } = {}) {
   pushToConsole();
   publishStage();
+  // A new selection: have the console scroll to the selected fixtures' faders.
+  const selectionKey = state.selected.join(",");
+  if (selectionKey !== lastSelectionKey) {
+    lastSelectionKey = selectionKey;
+    const ids = [...new Set(selectedFixtures().map((i) => i.link.consoleId).filter(Boolean))];
+    if (ids.length) consoleLink.publishSelection(ids);
+  }
   trace?.refresh();
   syncScene();
   drawPlan();
@@ -1437,7 +1447,7 @@ function select(id, additive = false) {
 const bannerEl = document.getElementById("banner");
 const PLACE_HINT = bannerEl.textContent;
 const RIG_PLACE_HINT = "Click where the rig's centre goes: a surface or the ground in 3D, or the plan · Esc cancels";
-const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected instruments at it · Esc cancels";
+const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected fixtures at it · Esc cancels";
 let bannerTimer = 0;
 
 /** Show a banner message (null hides it); `ms` auto-hides it. */
@@ -1461,8 +1471,8 @@ function setPlacing(on, rigCfg = null) {
 }
 
 function setAiming(on) {
-  if (on && !selectedInstruments().length) {
-    setBanner("Select one or more instruments first, then Aim at spot (T)", 2500);
+  if (on && !selectedFixtures().length) {
+    setBanner("Select one or more fixtures first, then Aim at spot (T)", 2500);
     return;
   }
   if (on && placing) setPlacing(false);
@@ -1474,9 +1484,9 @@ function setAiming(on) {
   drawPlan();
 }
 
-/** Point every selected instrument's beam at `p` (world, metres). */
+/** Point every selected fixture's beam at `p` (world, metres). */
 function applyAim(p) {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   const missed = sel.filter((inst) => !aimAt(inst, p));
   setAiming(false);
   changed();
@@ -1486,38 +1496,38 @@ function applyAim(p) {
   }
 }
 
-function addInstrumentAt(x, y, z) {
-  if (state.instruments.length >= MAX_INSTRUMENTS) { setPlacing(false); return; }
-  const inst = createInstrument(x, y, z, state.instruments.length, state.box);
+function addFixtureAt(x, y, z) {
+  if (state.fixtures.length >= MAX_FIXTURES) { setPlacing(false); return; }
+  const inst = createFixture(x, y, z, state.fixtures.length, state.box);
   inst.link.register = placeType;
   inst.link.universe = placeUniverse;
   if (placeFixture) {
     applyFixture(inst, placeFixture);
-    const same = state.instruments.filter((i) => i.link.fixture?.model === placeFixture.model).length;
+    const same = state.fixtures.filter((i) => i.link.fixture?.model === placeFixture.model).length;
     inst.name = `${placeFixture.model} ${same + 1}`;
   }
-  state.instruments.push(inst);
+  state.fixtures.push(inst);
   setPlacing(false);
   select(inst.id);
   requestRegistrations();
 }
 
 // ---------------------------------------------------------------------
-// Right-click menu (instruments in 3D, plan and list)
+// Right-click menu (fixtures in 3D, plan and list)
 // ---------------------------------------------------------------------
 
 const ctxMenu = document.getElementById("ctxMenu");
 
 /**
- * Open the menu for instrument `id` at a screen point. Right-clicking an
- * instrument that's part of the selection acts on the whole selection;
- * otherwise it selects just that instrument first.
+ * Open the menu for fixture `id` at a screen point. Right-clicking an
+ * fixture that's part of the selection acts on the whole selection;
+ * otherwise it selects just that fixture first.
  */
 function openContextMenu(id, x, y) {
   if (!state.selected.includes(id)) select(id);
   const n = state.selected.length;
   const rig = rigOf(byId(id));
-  const title = n === 1 ? byId(id)?.name ?? "" : `${n} instruments`;
+  const title = n === 1 ? byId(id)?.name ?? "" : `${n} fixtures`;
   const count = n > 1 ? ` ${n}` : "";
   const delCount = deletionIds().size;
   const delLabel = rig ? `Delete rig${delCount > 1 ? ` (${delCount})` : ""}` : `Delete${count}`;
@@ -1562,40 +1572,40 @@ window.addEventListener("blur", closeContextMenu);
 window.addEventListener("resize", closeContextMenu);
 
 /**
- * Copy every selected instrument (all settings, 0.5 m to stage left) and
- * select the copies. Stops at the instrument limit.
+ * Copy every selected fixture (all settings, 0.5 m to stage left) and
+ * select the copies. Stops at the fixture limit.
  */
 function duplicateSelected() {
-  const wanted = selectedInstruments();
-  const room = MAX_INSTRUMENTS - state.instruments.length;
+  const wanted = selectedFixtures();
+  const room = MAX_FIXTURES - state.fixtures.length;
   const src = wanted.slice(0, Math.max(0, room));
   if (!src.length) {
-    if (wanted.length) setBanner(`Instrument limit reached (${MAX_INSTRUMENTS})`, 2500);
+    if (wanted.length) setBanner(`Fixture limit reached (${MAX_FIXTURES})`, 2500);
     return;
   }
-  // Copies are free instruments, even when copied from a rig.
+  // Copies are free fixtures, even when copied from a rig.
   const copies = src.map((inst) => ({
     ...structuredClone(inst), id: newId(), name: `${inst.name} copy`, x: round(inst.x + 0.5),
     rigId: null, rigIndex: 0,
-    // Copies get their own console instrument if the original came from the stage.
+    // Copies get their own console fixture if the original came from the stage.
     link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.owned ? inst.link.type : inst.link.register, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null },
   }));
-  state.instruments.push(...copies);
+  state.fixtures.push(...copies);
   state.selected = copies.map((c) => c.id);
   renderInspector();
   changed();
   requestRegistrations();
-  if (src.length < wanted.length) setBanner(`Instrument limit reached (${MAX_INSTRUMENTS}): copied ${src.length} of ${wanted.length}`, 3000);
+  if (src.length < wanted.length) setBanner(`Fixture limit reached (${MAX_FIXTURES}): copied ${src.length} of ${wanted.length}`, 3000);
 }
 
-/** Deleted instruments (and rigs), newest last, so ⌘Z can put them back. */
+/** Deleted fixtures (and rigs), newest last, so ⌘Z can put them back. */
 const undoStack = [];
 const MAX_UNDO = 50;
 
 /** What a delete removes: the selection, widened to whole rigs. */
 function deletionIds() {
   const ids = new Set(state.selected);
-  for (const inst of selectedInstruments()) {
+  for (const inst of selectedFixtures()) {
     const rig = rigOf(inst);
     if (rig) rigMembers(rig).forEach((m) => ids.add(m.id));
   }
@@ -1605,20 +1615,20 @@ function deletionIds() {
 function deleteSelected() {
   const ids = deletionIds();
   const removed = [];
-  state.instruments.forEach((inst, index) => { if (ids.has(inst.id)) removed.push({ inst, index }); });
+  state.fixtures.forEach((inst, index) => { if (ids.has(inst.id)) removed.push({ inst, index }); });
   if (!removed.length) return;
   const rigIds = new Set(removed.map((r) => r.inst.rigId).filter(Boolean));
   const rigs = state.rigs.filter((r) => rigIds.has(r.id));
   undoStack.push({ removed, rigs });
   if (undoStack.length > MAX_UNDO) undoStack.shift();
-  state.instruments = state.instruments.filter((i) => !ids.has(i.id));
+  state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
   state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
   // Lights the stage registered leave the console too (their faders are freed).
   consoleLink.unregister(removed.filter((r) => r.inst.link.owned).map((r) => r.inst.link.consoleId));
   select(null);
   const what = rigs.length === 1 && removed.every((r) => r.inst.rigId === rigs[0].id)
     ? rigs[0].name
-    : removed.length === 1 ? removed[0].inst.name : `${removed.length} instruments`;
+    : removed.length === 1 ? removed[0].inst.name : `${removed.length} fixtures`;
   setBanner(`Deleted ${what} · ⌘Z to undo`, 4000);
 }
 
@@ -1626,16 +1636,16 @@ function undoDelete() {
   const entry = undoStack.pop();
   if (!entry) return;
   const { removed, rigs } = entry;
-  if (state.instruments.length + removed.length > MAX_INSTRUMENTS) {
+  if (state.fixtures.length + removed.length > MAX_FIXTURES) {
     undoStack.push(entry);
-    setBanner(`Can't undo: it would go over ${MAX_INSTRUMENTS} instruments`, 3000);
+    setBanner(`Can't undo: it would go over ${MAX_FIXTURES} fixtures`, 3000);
     return;
   }
   state.rigs.push(...rigs);
   // Re-insert in original order so each lands back at its old index.
-  for (const { inst, index } of removed) state.instruments.splice(Math.min(index, state.instruments.length), 0, inst);
+  for (const { inst, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, inst);
   rigs.forEach(syncRig);
-  // Their console instruments were removed on delete: register them again.
+  // Their console fixtures were removed on delete: register them again.
   for (const { inst } of removed) {
     if (!inst.link.owned) continue;
     inst.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.type, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null };
@@ -1644,13 +1654,13 @@ function undoDelete() {
   state.selected = removed.map((r) => r.inst.id).filter((id) => byId(id));
   renderInspector();
   changed();
-  const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].inst.name : `${removed.length} instruments`;
+  const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].inst.name : `${removed.length} fixtures`;
   setBanner(`Restored ${what}`, 2000);
 }
 
 function act(name) {
-  const sel = selectedInstruments();
-  if (name === "home") sel.forEach(homeInstrument);
+  const sel = selectedFixtures();
+  if (name === "home") sel.forEach(homeFixture);
   // A rig member's zero is set by its rig, so these skip rig members.
   const free = sel.filter((i) => !i.rigId);
   if (name === "zero") free.forEach(setZeroHere);
@@ -1669,11 +1679,11 @@ function act(name) {
 // Keyboard
 // ---------------------------------------------------------------------
 
-// Keys bar color picker: sets the color of every selected instrument (like
+// Keys bar color picker: sets the color of every selected fixture (like
 // the inspector's Color); shows the first selected one's color.
 const keysColor = /** @type {HTMLInputElement} */ (document.getElementById("keysColor"));
 keysColor.addEventListener("input", () => {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   if (!sel.length) return;
   for (const inst of sel) setColorHex(inst, keysColor.value);
   changed();
@@ -1730,18 +1740,18 @@ window.addEventListener("keydown", (e) => {
     if (state.selected.length) { e.preventDefault(); deleteSelected(); }
     return;
   }
-  if (e.key === "a" || e.key === "A") { togglePlaceInstrument(); return; }
+  if (e.key === "a" || e.key === "A") { togglePlaceFixture(); return; }
   if (e.code === "KeyF") { if (!e.repeat) startFlash(); e.preventDefault(); return; }
-  if (e.key === "Tab" && state.instruments.length) {
+  if (e.key === "Tab" && state.fixtures.length) {
     e.preventDefault();
-    const cur = state.instruments.findIndex((i) => i.id === state.selected[state.selected.length - 1]);
-    const n = state.instruments.length;
-    const next = state.instruments[(cur + (e.shiftKey ? -1 : 1) + n) % n];
+    const cur = state.fixtures.findIndex((i) => i.id === state.selected[state.selected.length - 1]);
+    const n = state.fixtures.length;
+    const next = state.fixtures[(cur + (e.shiftKey ? -1 : 1) + n) % n];
     select(next.id);
     return;
   }
 
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   if (!sel.length) return;
 
   // Every value is 0–255: one key press = 1 step, ⇧ = 10.
@@ -1758,7 +1768,7 @@ window.addEventListener("keydown", (e) => {
     case "Minus": case "NumpadSubtract": nudge("dimmer", -step); break;
     case "BracketLeft": nudge("zoom", -step); break;
     case "BracketRight": nudge("zoom", step); break;
-    case "KeyH": sel.forEach(homeInstrument); break;
+    case "KeyH": sel.forEach(homeFixture); break;
     case "KeyZ": sel.filter((i) => !i.rigId).forEach(setZeroHere); break;
     default: handled = false;
   }
@@ -1784,7 +1794,7 @@ for (const [k, el] of Object.entries(boxInputs)) {
   });
 }
 
-document.getElementById("addBtn").addEventListener("click", (e) => { e.currentTarget.blur(); togglePlaceInstrument(); });
+document.getElementById("addBtn").addEventListener("click", (e) => { e.currentTarget.blur(); togglePlaceFixture(); });
 
 document.getElementById("exportBtn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: "application/json" });
@@ -1874,9 +1884,9 @@ const rigRoomEl = document.getElementById("rigRoom");
 document.getElementById("rigBtn").addEventListener("click", (e) => {
   e.currentTarget.blur();
   if (placing) setPlacing(false);
-  const room = MAX_INSTRUMENTS - state.instruments.length;
+  const room = MAX_FIXTURES - state.fixtures.length;
   rigInputs.count.max = String(Math.max(2, room));
-  rigRoomEl.textContent = `${room} of ${MAX_INSTRUMENTS} instrument slots free.`;
+  rigRoomEl.textContent = `${room} of ${MAX_FIXTURES} fixture slots free.`;
   fillConsoleTypes(rigInputs.consoleType);
   rigLib.sync();
   fillUniverses(sd("rigUniverse"));
@@ -1892,9 +1902,9 @@ document.getElementById("rigPlace").addEventListener("click", () => {
     tilt: rigInputs.tilt.value,
     yaw: rigInputs.yaw.value,
   }, 0);
-  const room = MAX_INSTRUMENTS - state.instruments.length;
+  const room = MAX_FIXTURES - state.fixtures.length;
   if (cfg.count > room) {
-    rigRoomEl.textContent = `Only ${room} instrument slots free; lower the count to ${room} or fewer.`;
+    rigRoomEl.textContent = `Only ${room} fixture slots free; lower the count to ${room} or fewer.`;
     return;
   }
   rigDlg.close();
@@ -1927,9 +1937,9 @@ rigInputs.type.addEventListener("change", syncRigDialogType);
 syncRigDialogType();
 
 // ---------------------------------------------------------------------
-// Console link: stage instruments ↔ console instruments / DMX channels
+// Console link: stage fixtures ↔ console fixtures / DMX channels
 // ---------------------------------------------------------------------
-// A linked instrument has a start channel and a layout (which attribute
+// A linked fixture has a start channel and a layout (which attribute
 // each channel drives). Values flow both ways for channels that have a
 // console fader patched: the console's output sets the stage, and changing
 // a value here moves that fader (see console-link.js for the rules).
@@ -1941,8 +1951,8 @@ const consoleLink = createConsoleLink({
 });
 const consoleStatusEl = document.getElementById("consoleStatus");
 
-const sortedConsoleInstruments = () => [...consoleLink.instruments()].sort((a, b) => a.channelStart - b.channelStart);
-const consoleInstrumentById = (id) => consoleLink.instruments().find((c) => c.id === id) ?? null;
+const sortedConsoleFixtures = () => [...consoleLink.fixtures()].sort((a, b) => a.channelStart - b.channelStart);
+const consoleFixtureById = (id) => consoleLink.fixtures().find((c) => c.id === id) ?? null;
 /** Channel as shown: "45", or "2/45" (universe/channel) when the console has several universes. */
 const addr = (ch) => (consoleLink.universes > 1 ? `${Math.floor((ch - 1) / 512) + 1}/${((ch - 1) % 512) + 1}` : String(ch));
 /** "2/45" or "45" → channel number (null if invalid). */
@@ -1968,9 +1978,9 @@ setInterval(updateConsoleStatus, 1000);
 /** Take the console's current values for linked, patched channels. */
 function applyConsoleLevels() {
   let moved = false;
-  for (const inst of state.instruments) {
-    // Follow the console instrument if its address was changed there.
-    const ci = inst.link.consoleId ? consoleInstrumentById(inst.link.consoleId) : null;
+  for (const inst of state.fixtures) {
+    // Follow the console fixture if its address was changed there.
+    const ci = inst.link.consoleId ? consoleFixtureById(inst.link.consoleId) : null;
     if (ci && ci.channelStart !== inst.link.start) { inst.link.start = ci.channelStart; moved = true; }
     for (const { channel, attr } of linkChannels(inst)) {
       const v = consoleLink.incoming(channel);
@@ -1988,13 +1998,13 @@ function applyConsoleLevels() {
 /** Send values changed on the stage to the console (called from changed()). */
 function pushToConsole() {
   const entries = [];
-  for (const inst of state.instruments) {
+  for (const inst of state.fixtures) {
     for (const { channel, attr } of linkChannels(inst)) entries.push({ channel, value: inst.dmx[attr] });
   }
   consoleLink.push(entries);
 }
 
-function linkToConsoleInstrument(inst, ci) {
+function linkToConsoleFixture(inst, ci) {
   if (!ci) return;
   inst.link = { consoleId: ci.id, start: ci.channelStart, layout: layoutFor(ci.mount, ci.color, ci.channelEnd - ci.channelStart + 1) };
 }
@@ -2010,16 +2020,16 @@ function linkSectionHtml(inst) {
   const L = inst.link;
   const mode = L.consoleId ?? (L.start ? "manual" : "");
   const opt = (v, text) => `<option value="${escapeHtml(v)}"${v === mode ? " selected" : ""}>${escapeHtml(text)}</option>`;
-  const missing = L.consoleId && !consoleInstrumentById(L.consoleId);
+  const missing = L.consoleId && !consoleFixtureById(L.consoleId);
   const attrOpts = (cur) => [`<option value="">—</option>`, ...DMX_ATTRS.map((a) => `<option value="${a}"${a === cur ? " selected" : ""}>${DMX_LABELS[a]}</option>`)].join("");
   return `
     <div class="fields link-fields">
       <div class="subhead">Console link</div>
       ${L.fixture ? `<label>Fixture</label><div class="hint" style="margin:0">${escapeHtml(`${L.fixture.manufacturer} ${L.fixture.model}`)} · ${escapeHtml(L.fixture.mode)} · ${L.fixture.channels.length} ch</div>` : ""}
-      <label>Instrument</label>
+      <label>Fixture</label>
       <select data-link="target">
         ${opt("", "— not linked —")}
-        ${sortedConsoleInstruments().map((c) => opt(c.id, `${c.name} · ${chRange(c)}`)).join("")}
+        ${sortedConsoleFixtures().map((c) => opt(c.id, `${c.name} · ${chRange(c)}`)).join("")}
         ${missing ? opt(L.consoleId, "(not found in the console)") : ""}
         ${opt("manual", "Manual address…")}
       </select>
@@ -2032,27 +2042,27 @@ function linkSectionHtml(inst) {
         <div class="lay-btns">
           <button type="button" data-link-act="add" title="Add a channel">+ ch</button>
           <button type="button" data-link-act="remove" title="Remove the last channel">− ch</button>
-          ${L.consoleId ? `<button type="button" data-link-act="preset" title="Reset to the preset for the console instrument's type">Preset</button>` : ""}
+          ${L.consoleId ? `<button type="button" data-link-act="preset" title="Reset to the preset for the console fixture's type">Preset</button>` : ""}
         </div>
       </div>` : ""}
       ${!L.start ? `
       <label>Register</label>
       <div class="xyz">
         <select data-reg-type>${CONSOLE_TYPES.filter((t) => t.key !== "none").map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("")}</select>
-        <button type="button" data-link-act="register" title="Create a console instrument for this light, with free faders patched to it">Register</button>
+        <button type="button" data-link-act="register" title="Create a console fixture for this light, with free faders patched to it">Register</button>
       </div>` : ""}
       <div class="readout" id="linkStatus"></div>
     </div>`;
 }
 
-/** Rig only: link every member to consecutive console instruments. */
+/** Rig only: link every member to consecutive console fixtures. */
 function rigLinkHtml() {
   return `
     <div class="fields rig-fields">
       <label>Link rig</label>
-      <select data-rig-link title="Link member 1 to the chosen console instrument, member 2 to the next one, …">
+      <select data-rig-link title="Link member 1 to the chosen console fixture, member 2 to the next one, …">
         <option value="">Members in order, from…</option>
-        ${sortedConsoleInstruments().map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} · ${chRange(c)}</option>`).join("")}
+        ${sortedConsoleFixtures().map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} · ${chRange(c)}</option>`).join("")}
         <option value="__unlink">Unlink all members</option>
       </select>
     </div>`;
@@ -2063,28 +2073,28 @@ function linkRigFrom(rig, id) {
   if (id === "__unlink") {
     members.forEach((m) => { m.link = { consoleId: null, start: null, layout: [] }; });
   } else {
-    const list = sortedConsoleInstruments();
+    const list = sortedConsoleFixtures();
     const first = list.findIndex((c) => c.id === id);
     if (first < 0) return;
-    members.forEach((m, k) => linkToConsoleInstrument(m, list[first + k]));
+    members.forEach((m, k) => linkToConsoleFixture(m, list[first + k]));
     const linked = Math.min(members.length, list.length - first);
-    if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console instruments`, 4000);
+    if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console fixtures`, 4000);
   }
   afterLinkChange();
 }
 
 function bindLinkControls() {
-  const sel = selectedInstruments();
+  const sel = selectedFixtures();
   const inst = sel.length === 1 ? sel[0] : null;
   inspectorEl.querySelector('[data-link="target"]')?.addEventListener("change", (e) => {
     const v = e.target.value;
-    // Moving off a console instrument the stage registered: remove it there.
+    // Moving off a console fixture the stage registered: remove it there.
     if (inst.link.owned && v !== inst.link.consoleId) consoleLink.unregister([inst.link.consoleId]);
     if (v === "") inst.link = { consoleId: null, start: null, layout: [] };
     else if (v === "manual") inst.link = { consoleId: null, start: inst.link.start ?? 1, layout: inst.link.layout.length ? inst.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
     else {
       const fixture = inst.link.fixture;
-      linkToConsoleInstrument(inst, consoleInstrumentById(v));
+      linkToConsoleFixture(inst, consoleFixtureById(v));
       inst.link.fixture = fixture ?? null;
     }
     afterLinkChange();
@@ -2114,15 +2124,15 @@ function bindLinkControls() {
         requestRegistrations();
       }
       if (el.dataset.linkAct === "preset") {
-        const ci = consoleInstrumentById(L.consoleId);
+        const ci = consoleFixtureById(L.consoleId);
         if (L.fixture) L.layout = L.fixture.channels.map((c) => c.attr);
-        else if (ci) linkToConsoleInstrument(inst, ci);
+        else if (ci) linkToConsoleFixture(inst, ci);
       }
       afterLinkChange();
     });
   });
   inspectorEl.querySelector("[data-rig-link]")?.addEventListener("change", (e) => {
-    const rig = commonRig(selectedInstruments());
+    const rig = commonRig(selectedFixtures());
     if (rig && e.target.value) linkRigFrom(rig, e.target.value);
   });
 }
@@ -2162,7 +2172,7 @@ function syncDmxRows(inst) {
 // Registering lights in the console
 // ---------------------------------------------------------------------
 // A light placed with a console type (or a rig's members, or a copy of a
-// registered light) asks the console to create an instrument at the next
+// registered light) asks the console to create a fixture at the next
 // free DMX block, patch one free fader per channel and name them. It starts
 // at the light's current values. Lights placed while the console is closed
 // wait (link.register) and register when it opens.
@@ -2219,7 +2229,7 @@ const registering = new Map();
 function requestRegistrations() {
   if (!consoleLink.live) return;
   const requests = [];
-  for (const inst of state.instruments) {
+  for (const inst of state.fixtures) {
     const t = inst.link.register;
     if (!t || registering.has(inst.id)) continue;
     const layout = registerLayout(inst.link, t);
@@ -2230,6 +2240,8 @@ function requestRegistrations() {
       color: t.color,
       width: layout.length,
       labels: registerLabels(inst.link, t),
+      // What each channel does (so the console can e.g. show R/G/B faders as a color picker).
+      roles: layout,
       values: layout.map((a) => (a ? inst.dmx[a] : 0)),
       group: rigOf(inst)?.name ?? null,
       universe: inst.link.universe ?? null,
@@ -2263,18 +2275,18 @@ function onRegistered(results) {
   if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 7000);
 }
 
-// Place instrument: pick its console type first.
+// Place fixture: pick its console type first.
 const placeDlg = /** @type {HTMLDialogElement} */ (document.getElementById("placeDlg"));
 const placeTypeEl = document.getElementById("placeType");
-/** Console type for the instrument being placed (null = stage only). */
+/** Console type for the fixture being placed (null = stage only). */
 let placeType = null;
-/** Real fixture for the instrument being placed (null = generic). */
+/** Real fixture for the fixture being placed (null = generic). */
 let placeFixture = null;
-/** Universe the instrument being placed registers in (null = first with room). */
+/** Universe the fixture being placed registers in (null = first with room). */
 let placeUniverse = null;
 const placeLib = libraryPickerFor(placeTypeEl, document.getElementById("placeLib"));
 
-function togglePlaceInstrument() {
+function togglePlaceFixture() {
   if (placing) { setPlacing(false); return; }
   fillConsoleTypes(placeTypeEl);
   placeLib.sync();
@@ -2312,7 +2324,7 @@ const trace = createTracePopover();
 
 /** A light as the trace card (here and in the console) sees it. */
 function traceLights() {
-  return state.instruments.map((i) => ({
+  return state.fixtures.map((i) => ({
     id: i.id,
     name: i.name,
     start: i.link.start,
@@ -2320,7 +2332,7 @@ function traceLights() {
     dmx: { ...i.dmx },
     notes: { dimmer: `${Math.round(i.intensity * 100)}%`, pan: `${i.pan}°`, tilt: `${i.tilt}°`, zoom: `${i.beam}°` },
     consoleId: i.link.consoleId,
-    consoleName: i.link.consoleId ? consoleInstrumentById(i.link.consoleId)?.name ?? null : null,
+    consoleName: i.link.consoleId ? consoleFixtureById(i.link.consoleId)?.name ?? null : null,
     // Real fixture channel names (per channel, from the start channel), if it's a library fixture.
     channelNames: i.link.fixture ? i.link.fixture.channels.map((c) => c.name) : null,
     fixture: i.link.fixture ? `${i.link.fixture.manufacturer} ${i.link.fixture.model} · ${i.link.fixture.mode}` : null,
@@ -2329,7 +2341,7 @@ function traceLights() {
 
 function traceSnapshot() {
   const { levels, faders, mix, universes } = consoleLink.traceInfo();
-  return { live: consoleLink.live, levels, faders, mix, universes, consoleInstruments: consoleLink.instruments(), stageInstruments: traceLights() };
+  return { live: consoleLink.live, levels, faders, mix, universes, consoleFixtures: consoleLink.fixtures(), stageFixtures: traceLights() };
 }
 
 function showTrace(target, e) {

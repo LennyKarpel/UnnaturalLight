@@ -11,14 +11,14 @@
       <header class="header">
         <div class="brand">
           <h1>UnnaturalLight</h1>
-          <div class="setlist-name-group">
-            <p id="setlistNameDisplay" class="setlist-name" hidden></p>
+          <div class="set-name-group">
+            <p id="setNameDisplay" class="set-name" hidden></p>
             <button
-              id="setlistMenuBtn"
+              id="setMenuBtn"
               type="button"
-              class="scene-menu-btn setlist-menu-btn"
-              title="Setlist options"
-              aria-label="Setlist options"
+              class="scene-menu-btn set-menu-btn"
+              title="Set options"
+              aria-label="Set options"
               aria-haspopup="menu"
               aria-expanded="false"
               hidden
@@ -28,9 +28,9 @@
           </div>
         </div>
         <div class="controls">
-          <button id="newSetlistBtn" type="button">New setlist</button>
-          <button id="saveBtn" type="button">Save setlist</button>
-          <button id="loadBtn" type="button">Load setlist</button>
+          <button id="newSetBtn" type="button">New set</button>
+          <button id="saveBtn" type="button">Save set</button>
+          <button id="loadBtn" type="button">Load set</button>
           <input id="loadFile" type="file" accept="application/json,.json" hidden />
           <button id="connectBtn" type="button">Connect DMX Pro</button>
           <span id="status" class="status" data-state="idle">Disconnected</span>
@@ -38,66 +38,66 @@
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
-        <a href="#setlist" data-page="setlist" class="nav-link" draggable="true">Setlist</a>
-        <a href="#tunes" data-page="tunes" class="nav-link is-active" draggable="true">Tunes</a>
+        <a href="#set" data-page="set" class="nav-link" draggable="true">Set</a>
+        <a href="#songs" data-page="songs" class="nav-link is-active" draggable="true">Songs</a>
         <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
-        <a href="#instruments" data-page="instruments" class="nav-link" draggable="true">Instruments</a>
+        <a href="#fixtures" data-page="fixtures" class="nav-link" draggable="true">Fixtures</a>
         <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
       </nav>
 
-      <section id="page-setlist" class="page" hidden>
+      <section id="page-set" class="page" hidden>
         <div class="page-intro">
           <div>
-            <h2>Setlist</h2>
-            <p class="page-intro-hint">Tunes in this setlist · click to play · drag to reorder</p>
+            <h2>Set</h2>
+            <p class="page-intro-hint">Songs in this set · click to play · drag to reorder</p>
           </div>
           <div class="patch-actions">
-            <button id="addTuneBtn" type="button" class="btn-quiet">+ Tune</button>
+            <button id="addTuneBtn" type="button" class="btn-quiet">+ Song</button>
           </div>
         </div>
         <div id="tuneScroll" class="tune-scroll">
-          <div id="tuneEmpty" class="instrument-empty" hidden>No tunes yet.</div>
-          <div id="tuneList" class="tune-list" role="list" aria-label="Tunes"></div>
+          <div id="tuneEmpty" class="fixture-empty" hidden>No songs yet.</div>
+          <div id="tuneList" class="tune-list" role="list" aria-label="Songs"></div>
         </div>
       </section>
 
-      <section id="page-tunes" class="page is-active">
+      <section id="page-songs" class="page is-active">
         <div class="faders-stage">
           <div class="faders-stage-main">
             <section class="transport">
               <div class="active-tune-bar">
-                <span class="active-tune-label">Tune</span>
-                <span id="activeTuneLabel" class="active-tune-name">Tune 1</span>
+                <span class="active-tune-label">Song</span>
+                <span id="activeTuneLabel" class="active-tune-name">Song 1</span>
               </div>
 
               <div class="transport-main">
                 <div class="crossfade go-transport">
                   <div class="crossfade-head">
                     <div class="cross-from-label go-slot">
-                      <span class="go-slot-label">Current</span>
+                      <span class="go-slot-label" title="The cue on stage now">Live</span>
                       <span id="crossFromLabel" class="go-slot-name">A</span>
                     </div>
                     <div class="crossfade-title go-title">
-                      <button id="goBtn" type="button" class="go-btn" title="GO — fade to next transition">
+                      <button id="goBtn" type="button" class="go-btn" title="GO — transition to the next cue">
                         GO
                       </button>
                       <output id="crossValue" class="go-progress">0%</output>
                     </div>
                     <div class="cross-to-label go-slot">
-                      <span class="go-slot-label">Next</span>
+                      <span class="go-slot-label" title="The cue GO transitions to">Up next</span>
                       <span id="crossToLabel" class="go-slot-name">B</span>
                       <span id="goNextFade" class="go-next-fade">4s</span>
                     </div>
                   </div>
-                  <input id="crossfader" type="range" min="0" max="100" value="0" aria-label="Blend Current to Next" />
+                  <input id="crossfader" type="range" min="0" max="100" value="0" aria-label="Blend Live to Up next" />
                   <div class="timed-crossfade">
                     <button id="fadePauseBtn" type="button" disabled>Pause</button>
                   </div>
                 </div>
 
                 <div class="row-actions">
-                  <button id="addRowBtn" type="button" aria-label="Add transition" title="Add transition">+</button>
-                  <button id="removeRowBtn" type="button" aria-label="Remove transition" title="Remove transition">−</button>
+                  <button id="addRowBtn" type="button" aria-label="Add cue" title="Add cue">+</button>
+                  <button id="removeRowBtn" type="button" aria-label="Remove cue" title="Remove cue">−</button>
                 </div>
               </div>
             </section>
@@ -111,7 +111,7 @@
             </section>
           </div>
 
-          <aside class="submasters" aria-label="Transition submasters">
+          <aside class="submasters" aria-label="Cue submasters">
             <div class="submasters-title">Submaster</div>
             <div class="submasters-sliders">
               <div class="submaster submaster-from">
@@ -119,7 +119,7 @@
                   <span id="fromSubLabel" class="submaster-name">A</span>
                   <output id="fromSubValue" for="fromSub">100%</output>
                 </label>
-                <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Current transition submaster" />
+                <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Live cue submaster" />
                 <button id="fromSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
                   <span aria-hidden="true">×</span>
                 </button>
@@ -129,7 +129,7 @@
                   <span id="toSubLabel" class="submaster-name">B</span>
                   <output id="toSubValue" for="toSub">100%</output>
                 </label>
-                <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Next transition submaster" />
+                <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Up next cue submaster" />
                 <button id="toSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
                   <span aria-hidden="true">×</span>
                 </button>
@@ -150,7 +150,7 @@
         </div>
 
         <div id="rowsScroll" class="rows-scroll">
-          <main id="rows" class="rows" aria-label="Transitions"></main>
+          <main id="rows" class="rows" aria-label="Cues"></main>
         </div>
       </section>
 
@@ -165,18 +165,18 @@
           <div id="channelLevels" class="faders channel-faders"></div>
         </section>
 
-        <section class="selected-group" aria-label="Current transition">
+        <section class="selected-group" aria-label="Live cue">
           <div class="selected-group-head">
             <div>
               <h3 id="currentSceneTitle">A</h3>
-              <p class="selected-group-hint">Current transition faders · click name to rename</p>
+              <p class="selected-group-hint">Live cue faders · click name to rename</p>
             </div>
             <button
               id="channelsSceneMenuBtn"
               type="button"
               class="scene-menu-btn"
-              title="Transition options"
-              aria-label="Transition options"
+              title="Cue options"
+              aria-label="Cue options"
               aria-haspopup="menu"
               aria-expanded="false"
             >
@@ -187,21 +187,21 @@
         </section>
       </section>
 
-      <section id="page-instruments" class="page" hidden>
+      <section id="page-fixtures" class="page" hidden>
         <div class="page-intro">
           <div>
-            <h2>Instruments</h2>
+            <h2>Fixtures</h2>
           </div>
           <div class="patch-actions">
-            <button id="addInstrumentGroupBtn" type="button" class="btn-quiet">+ Group</button>
+            <button id="addFixtureGroupBtn" type="button" class="btn-quiet">+ Group</button>
           </div>
         </div>
 
-        <form id="instrumentForm" class="instrument-form" autocomplete="off">
-          <label class="instrument-field">
+        <form id="fixtureForm" class="fixture-form" autocomplete="off">
+          <label class="fixture-field">
             Name
             <input
-              id="instrumentNameInput"
+              id="fixtureNameInput"
               type="text"
               maxlength="40"
               placeholder="e.g. Wash 1"
@@ -209,39 +209,39 @@
               spellcheck="false"
             />
           </label>
-          <label class="instrument-field instrument-field-ch">
+          <label class="fixture-field fixture-field-ch">
             Start
-            <span id="instrumentStartPicker" class="channel-picker-host"></span>
+            <span id="fixtureStartPicker" class="channel-picker-host"></span>
           </label>
-          <label class="instrument-field instrument-field-ch">
+          <label class="fixture-field fixture-field-ch">
             Channels
-            <span id="instrumentCountPicker" class="channel-picker-host"></span>
+            <span id="fixtureCountPicker" class="channel-picker-host"></span>
           </label>
-          <label class="instrument-field instrument-field-ch">
+          <label class="fixture-field fixture-field-ch">
             Qty
-            <span id="instrumentQtyPicker" class="channel-picker-host"></span>
+            <span id="fixtureQtyPicker" class="channel-picker-host"></span>
           </label>
-          <label class="instrument-field">
+          <label class="fixture-field">
             Group
-            <span id="instrumentFormGroupPicker" class="channel-picker-host"></span>
+            <span id="fixtureFormGroupPicker" class="channel-picker-host"></span>
           </label>
-          <fieldset class="instrument-fieldset">
+          <fieldset class="fixture-fieldset">
             <legend>Mount</legend>
-            <label><input type="radio" name="instrumentMount" value="fixed" checked /> Fixed</label>
-            <label><input type="radio" name="instrumentMount" value="movable" /> Movable</label>
+            <label><input type="radio" name="fixtureMount" value="fixed" checked /> Fixed</label>
+            <label><input type="radio" name="fixtureMount" value="movable" /> Movable</label>
           </fieldset>
-          <fieldset class="instrument-fieldset">
+          <fieldset class="fixture-fieldset">
             <legend>Color</legend>
-            <label><input type="radio" name="instrumentColor" value="single" checked /> Single</label>
-            <label><input type="radio" name="instrumentColor" value="multi" /> Multi</label>
+            <label><input type="radio" name="fixtureColor" value="single" checked /> Single</label>
+            <label><input type="radio" name="fixtureColor" value="multi" /> Multi</label>
           </fieldset>
-          <button id="addInstrumentBtn" type="submit">+ Instrument</button>
+          <button id="addFixtureBtn" type="submit">+ Fixture</button>
         </form>
 
-        <div id="instrumentConflicts" class="instrument-conflicts" hidden></div>
-        <div id="instrumentScroll" class="instrument-scroll">
-          <div id="instrumentEmpty" class="instrument-empty" hidden>No instruments registered yet.</div>
-          <div id="instrumentList" class="instrument-list" role="list" aria-label="Registered instruments"></div>
+        <div id="fixtureConflicts" class="fixture-conflicts" hidden></div>
+        <div id="fixtureScroll" class="fixture-scroll">
+          <div id="fixtureEmpty" class="fixture-empty" hidden>No fixtures registered yet.</div>
+          <div id="fixtureList" class="fixture-list" role="list" aria-label="Registered fixtures"></div>
         </div>
       </section>
 
@@ -249,7 +249,7 @@
         <div class="page-intro">
           <div>
             <h2>Patch</h2>
-            <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all transitions.</p>
+            <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all cues.</p>
           </div>
           <div class="patch-actions">
             <button id="identityBtn" type="button">1:1 (Fader → Ch)</button>
@@ -266,8 +266,8 @@
       <form method="dialog" class="dialog-body">
         <h2>Unsaved changes</h2>
         <p>
-          The current setlist has changed since it was last saved.
-          Load another setlist anyway and discard those changes?
+          The current set has changed since it was last saved.
+          Load another set anyway and discard those changes?
         </p>
         <div class="dialog-actions">
           <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
@@ -289,7 +289,7 @@
 
     <dialog id="sceneNameDialog" class="dialog">
       <form method="dialog" class="dialog-body" id="sceneNameForm">
-        <h2 id="sceneNameDialogTitle">New transition</h2>
+        <h2 id="sceneNameDialogTitle">New cue</h2>
         <label class="dialog-field">
           Name
           <input
@@ -311,27 +311,27 @@
     <div id="sceneMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-menu-panel">
         <div class="popup-menu-bar">
-          <span class="popup-menu-label">Transitions</span>
+          <span class="popup-menu-label">Cues</span>
         </div>
-        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Transitions"></div>
+        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Cues"></div>
       </div>
     </div>
 
     <div id="sceneRowMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Transition actions"></div>
+        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Cue actions"></div>
       </div>
     </div>
 
-    <div id="setlistMenu" class="popup-menu" hidden>
+    <div id="setMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="setlistMenuList" class="popup-menu-list" role="menu" aria-label="Setlist actions"></div>
+        <div id="setMenuList" class="popup-menu-list" role="menu" aria-label="Set actions"></div>
       </div>
     </div>
 
     <div id="channelsSceneMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Transition options"></div>
+        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Cue options"></div>
       </div>
     </div>
 
@@ -350,12 +350,12 @@
       </div>
     </div>
 
-    <div id="instrumentGroupMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel instrument-group-menu-panel">
+    <div id="fixtureGroupMenu" class="popup-menu" hidden>
+      <div class="popup-menu-panel fixture-group-menu-panel">
         <div class="popup-menu-bar">
           <span class="popup-menu-label">Group</span>
         </div>
-        <div id="instrumentGroupMenuList" class="popup-menu-list" role="menu" aria-label="Instrument groups"></div>
+        <div id="fixtureGroupMenuList" class="popup-menu-list" role="menu" aria-label="Fixture groups"></div>
       </div>
     </div>
 

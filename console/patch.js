@@ -9,7 +9,7 @@ const LEGACY_KEYS = [
 export const FADER_COUNT = 256;
 /** Channels per DMX universe (one Enttec DMX USB Pro each). */
 export const UNIVERSE_SIZE = 512;
-/** Most universes a setlist can have. */
+/** Most universes a set can have. */
 export const MAX_UNIVERSES = 8;
 /**
  * Channels are numbered continuously across universes: universe 2 channel 1
@@ -18,7 +18,7 @@ export const MAX_UNIVERSES = 8;
 export const DMX_CHANNEL_MAX = UNIVERSE_SIZE * MAX_UNIVERSES;
 
 let universeCount = 1;
-/** The current setlist's universe count (1…MAX_UNIVERSES); set by app.js. */
+/** The current set's universe count (1…MAX_UNIVERSES); set by app.js. */
 export function setUniverseCount(n) {
   universeCount = Math.max(1, Math.min(MAX_UNIVERSES, Math.round(Number(n)) || 1));
 }
@@ -47,7 +47,8 @@ export function parseAddress(text) {
 /** Channels shown on the main-page Channels meter row. */
 export const CHANNEL_METER_COUNT = 256;
 export const MIN_ROWS = 2;
-export const MAX_ROWS = 24;
+/** Cues per song: no limit. */
+export const MAX_ROWS = Infinity;
 
 /**
  * @typedef {{ channel: number, max: number }} PatchTarget

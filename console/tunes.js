@@ -60,20 +60,27 @@ export function blankLevels() {
 }
 
 /** @param {number} index */
+// Cues are shown as "Cue <position>" plus an optional name, so a new cue has
+// no name. The old automatic names (A, B, … / "Transition 3") would go stale
+// when cues are reordered, so they're dropped on load.
 export function defaultTransitionName(index) {
-  if (index >= 0 && index < 26) return String.fromCharCode(65 + index);
-  return `Transition ${index + 1}`;
+  return "";
+}
+
+/** @param {string} name */
+export function isAutoCueName(name) {
+  return /^[A-Z]$/.test(name) || /^(Transition|Cue) \d+$/.test(name);
 }
 
 /** @param {number} index */
 export function defaultTuneName(index) {
-  return `Tune ${index + 1}`;
+  return `Song ${index + 1}`;
 }
 
 /** @param {unknown} name @param {number} [index] */
 export function normalizeTransitionName(name, index = 0) {
   const text = typeof name === "string" ? name.trim().slice(0, 40) : "";
-  return text || defaultTransitionName(index);
+  return isAutoCueName(text) ? "" : text;
 }
 
 /** @param {unknown} name @param {number} [index] */
@@ -276,9 +283,7 @@ export function tunesFromLegacyRows(
   const transitions = normalizeTransitions(
     rowList.slice(0, MAX_TRANSITIONS).map((row, i) => ({
       name:
-        typeof nameList[i] === "string" && nameList[i].trim()
-          ? nameList[i].trim()
-          : defaultTransitionName(i),
+        typeof nameList[i] === "string" ? nameList[i] : "",
       levels: row,
       fadeTime: fade,
     })),
@@ -301,7 +306,7 @@ export function tunesFromLegacyRows(
 export function resolveActiveTune(tunes, activeTuneId) {
   // Return the tune object from `tunes` itself, not from a normalized copy:
   // the console edits the returned tune's transitions in place, and a copy
-  // would make those edits (fader moves, …) miss the saved setlist.
+  // would make those edits (fader moves, …) miss the saved set.
   const list = Array.isArray(tunes) && tunes.length > 0 ? tunes : normalizeTunes(tunes);
   if (activeTuneId) {
     const found = list.find((tune) => tune.id === activeTuneId);

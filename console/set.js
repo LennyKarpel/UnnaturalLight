@@ -7,9 +7,9 @@ import {
   MAX_UNIVERSES,
 } from "./patch.js";
 import {
-  normalizeInstrumentGroups,
-  normalizeInstruments,
-} from "./instruments.js";
+  normalizeFixtureGroups,
+  normalizeFixtures,
+} from "./fixtures.js";
 import {
   DEFAULT_TRANSITION_FADE_TIME,
   defaultTransitionName,
@@ -20,15 +20,15 @@ import {
   TRANSITION_FADE_TIMES,
 } from "./tunes.js";
 
-export const SETLIST_VERSION = 2;
-export const SETLIST_APP = "UnnaturalLight";
+export const SET_VERSION = 2;
+export const SET_APP = "UnnaturalLight";
 /** @deprecated Prefer TRANSITION_FADE_TIMES / per-transition fadeTime */
 export const FADE_TIMES = TRANSITION_FADE_TIMES;
 export const DEFAULT_NAV_ORDER = [
-  "setlist",
-  "tunes",
+  "set",
+  "songs",
   "channels",
-  "instruments",
+  "fixtures",
   "patch",
 ];
 const SESSION_KEY = "unnaturallight.setlist.session.v1";
@@ -84,8 +84,10 @@ export function normalizeNavOrder(order) {
     if (typeof item !== "string") continue;
     // Legacy page ids.
     let page = item;
-    if (page === "faders" || page === "songs") page = "tunes";
-    if (page === "show") page = "setlist";
+    // The Songs page was called Tunes for a while.
+    if (page === "faders" || page === "tunes") page = "songs";
+    if (page === "show" || page === "setlist") page = "set";
+    if (page === "instruments") page = "fixtures";
     if (!allowed.has(page) || next.includes(page)) continue;
     next.push(page);
   }
@@ -95,14 +97,14 @@ export function normalizeNavOrder(order) {
   return next;
 }
 
-export function defaultSetlistName() {
+export function defaultSetName() {
   return "Untitled";
 }
 
 /** @param {unknown} name */
-export function normalizeSetlistName(name) {
+export function normalizeSetName(name) {
   const text = typeof name === "string" ? name.trim() : "";
-  return text || defaultSetlistName();
+  return text || defaultSetName();
 }
 
 /** @param {number} index */
@@ -135,7 +137,7 @@ export function normalizeFaderNames(names) {
 
 /**
  * @param {{
- *   setlistName?: string,
+ *   setName?: string,
  *   navOrder?: string[],
  *   master: number,
  *   cross: number,
@@ -148,27 +150,27 @@ export function normalizeFaderNames(names) {
  *   tunes: import("./tunes.js").Tune[],
  *   activeTuneId?: string | null,
  *   faderNames?: string[],
- *   instrumentGroups?: import("./instruments.js").InstrumentGroup[],
- *   instruments?: import("./instruments.js").Instrument[],
+ *   fixtureGroups?: import("./fixtures.js").FixtureGroup[],
+ *   fixtures?: import("./fixtures.js").Fixture[],
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
-/** Universe count (1…MAX_UNIVERSES); older setlists have one. */
+/** Universe count (1…MAX_UNIVERSES); older sets have one. */
 export function normalizeUniverses(value) {
   const n = Math.round(Number(value));
   return Number.isFinite(n) ? Math.max(1, Math.min(MAX_UNIVERSES, n)) : 1;
 }
 
-export function serializeSetlist(state) {
+export function serializeSet(state) {
   const tunes = normalizeTunes(state.tunes);
   const active = resolveActiveTune(tunes, state.activeTuneId);
-  const instrumentGroups = normalizeInstrumentGroups(state.instrumentGroups);
+  const fixtureGroups = normalizeFixtureGroups(state.fixtureGroups);
   return {
-    version: SETLIST_VERSION,
-    app: SETLIST_APP,
-    kind: "setlist",
+    version: SET_VERSION,
+    app: SET_APP,
+    kind: "set",
     savedAt: new Date().toISOString(),
-    setlistName: normalizeSetlistName(state.setlistName),
+    setName: normalizeSetName(state.setName),
     navOrder: normalizeNavOrder(state.navOrder),
     master: clamp(state.master, 0, 100),
     cross: clamp(state.cross, 0, 100),
@@ -184,26 +186,26 @@ export function serializeSetlist(state) {
     tunes,
     activeTuneId: active.id,
     faderNames: normalizeFaderNames(state.faderNames),
-    instrumentGroups,
-    instruments: normalizeInstruments(state.instruments, instrumentGroups),
+    fixtureGroups,
+    fixtures: normalizeFixtures(state.fixtures, fixtureGroups),
     patch: state.patch.map(normalizeFaderPatch),
   };
 }
 
 /** Stable snapshot for dirty checks (ignores savedAt / selectedRow). */
-export function setlistSnapshot(state) {
-  const { savedAt: _savedAt, selectedRow: _selectedRow, ...rest } = serializeSetlist(state);
+export function setSnapshot(state) {
+  const { savedAt: _savedAt, selectedRow: _selectedRow, ...rest } = serializeSet(state);
   return JSON.stringify(rest);
 }
 
-export function setlistToJson(state) {
-  return `${JSON.stringify(serializeSetlist(state), null, 2)}\n`;
+export function setToJson(state) {
+  return `${JSON.stringify(serializeSet(state), null, 2)}\n`;
 }
 
 /**
  * @param {unknown} data
  * @returns {{
- *   setlistName: string,
+ *   setName: string,
  *   navOrder: string[],
  *   master: number,
  *   cross: number,
@@ -216,32 +218,33 @@ export function setlistToJson(state) {
  *   tunes: import("./tunes.js").Tune[],
  *   activeTuneId: string,
  *   faderNames: string[],
- *   instrumentGroups: import("./instruments.js").InstrumentGroup[],
- *   instruments: import("./instruments.js").Instrument[],
+ *   fixtureGroups: import("./fixtures.js").FixtureGroup[],
+ *   fixtures: import("./fixtures.js").Fixture[],
  *   patch: import("./patch.js").FaderPatch[],
  * }}
  */
-export function parseSetlist(data) {
+export function parseSet(data) {
   if (!data || typeof data !== "object") {
-    throw new Error("Invalid setlist file.");
+    throw new Error("Invalid set file.");
   }
 
   const obj = /** @type {Record<string, unknown>} */ (data);
   if (
     obj.app != null &&
-    obj.app !== SETLIST_APP &&
+    obj.app !== SET_APP &&
     obj.app !== "NaturalLight" &&
     obj.app !== "SunLight"
   ) {
-    throw new Error("This file is not an UnnaturalLight setlist.");
+    throw new Error("This file is not an UnnaturalLight set.");
   }
-  if (obj.kind != null && obj.kind !== "setlist" && obj.kind !== "show") {
-    throw new Error("This file is not an UnnaturalLight setlist.");
+  // Older files: kind "setlist" (and "show" before that).
+  if (obj.kind != null && obj.kind !== "set" && obj.kind !== "setlist" && obj.kind !== "show") {
+    throw new Error("This file is not an UnnaturalLight set.");
   }
 
   const version = obj.version == null ? 1 : Number(obj.version);
-  if (version !== 1 && version !== SETLIST_VERSION) {
-    throw new Error(`Unsupported setlist version: ${obj.version}`);
+  if (version !== 1 && version !== SET_VERSION) {
+    throw new Error(`Unsupported set version: ${obj.version}`);
   }
 
   const patchSource = Array.isArray(obj.patch) ? obj.patch : [];
@@ -285,18 +288,19 @@ export function parseSetlist(data) {
   const active = resolveActiveTune(tunes, activeId);
   const transitionCount = active.transitions.length;
 
-  const setlistName = normalizeSetlistName(
-    obj.setlistName ?? obj.showName,
+  const setName = normalizeSetName(
+    obj.setName ?? obj.setlistName ?? obj.showName,
   );
   const navOrder = normalizeNavOrder(obj.navOrder);
   const faderNames = normalizeFaderNames(obj.faderNames);
-  const instrumentGroups = normalizeInstrumentGroups(obj.instrumentGroups);
-  const instruments = normalizeInstruments(obj.instruments, instrumentGroups);
+  // Older sets called fixtures "instruments".
+  const fixtureGroups = normalizeFixtureGroups(obj.fixtureGroups ?? obj.instrumentGroups);
+  const fixtures = normalizeFixtures(obj.fixtures ?? obj.instruments, fixtureGroups);
   const master = clamp(Number(obj.master ?? 100), 0, 100);
   const cross = clamp(Number(obj.cross ?? 0), 0, 100);
   const fromSub = clamp(Number(obj.fromSub ?? 100), 0, 100);
   const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
-  // Legacy setlist-level field; live GO uses each transition’s fadeTime.
+  // Legacy set-level field; live GO uses each transition’s fadeTime.
   const fadeTime = legacyFadeTime;
   const universes = normalizeUniverses(obj.universes);
   let fromRow = clampInt(Number(obj.fromRow ?? 0), 0, transitionCount - 1);
@@ -308,7 +312,7 @@ export function parseSetlist(data) {
   );
 
   return {
-    setlistName,
+    setName,
     navOrder,
     master,
     cross,
@@ -322,45 +326,45 @@ export function parseSetlist(data) {
     tunes,
     activeTuneId: active.id,
     faderNames,
-    instrumentGroups,
-    instruments,
+    fixtureGroups,
+    fixtures,
     patch,
   };
 }
 
-export function downloadSetlist(state, filename) {
-  const blob = new Blob([setlistToJson(state)], { type: "application/json" });
+export function downloadSet(state, filename) {
+  const blob = new Blob([setToJson(state)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename || defaultFilename(state.setlistName);
+  a.download = filename || defaultFilename(state.setName);
   document.body.append(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-/** @param {unknown} [setlistName] */
-export function defaultFilename(setlistName) {
+/** @param {unknown} [setName] */
+export function defaultFilename(setName) {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const base = normalizeSetlistName(setlistName)
+  const base = normalizeSetName(setName)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-  return `${base || "setlist"}-${stamp}.json`;
+  return `${base || "set"}-${stamp}.json`;
 }
 
-/** Autosave full setlist state for refresh restore (no explicit Save needed). */
+/** Autosave full set state for refresh restore (no explicit Save needed). */
 export function saveSession(state) {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeSetlist(state)));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeSet(state)));
   } catch (err) {
     console.warn("Could not autosave session", err);
   }
 }
 
-/** @returns {ReturnType<typeof parseSetlist> | null} */
+/** @returns {ReturnType<typeof parseSet> | null} */
 export function loadSession() {
   try {
     let raw = localStorage.getItem(SESSION_KEY);
@@ -369,7 +373,7 @@ export function loadSession() {
       raw = localStorage.getItem(key);
     }
     if (!raw) return null;
-    return parseSetlist(JSON.parse(raw));
+    return parseSet(JSON.parse(raw));
   } catch (err) {
     console.warn("Could not load session", err);
     return null;

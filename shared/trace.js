@@ -1,5 +1,5 @@
 // Signal trace, shared by the console and the stage: ⌥-click a fader, a
-// DMX channel, a console instrument or a stage light to see what controls
+// DMX channel, a console fixture or a stage light to see what controls
 // it, what it controls, and the current values, in a small card next to
 // the pointer.
 //
@@ -10,18 +10,18 @@
  * @typedef {{ channel: number, max: number }} PatchTarget
  * @typedef {{ num: number, name: string, live: number, from: number, to: number, patch: PatchTarget[] }} FaderInfo
  * @typedef {{ master: number, fromSub: number, toSub: number, cross: number, fromName: string, toName: string }} MixInfo
- * @typedef {{ id: string, name: string, mount?: string, color?: string, channelStart: number, channelEnd: number }} ConsoleInstrument
- * @typedef {{ id: string, name: string, start: number | null, layout: (string | null)[], dmx: Record<string, number>, notes: Record<string, string>, consoleId: string | null, consoleName: string | null, channelNames?: string[] | null, fixture?: string | null }} StageInstrument
+ * @typedef {{ id: string, name: string, mount?: string, color?: string, channelStart: number, channelEnd: number }} ConsoleFixture
+ * @typedef {{ id: string, name: string, start: number | null, layout: (string | null)[], dmx: Record<string, number>, notes: Record<string, string>, consoleId: string | null, consoleName: string | null, channelNames?: string[] | null, fixture?: string | null }} StageFixture
  * @typedef {{
  *   live: boolean,
  *   levels: number[] | null,
  *   faders: FaderInfo[] | null,
  *   mix: MixInfo | null,
  *   universes?: number,
- *   consoleInstruments: ConsoleInstrument[],
- *   stageInstruments: StageInstrument[] | null,
+ *   consoleFixtures: ConsoleFixture[],
+ *   stageFixtures: StageFixture[] | null,
  * }} Snapshot
- * @typedef {{ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "instrument", id: string } | { kind: "light", id: string }} TraceTarget
+ * @typedef {{ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "fixture", id: string } | { kind: "light", id: string }} TraceTarget
  * @typedef {{ label: string, value?: string | number, note?: string, depth?: number, tone?: "on" | "muted" | "warn" }} Row
  * @typedef {{ title: string, subtitle: string, sections: { heading: string, rows: Row[] }[] }} Trace
  */
@@ -42,23 +42,23 @@ function fadersOn(s, ch) {
     .sort((a, b) => b.out - a.out);
 }
 
-/** What a DMX channel drives: console instruments and linked stage lights. */
+/** What a DMX channel drives: console fixtures and linked stage lights. */
 function channelUses(s, ch, depth) {
   /** @type {Row[]} */
   const rows = [];
-  for (const ci of s.consoleInstruments) {
+  for (const ci of s.consoleFixtures) {
     if (ch < ci.channelStart || ch > ci.channelEnd) continue;
     rows.push({ label: `Console · ${ci.name}`, note: `channel ${ch - ci.channelStart + 1} of ${ci.channelEnd - ci.channelStart + 1}`, depth });
   }
-  for (const si of s.stageInstruments ?? []) {
+  for (const si of s.stageFixtures ?? []) {
     if (!si.start || ch < si.start) continue;
     const attr = si.layout[ch - si.start];
     const channelName = si.channelNames?.[ch - si.start];
     if (attr) rows.push({ label: `Stage · ${si.name} · ${LABEL[attr]}`, value: si.dmx[attr], note: si.notes[attr] ? `= ${si.notes[attr]}` : "", depth, tone: "on" });
     else if (channelName) rows.push({ label: `Stage · ${si.name} · ${channelName}`, note: "not drawn on the stage", depth, tone: "muted" });
   }
-  if (!rows.length) rows.push({ label: "Not used by any instrument", depth, tone: "muted" });
-  if (!s.stageInstruments) rows.push({ label: "Stage not open: its lights aren't shown", depth, tone: "muted" });
+  if (!rows.length) rows.push({ label: "Not used by any fixture", depth, tone: "muted" });
+  if (!s.stageFixtures) rows.push({ label: "Stage not open: its lights aren't shown", depth, tone: "muted" });
   return rows;
 }
 
@@ -75,8 +75,8 @@ function traceFader(s, n) {
   const up = [];
   if (m) {
     const t = m.cross / 100;
-    if (t < 1) up.push({ label: `Transition ${m.fromName}`, value: f.from, note: m.fromSub !== 100 ? `submaster ${m.fromSub}%` : "" });
-    if (t > 0) up.push({ label: `Transition ${m.toName}`, value: f.to, note: `${m.toSub !== 100 ? `submaster ${m.toSub}% · ` : ""}crossfade ${m.cross}%` });
+    if (t < 1) up.push({ label: `Cue ${m.fromName}`, value: f.from, note: m.fromSub !== 100 ? `submaster ${m.fromSub}%` : "" });
+    if (t > 0) up.push({ label: `Cue ${m.toName}`, value: f.to, note: `${m.toSub !== 100 ? `submaster ${m.toSub}% · ` : ""}crossfade ${m.cross}%` });
     up.push({ label: "Master", value: `${m.master}%`, tone: m.master === 0 ? "warn" : undefined });
   }
   up.push({ label: "Live level", value: f.live, tone: "on" });
@@ -129,7 +129,7 @@ function traceChannel(s, ch) {
 
 /** @param {Snapshot} s @param {string} id */
 function traceLight(s, id) {
-  const si = (s.stageInstruments ?? []).find((i) => i.id === id);
+  const si = (s.stageFixtures ?? []).find((i) => i.id === id);
   if (!si) return { title: "Light", subtitle: "Stage light", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
   /** @type {Row[]} */
   const rows = [];
@@ -174,7 +174,7 @@ function traceLight(s, id) {
 
 /** Stage lights' attributes on a channel, e.g. "Inst 1 · Dimmer". */
 function stageUsesOf(s, ch) {
-  return (s.stageInstruments ?? []).flatMap((si) => {
+  return (s.stageFixtures ?? []).flatMap((si) => {
     const attr = si.start && ch >= si.start ? si.layout[ch - si.start] : null;
     return attr ? [{ si, attr }] : [];
   });
@@ -182,7 +182,7 @@ function stageUsesOf(s, ch) {
 
 /** A library fixture's own name for a channel (e.g. "Gobo Wheel"), if any. */
 function channelNameOf(s, ch) {
-  for (const si of s.stageInstruments ?? []) {
+  for (const si of s.stageFixtures ?? []) {
     const name = si.start && ch >= si.start ? si.channelNames?.[ch - si.start] : null;
     if (name) return name;
   }
@@ -190,17 +190,17 @@ function channelNameOf(s, ch) {
 }
 
 /** @param {Snapshot} s @param {string} id */
-function traceInstrument(s, id) {
-  const ci = s.consoleInstruments.find((c) => c.id === id);
-  if (!ci) return { title: "Instrument", subtitle: "Console instrument", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
+function traceFixture(s, id) {
+  const ci = s.consoleFixtures.find((c) => c.id === id);
+  if (!ci) return { title: "Fixture", subtitle: "Console fixture", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
   const count = ci.channelEnd - ci.channelStart + 1;
   const kind = [ci.mount === "movable" ? "Movable" : ci.mount ? "Fixed" : "", ci.color === "multi" ? "Multi-color" : ci.color ? "Single color" : ""].filter(Boolean).join(" · ");
 
   /** @type {Row[]} */
   const lights = [];
-  if (!s.stageInstruments) lights.push({ label: "Stage not open: its lights aren't shown", tone: "muted" });
+  if (!s.stageFixtures) lights.push({ label: "Stage not open: its lights aren't shown", tone: "muted" });
   else {
-    const linked = s.stageInstruments.filter((si) => si.consoleId === id);
+    const linked = s.stageFixtures.filter((si) => si.consoleId === id);
     if (!linked.length) lights.push({ label: "No stage light linked to it", tone: "muted" });
     for (const si of linked) lights.push({ label: si.name, note: `Ch ${addr(s, si.start)}–${addr(s, si.start + si.layout.length - 1)}`, tone: "on" });
   }
@@ -213,7 +213,7 @@ function traceInstrument(s, id) {
     rows.push({
       label: `Ch ${addr(s, ch)} · ${ch - ci.channelStart + 1} of ${count}${fixtureName ? ` · ${fixtureName}` : ""}`,
       value: s.levels?.[ch - 1] ?? "",
-      note: uses.length ? uses.map(({ si, attr }) => `${si.name} · ${LABEL[attr]}${si.notes[attr] ? ` = ${si.notes[attr]}` : ""}`).join(", ") : (s.stageInstruments ? "not used on the stage" : ""),
+      note: uses.length ? uses.map(({ si, attr }) => `${si.name} · ${LABEL[attr]}${si.notes[attr] ? ` = ${si.notes[attr]}` : ""}`).join(", ") : (s.stageFixtures ? "not used on the stage" : ""),
     });
     if (!s.faders) continue;
     const on = fadersOn(s, ch);
@@ -230,7 +230,7 @@ function traceInstrument(s, id) {
 
   return {
     title: ci.name,
-    subtitle: `Console instrument · Ch ${addr(s, ci.channelStart)}${count > 1 ? `–${addr(s, ci.channelEnd)}` : ""}${kind ? ` · ${kind}` : ""}`,
+    subtitle: `Console fixture · Ch ${addr(s, ci.channelStart)}${count > 1 ? `–${addr(s, ci.channelEnd)}` : ""}${kind ? ` · ${kind}` : ""}`,
     sections: [{ heading: "Stage lights", rows: lights }, { heading: "Channels ← controlled by", rows }],
   };
 }
@@ -239,7 +239,7 @@ function traceInstrument(s, id) {
 export function buildTrace(s, target) {
   if (target.kind === "fader") return traceFader(s, target.fader);
   if (target.kind === "channel") return traceChannel(s, target.channel);
-  if (target.kind === "instrument") return traceInstrument(s, target.id);
+  if (target.kind === "fixture") return traceFixture(s, target.id);
   return traceLight(s, target.id);
 }
 

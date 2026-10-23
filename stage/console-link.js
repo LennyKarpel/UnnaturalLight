@@ -2,7 +2,7 @@
 // over a BroadcastChannel between tabs of the same site.
 //
 //   console → stage   output levels (0–255 per DMX channel), which fader(s)
-//                     drive each channel, and the console's instruments
+//                     drive each channel, and the console's fixtures
 //   stage → console   "set channel N to V" when a linked value is changed here,
 //                     and the stage's lights (for the console's ⌥-click trace)
 //
@@ -12,7 +12,7 @@
 // console's older broadcasts so dragging a slider doesn't jitter.
 
 const CHANNEL_NAME = "unnaturallight.dmx";
-/** Where the console saves its session (its instruments are read from here while it's closed). */
+/** Where the console saves its session (its fixtures are read from here while it's closed). */
 const CONSOLE_SESSION_KEY = "unnaturallight.setlist.session.v1";
 /** No message for this long = console offline. */
 const LIVE_MS = 2500;
@@ -20,13 +20,14 @@ const LIVE_MS = 2500;
 const PENDING_MS = 600;
 
 /**
- * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleInstrument
+ * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleFixture
  */
 
-function readSavedInstruments() {
+function readSavedFixtures() {
   try {
     const data = JSON.parse(localStorage.getItem(CONSOLE_SESSION_KEY) ?? "null");
-    const list = Array.isArray(data?.instruments) ? data.instruments : [];
+    // Older console sessions called them "instruments".
+    const list = Array.isArray(data?.fixtures) ? data.fixtures : Array.isArray(data?.instruments) ? data.instruments : [];
     return list.filter((i) => typeof i?.id === "string" && Number.isInteger(i.channelStart) && Number.isInteger(i.channelEnd));
   } catch {
     return [];
@@ -41,13 +42,13 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
   let levels = null;
   /** channel → fader numbers (1-based) patched to it */
   let faders = new Map();
-  /** @type {ConsoleInstrument[]} */
-  let instruments = readSavedInstruments();
+  /** @type {ConsoleFixture[]} */
+  let fixtures = readSavedFixtures();
   /** Per fader: number, name, live level, transition values, patch (for traces). */
   let faderInfo = null;
   /** Master / submasters / crossfade and transition names (for traces). */
   let mix = null;
-  /** The console setlist's universe count (channel 513 = universe 2/1). */
+  /** The console set's universe count (channel 513 = universe 2/1). */
   let universes = 1;
   /** channel → the value the console and stage agree on (heard or sent) */
   const synced = new Map();
@@ -62,7 +63,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     lastHeard = Date.now();
     levels = msg.levels;
     faders = new Map(Array.isArray(msg.faders) ? msg.faders : []);
-    if (Array.isArray(msg.instruments)) instruments = msg.instruments;
+    if (Array.isArray(msg.fixtures)) fixtures = msg.fixtures;
     faderInfo = Array.isArray(msg.faderInfo) ? msg.faderInfo : null;
     mix = msg.mix ?? null;
     universes = Number.isInteger(msg.universes) && msg.universes >= 1 ? msg.universes : 1;
@@ -74,9 +75,9 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     get live() {
       return Date.now() - lastHeard < LIVE_MS;
     },
-    /** The console's instruments (live, or from its saved session). */
-    instruments: () => instruments,
-    /** Universes in the console's setlist (1 while offline / unknown). */
+    /** The console's fixtures (live, or from its saved session). */
+    fixtures: () => fixtures,
+    /** Universes in the console's set (1 while offline / unknown). */
     get universes() { return universes; },
     /** Fader numbers patched to a channel ([] = none / unknown). */
     fadersFor: (channel) => faders.get(channel) ?? [],
@@ -84,17 +85,21 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     traceInfo() {
       return this.live ? { levels, faders: faderInfo, mix, universes } : { levels: null, faders: null, mix: null, universes };
     },
-    /** Ask the console to create instruments (+ patch / name free faders) for lights. */
+    /** Ask the console to create fixtures (+ patch / name free faders) for lights. */
     register(requests) {
       bus?.postMessage({ type: "register", requests });
     },
-    /** Ask the console to remove instruments the stage registered (frees their faders). */
+    /** Ask the console to remove fixtures the stage registered (frees their faders). */
     unregister(consoleIds) {
       if (consoleIds.length) bus?.postMessage({ type: "unregister", consoleIds });
     },
     /** Send the stage's lights to the console (for its traces). */
     publishStage(list) {
-      bus?.postMessage({ type: "stage", instruments: list });
+      bus?.postMessage({ type: "stage", fixtures: list });
+    },
+    /** Tell the console which of its fixtures are selected here (it scrolls to their faders). */
+    publishSelection(consoleIds) {
+      bus?.postMessage({ type: "stage-select", consoleIds });
     },
     /**
      * The console's value for a channel that the stage should take now, or
