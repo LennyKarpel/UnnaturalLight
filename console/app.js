@@ -2042,6 +2042,9 @@ function faderColumns(runs = fixtureRuns()) {
   return { col, template: template.join(" ") };
 }
 
+/** Fixtures selected on the stage: their outlines stay highlighted. */
+let revealedFixtureIds = [];
+
 function addFixtureOutlines(grid, { col, template } = faderColumns()) {
   // Pin each fader to its own column so outlines can sit on top of them.
   grid.style.gridTemplateColumns = template;
@@ -2058,16 +2061,22 @@ function addFixtureOutlines(grid, { col, template } = faderColumns()) {
     box.dataset.name = run.fixture.name;
     box.dataset.fixtureId = run.fixture.id;
     box.title = `${run.fixture.name} · ${formatChannelRange(run.fixture)}`;
+    box.classList.toggle("is-revealed", revealedFixtureIds.includes(run.fixture.id));
     grid.append(box);
   });
 }
 
 /**
  * Scroll the fader rows to show these fixtures' faders (they scroll
- * together) and briefly highlight their outlines. Used when fixtures are
+ * together) and highlight their outlines until the stage selects something
+ * else ([] = nothing: just clear the highlight). Used when fixtures are
  * selected on the stage.
  */
 function revealFixtures(ids) {
+  revealedFixtureIds = ids;
+  for (const box of document.querySelectorAll(".fixture-outline")) {
+    box.classList.toggle("is-revealed", ids.includes(box.dataset.fixtureId));
+  }
   const runs = fixtureRuns().filter((run) => ids.includes(run.fixture.id));
   if (!runs.length) return;
   const first = Math.min(...runs.map((r) => r.start));
@@ -2086,14 +2095,6 @@ function revealFixtures(ids) {
       strip.scrollLeft = Math.max(0, target);
     }
   }
-  for (const box of document.querySelectorAll(".fixture-outline")) {
-    const hit = ids.some((id) => box.dataset.fixtureId === id);
-    box.classList.toggle("is-revealed", hit);
-  }
-  clearTimeout(revealFixtures.timer);
-  revealFixtures.timer = setTimeout(() => {
-    for (const box of document.querySelectorAll(".fixture-outline.is-revealed")) box.classList.remove("is-revealed");
-  }, 1600);
 }
 
 // ---------------------------------------------------------------------

@@ -329,7 +329,7 @@ When you place a light with a console type, the console automatically:
 1. adds a **fixture** for it at the next free DMX channels (in the universe you chose),
 2. gives it **one fader per channel**, **named after the light**: a fader already patched to just that channel and still unnamed (e.g. after *Patch 1:1*) is reused, otherwise a free fader is patched to it,
 3. sets those faders to the light's current values, so nothing jumps, and
-4. scrolls the fader rows to them and briefly highlights them.
+4. scrolls the fader rows to them and highlights them while the light is selected on the stage.
 
 If there aren't enough faders or channels, the light stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console. If the console isn't open yet, the light waits and sets itself up as soon as the console opens.
 
@@ -337,7 +337,7 @@ To set up a light that's already on the stage, use **Register** in its inspector
 
 ### Finding a fixture's faders
 
-Select a fixture on the stage (click it, or `Tab` to it) and the console's fader rows **scroll to its faders** and briefly highlight its outline, so you can grab them straight away. This works for fixtures linked to the console.
+Select a fixture on the stage (click it, or `Tab` to it) and the console's fader rows **scroll to its faders** and highlight its outline for as long as it stays selected, so you can grab them straight away. Selecting something else moves the highlight; clicking empty space clears it. This works for fixtures linked to the console.
 
 ### Staying in sync
 

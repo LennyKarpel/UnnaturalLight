@@ -1432,18 +1432,20 @@ function renderHud() {
 // Actions
 // ---------------------------------------------------------------------
 
-/** Selection last told to the console. */
+/** Console fixtures last told to the console as selected. */
 let lastSelectionKey = "";
 
 function changed({ list = true, inspector = true, persist = true } = {}) {
   pushToConsole();
   publishStage();
-  // A new selection: have the console scroll to the selected fixtures' faders.
-  const selectionKey = state.selected.join(",");
+  // A new selection: have the console scroll to the selected fixtures' faders
+  // and highlight them until the selection changes (none = clear it). Keyed on
+  // the console fixtures, so a light that links up while selected is sent too.
+  const ids = [...new Set(selectedFixtures().map((i) => i.link.consoleId).filter(Boolean))];
+  const selectionKey = ids.join(",");
   if (selectionKey !== lastSelectionKey) {
     lastSelectionKey = selectionKey;
-    const ids = [...new Set(selectedFixtures().map((i) => i.link.consoleId).filter(Boolean))];
-    if (ids.length) consoleLink.publishSelection(ids);
+    consoleLink.publishSelection(ids);
   }
   trace?.refresh();
   syncScene();

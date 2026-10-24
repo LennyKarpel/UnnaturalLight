@@ -112,7 +112,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     publishStage(list) {
       bus?.postMessage({ type: "stage", fixtures: list });
     },
-    /** Tell the console which of its fixtures are selected here (it scrolls to their faders). */
+    /** Tell the console which of its fixtures are selected here (it scrolls to and highlights their faders; [] = none). */
     publishSelection(consoleIds) {
       bus?.postMessage({ type: "stage-select", consoleIds });
     },
