@@ -1435,7 +1435,7 @@ function renderHud() {
 /** Selection last told to the console. */
 let lastSelectionKey = "";
 
-function changed({ list = true, inspector = true } = {}) {
+function changed({ list = true, inspector = true, persist = true } = {}) {
   pushToConsole();
   publishStage();
   // A new selection: have the console scroll to the selected fixtures' faders.
@@ -1451,7 +1451,7 @@ function changed({ list = true, inspector = true } = {}) {
   if (list) renderList();
   if (inspector) syncInspector();
   renderHud();
-  save();
+  if (persist) save();
 }
 
 function select(id, additive = false) {
@@ -1617,9 +1617,29 @@ function duplicateSelected() {
   if (src.length < wanted.length) setBanner(`Fixture limit reached (${MAX_FIXTURES}): copied ${src.length} of ${wanted.length}`, 3000);
 }
 
-/** Deleted fixtures (and rigs), newest last, so ⌘Z can put them back. */
-const undoStack = [];
+/**
+ * Deleted fixtures (and rigs), newest last, so ⌘Z can put them back. Kept
+ * with the saved stage, so ⌘Z in any stage window undoes the last delete
+ * made in any of them (in memory only if storage is unavailable).
+ * Each entry: { indexes, data } (data = the removed lights as a stage file).
+ */
+const UNDO_KEY = `${STORAGE_KEY}.undo`;
 const MAX_UNDO = 50;
+let undoMemory = [];
+
+function readUndo() {
+  try {
+    const list = JSON.parse(localStorage.getItem(UNDO_KEY) ?? "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return undoMemory;
+  }
+}
+
+function writeUndo(list) {
+  undoMemory = list.slice(-MAX_UNDO);
+  try { localStorage.setItem(UNDO_KEY, JSON.stringify(undoMemory)); } catch { /* storage unavailable */ }
+}
 
 /** What a delete removes: the selection, widened to whole rigs. */
 function deletionIds() {
@@ -1638,8 +1658,10 @@ function deleteSelected() {
   if (!removed.length) return;
   const rigIds = new Set(removed.map((r) => r.inst.rigId).filter(Boolean));
   const rigs = state.rigs.filter((r) => rigIds.has(r.id));
-  undoStack.push({ removed, rigs });
-  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  writeUndo([...readUndo(), {
+    indexes: removed.map((r) => r.index),
+    data: serializeStage(state.box, removed.map((r) => r.inst), state.transparent, rigs),
+  }]);
   state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
   state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
   // Lights the stage registered leave the console too (their faders are freed).
@@ -1652,15 +1674,21 @@ function deleteSelected() {
 }
 
 function undoDelete() {
-  const entry = undoStack.pop();
+  const list = readUndo();
+  const entry = list.pop();
   if (!entry) return;
-  const { removed, rigs } = entry;
+  const { fixtures, rigs } = parseStage(entry.data);
+  // Skip any that are already back (e.g. undone in another window just now).
+  const removed = fixtures
+    .map((inst, k) => ({ inst, index: entry.indexes?.[k] ?? state.fixtures.length }))
+    .filter(({ inst }) => !byId(inst.id));
   if (state.fixtures.length + removed.length > MAX_FIXTURES) {
-    undoStack.push(entry);
     setBanner(`Can't undo: it would go over ${MAX_FIXTURES} fixtures`, 3000);
     return;
   }
-  state.rigs.push(...rigs);
+  writeUndo(list);
+  if (!removed.length) return;
+  state.rigs.push(...rigs.filter((r) => !rigById(r.id)));
   // Re-insert in original order so each lands back at its old index.
   for (const { inst, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, inst);
   rigs.forEach(syncRig);
@@ -2256,13 +2284,17 @@ function libraryPickerFor(select, container) {
 
 /** Lights asked for but not answered yet (stage id → give-up timer). */
 const registering = new Map();
+/** Every light this window has asked the console to register. */
+const asked = new Set();
+/** Lights another stage window placed and is registering (its job, not ours). */
+const othersRegistering = new Set();
 
 function requestRegistrations() {
   if (!consoleLink.live) return;
   const requests = [];
   for (const inst of state.fixtures) {
     const t = inst.link.register;
-    if (!t || registering.has(inst.id)) continue;
+    if (!t || registering.has(inst.id) || othersRegistering.has(inst.id)) continue;
     const layout = registerLayout(inst.link, t);
     requests.push({
       stageId: inst.id,
@@ -2278,6 +2310,7 @@ function requestRegistrations() {
       universe: inst.link.universe ?? null,
     });
     registering.set(inst.id, setTimeout(() => registering.delete(inst.id), 5000));
+    asked.add(inst.id);
   }
   if (requests.length) consoleLink.register(requests);
 }
@@ -2285,7 +2318,7 @@ function requestRegistrations() {
 function onRegistered(results) {
   // Every stage tab hears every reply: one for a light this tab never
   // asked about belongs to another tab, so it isn't ours to undo (or save).
-  results = results.filter((r) => byId(r.stageId) || registering.has(r.stageId));
+  results = results.filter((r) => asked.has(r.stageId));
   if (!results.length) return;
   const failed = [];
   for (const r of results) {
@@ -2309,6 +2342,41 @@ function onRegistered(results) {
   changed();
   if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 15000);
 }
+
+// ---------------------------------------------------------------------
+// Other stage windows
+// ---------------------------------------------------------------------
+// Every stage window saves the whole stage, so without this the last one
+// to save would undo the others' edits. When another window saves, take its
+// stage, but keep this window's selection, and for linked channels the
+// values this window heard from the console (the other copy may be a moment
+// older). A save that changes nothing else is ignored, so console moves
+// (which every window saves) don't redraw the inspector under your cursor.
+
+window.addEventListener("storage", (e) => {
+  if (e.key !== STORAGE_KEY || !e.newValue) return;
+  let data;
+  try { data = JSON.parse(e.newValue); } catch { return; }
+  const before = JSON.stringify(serialize());
+  const mine = new Map(state.fixtures.map((i) => [i.id, i]));
+  const selected = state.selected;
+  loadData(data);
+  for (const inst of state.fixtures) {
+    const was = mine.get(inst.id);
+    if (was) {
+      for (const { attr } of linkChannels(inst)) if (inst.dmx[attr] !== was.dmx[attr]) setDmx(inst, attr, was.dmx[attr]);
+    } else if (inst.link.register) {
+      othersRegistering.add(inst.id);
+    }
+  }
+  state.selected = selected.filter((id) => byId(id));
+  if (JSON.stringify(serialize()) === before) return;
+  syncBoxInputs();
+  updateBox();
+  updateSurfaces();
+  renderInspector();
+  changed({ persist: false });
+});
 
 // Place fixture: pick its console type first.
 const placeDlg = /** @type {HTMLDialogElement} */ (document.getElementById("placeDlg"));

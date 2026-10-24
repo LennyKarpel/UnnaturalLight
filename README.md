@@ -244,7 +244,7 @@ Hold `F` (or the **Flash** button) to show the selected lights — or all lights
 
 - **Duplicate** (right-click or inspector) copies the selected lights. If the original was set up in the console, the copy gets its own console fixture and faders too.
 - **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected lights. Deleting a light in a rig removes the whole rig. Lights the stage set up in the console are removed there too, and their faders freed.
-- **⌘Z** brings back what you deleted (up to 50 times; until you reload).
+- **⌘Z** brings back what you deleted (up to 50 times, in any stage window, even after a reload).
 
 ### The right-click menu
 
@@ -385,7 +385,7 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work: the console's set on the show server (`server/data/session.json`), the stage in the browser. Closing and reopening the page, or restarting the server, brings it all back.
+**Everything autosaves** as you work: the console's set on the show server (`server/data/session.json`), the stage in the browser. Closing and reopening the page, or restarting the server, brings it all back. Stage windows open in the same browser keep each other up to date: an edit in one (placing, moving, renaming, deleting a light…) shows in the others within a moment, so no window's later save undoes another's work. A light being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
