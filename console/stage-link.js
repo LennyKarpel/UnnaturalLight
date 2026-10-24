@@ -10,7 +10,7 @@
  * the newest, so a console the browser runs slowly can't hold it back.
  *
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
- * are moved (in the transition(s) currently on the output) so the output
+ * are moved (in the cue(s) currently on the output) so the output
  * becomes V, allowing for the patch max, master, submasters and crossfade.
  * The stage also sends its lights, so ⌥-click traces here can show them, and
  * asks to register / unregister lights placed / deleted there (app.js creates
@@ -23,8 +23,9 @@
 
 import { UNIVERSE_SIZE } from "./patch.js";
 import { createTracePopover } from "../shared/trace.js";
+import { MSG, openStageBus } from "../shared/stage-bus.js";
+import { clampByte } from "../shared/numbers.js";
 
-const CHANNEL_NAME = "unnaturallight.dmx";
 const HEARTBEAT_MS = 1000;
 
 /**
@@ -32,7 +33,7 @@ const HEARTBEAT_MS = 1000;
  *   levels: () => Map<number, number>,
  *   serverSeq: () => number,
  *   patch: () => { channel: number, max: number }[][],
- *   live: () => { rows: number[][], fromRow: number, toRow: number, fromSub: number, toSub: number, cross: number, master: number },
+ *   live: () => { rows: number[][], fromCue: number, toCue: number, fromSub: number, toSub: number, cross: number, master: number },
  *   fixtures: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
  *   groups: () => { id: string, name: string }[],
  *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
@@ -65,8 +66,6 @@ let leader = false;
 const SOURCE_ID = Math.random().toString(36).slice(2);
 /** The output changed here (not just from the server) since the last send. */
 let localChange = false;
-
-const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
 
 /**
  * Tell the stage the output changed (coalesced to one message per tick).
@@ -114,7 +113,7 @@ function send() {
     for (const t of targets) faders.set(t.channel, [...(faders.get(t.channel) ?? []), i + 1]);
   });
   bus.postMessage({
-    type: "levels",
+    type: MSG.LEVELS,
     source: SOURCE_ID,
     local,
     seq: api.serverSeq(),
@@ -145,8 +144,8 @@ function applySet(values) {
       const level = clampByte((value * 255) / target.max);
       // …and the pre-master mix that gives it (see liveLevel in app.js).
       const mixed = (level * 100) / L.master;
-      if (t < 1 && L.fromSub > 0) L.rows[L.fromRow][i] = clampByte((mixed * 100) / L.fromSub);
-      if (t > 0 && L.toSub > 0) L.rows[L.toRow][i] = clampByte((mixed * 100) / L.toSub);
+      if (t < 1 && L.fromSub > 0) L.rows[L.fromCue][i] = clampByte((mixed * 100) / L.fromSub);
+      if (t > 0 && L.toSub > 0) L.rows[L.toCue][i] = clampByte((mixed * 100) / L.toSub);
       touched = true;
     }
   }
@@ -155,9 +154,9 @@ function applySet(values) {
 
 /** @param {StageLinkApi} linkApi */
 export function startStageLink(linkApi) {
-  if (typeof BroadcastChannel === "undefined") return;
+  bus = openStageBus();
+  if (!bus) return;
   api = linkApi;
-  bus = new BroadcastChannel(CHANNEL_NAME);
   leader = !navigator.locks;
   navigator.locks?.request("unnaturallight.stage-link", () => {
     leader = true;
@@ -166,29 +165,29 @@ export function startStageLink(linkApi) {
   });
   bus.addEventListener("message", (e) => {
     const msg = e.data;
-    if (msg?.type === "hello") send();
-    if (!leader && ["set", "register", "unregister"].includes(msg?.type)) return;
-    if (msg?.type === "set" && Array.isArray(msg.values)) applySet(msg.values);
-    if (msg?.type === "register" && Array.isArray(msg.requests)) {
+    if (msg?.type === MSG.HELLO) send();
+    if (!leader && [MSG.SET, MSG.REGISTER, MSG.UNREGISTER].includes(msg?.type)) return;
+    if (msg?.type === MSG.SET && Array.isArray(msg.values)) applySet(msg.values);
+    if (msg?.type === MSG.REGISTER && Array.isArray(msg.requests)) {
       const results = api.register(msg.requests);
       // Start each new light at its stage values (moves the new faders).
       applySet(msg.requests.flatMap((req) => {
         const r = results.find((x) => x.stageId === req.stageId && x.ok);
         return r ? req.values.map((value, k) => ({ channel: r.start + k, value })) : [];
       }));
-      bus.postMessage({ type: "registered", results });
+      bus.postMessage({ type: MSG.REGISTERED, results });
       send();
     }
-    if (msg?.type === "unregister" && Array.isArray(msg.consoleIds)) api.unregister(msg.consoleIds);
-    if (msg?.type === "stage-select" && Array.isArray(msg.consoleIds)) api.reveal(msg.consoleIds);
-    if (msg?.type === "stage" && Array.isArray(msg.fixtures)) {
+    if (msg?.type === MSG.UNREGISTER && Array.isArray(msg.consoleIds)) api.unregister(msg.consoleIds);
+    if (msg?.type === MSG.STAGE_SELECT && Array.isArray(msg.consoleIds)) api.reveal(msg.consoleIds);
+    if (msg?.type === MSG.STAGE && Array.isArray(msg.fixtures)) {
       stageFixtures = msg.fixtures;
       trace?.refresh();
     }
   });
   setInterval(send, HEARTBEAT_MS);
   send();
-  bus.postMessage({ type: "stage-hello" });
+  bus.postMessage({ type: MSG.STAGE_HELLO });
 
   // ⌥-click a fader, channel meter, Patch card or fixture row: show its
   // trace (instead of moving / renaming / dragging it).

@@ -11,14 +11,11 @@
  * Every change sets the input's value and fires "input" on it (closing fires
  * "change"), so the page handles it like the browser's picker. A click
  * outside, or Esc, only closes the popover: nothing under it is clicked.
+ * Styles: theme.css.
  */
 
-const byte = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
-const hexFromRgb = (r, g, b) => `#${[r, g, b].map((c) => byte(c).toString(16).padStart(2, "0")).join("")}`;
-const rgbFromHex = (hex) => {
-  const n = parseInt(String(hex).slice(1), 16);
-  return Number.isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
-};
+import { clampByte } from "./numbers.js";
+import { hexFromRgb, rgbFromHex } from "./color.js";
 
 /** Common lighting colors: [name, hex]. */
 const SWATCHES = [
@@ -29,43 +26,6 @@ const SWATCHES = [
 ];
 const MAX_USED_COLORS = 12;
 const WHEEL = 180; // CSS px
-
-// Uses the page's colors (--panel, --ink …), with the shared dark look as fallback.
-const STYLE = `
-input[type="color"] { cursor: pointer; }
-dialog.color-pop {
-  position: fixed; inset: auto; margin: 0; padding: 0;
-  border: 1px solid var(--track, #2a303b); border-radius: 8px;
-  background: var(--panel, #1b1f27); color: var(--ink, #e8e4dc);
-  font: 13px var(--font, "IBM Plex Sans", system-ui, sans-serif);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-dialog.color-pop::backdrop { background: transparent; }
-.color-pop-body { display: grid; gap: 8px; padding: 10px; width: 202px; }
-.color-wheel { position: relative; width: 180px; height: 180px; justify-self: center; }
-.color-wheel canvas { display: block; cursor: crosshair; touch-action: none; }
-.color-wheel-dot {
-  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
-  border: 2px solid #fff; border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); pointer-events: none;
-}
-.color-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
-.color-swatches[hidden], .color-used-head[hidden] { display: none; }
-.color-swatches button {
-  height: 22px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; cursor: pointer;
-}
-.color-swatches button:hover { border-color: var(--ink, #e8e4dc); }
-.color-swatches button.on { outline: 2px solid var(--accent, #e2a13a); outline-offset: 1px; }
-.color-used-head { color: var(--muted, #9a9488); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
-.color-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.color-values label { display: grid; gap: 2px; color: var(--muted, #9a9488); font-size: 11px; }
-.color-values input {
-  width: 100%; font: 12px var(--mono, "IBM Plex Mono", ui-monospace, Menlo, monospace);
-  padding: 3px 5px; border: 1px solid var(--track, #2a303b); border-radius: 4px;
-  background: var(--bg, #121418); color: var(--ink, #e8e4dc);
-}
-.color-values input[type="text"] { grid-column: 1 / -1; }
-`;
 
 /** h 0–360, s 0–1, v 0–1 → [r, g, b] 0–255 */
 function rgbFromHsv(h, s, v) {
@@ -93,12 +53,6 @@ function hsFromRgb(r, g, b) {
  *   the second swatch row: its heading and colors (hex), e.g. the stage's lights
  */
 export function installColorPicker(api) {
-  if (!document.getElementById("color-pop-style")) {
-    const style = document.createElement("style");
-    style.id = "color-pop-style";
-    style.textContent = STYLE;
-    document.head.append(style);
-  }
   const dlg = document.createElement("dialog");
   dlg.className = "color-pop";
   dlg.innerHTML = `
@@ -243,7 +197,7 @@ export function installColorPicker(api) {
   });
   rgbFields.forEach((el) => el.addEventListener("input", () => {
     if (el.value === "") return;
-    pick(hexFromRgb(...rgbFields.map((f) => byte(f.value))));
+    pick(hexFromRgb(...rgbFields.map((f) => clampByte(f.value))));
   }));
   hexField.addEventListener("input", () => {
     const v = hexField.value.trim().replace(/^#?/, "#");

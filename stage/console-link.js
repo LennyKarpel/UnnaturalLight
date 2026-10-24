@@ -11,9 +11,8 @@
 // a console fader; and a value just sent is held briefly against the
 // console's older broadcasts so dragging a slider doesn't jitter.
 
-const CHANNEL_NAME = "unnaturallight.dmx";
-/** Where the console saves its session (its fixtures are read from here while it's closed). */
-const CONSOLE_SESSION_KEY = "unnaturallight.setlist.session.v1";
+import { MSG, CONSOLE_SESSION_KEY, openStageBus } from "../shared/stage-bus.js";
+
 /** No message for this long = console offline. */
 const LIVE_MS = 2500;
 /** How long a value sent from the stage wins over the console's broadcasts. */
@@ -32,8 +31,7 @@ const ACTIVE_MS = 600;
 function readSavedFixtures() {
   try {
     const data = JSON.parse(localStorage.getItem(CONSOLE_SESSION_KEY) ?? "null");
-    // Older console sessions called them "instruments".
-    const list = Array.isArray(data?.fixtures) ? data.fixtures : Array.isArray(data?.instruments) ? data.instruments : [];
+    const list = Array.isArray(data?.fixtures) ? data.fixtures : [];
     return list.filter((i) => typeof i?.id === "string" && Number.isInteger(i.channelStart) && Number.isInteger(i.channelEnd));
   } catch {
     return [];
@@ -42,7 +40,7 @@ function readSavedFixtures() {
 
 /** @param {{ onLevels: () => void, onStageHello: () => void, onRegistered: (results: any[]) => void }} opts */
 export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
-  const bus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL_NAME);
+  const bus = openStageBus();
   let lastHeard = 0;
   /** @type {number[] | null} */
   let levels = null;
@@ -50,9 +48,9 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
   let faders = new Map();
   /** @type {ConsoleFixture[]} */
   let fixtures = readSavedFixtures();
-  /** Per fader: number, name, live level, transition values, patch (for traces). */
+  /** Per fader: number, name, live level, cue values, patch (for traces). */
   let faderInfo = null;
-  /** Master / submasters / crossfade and transition names (for traces). */
+  /** Master / submasters / crossfade and cue names (for traces). */
   let mix = null;
   /** The console set's universe count (channel 513 = universe 2/1). */
   let universes = 1;
@@ -72,9 +70,9 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
 
   bus?.addEventListener("message", (e) => {
     const msg = e.data;
-    if (msg?.type === "stage-hello") { onStageHello(); return; }
-    if (msg?.type === "registered" && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
-    if (msg?.type !== "levels" || !Array.isArray(msg.levels)) return;
+    if (msg?.type === MSG.STAGE_HELLO) { onStageHello(); return; }
+    if (msg?.type === MSG.REGISTERED && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
+    if (msg?.type !== MSG.LEVELS || !Array.isArray(msg.levels)) return;
     const seq = Number.isFinite(msg.seq) ? msg.seq : 0;
     if (!msg.local && seq < newestSeq) return;
     newestSeq = Math.max(newestSeq, seq);
@@ -93,7 +91,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     universes = Number.isInteger(msg.universes) && msg.universes >= 1 ? msg.universes : 1;
     onLevels();
   });
-  bus?.postMessage({ type: "hello" });
+  bus?.postMessage({ type: MSG.HELLO });
 
   return {
     get live() {
@@ -111,19 +109,19 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     },
     /** Ask the console to create fixtures (+ patch / name free faders) for lights. */
     register(requests) {
-      bus?.postMessage({ type: "register", requests });
+      bus?.postMessage({ type: MSG.REGISTER, requests });
     },
     /** Ask the console to remove fixtures the stage registered (frees their faders). */
     unregister(consoleIds) {
-      if (consoleIds.length) bus?.postMessage({ type: "unregister", consoleIds });
+      if (consoleIds.length) bus?.postMessage({ type: MSG.UNREGISTER, consoleIds });
     },
     /** Send the stage's lights to the console (for its traces). */
     publishStage(list) {
-      bus?.postMessage({ type: "stage", fixtures: list });
+      bus?.postMessage({ type: MSG.STAGE, fixtures: list });
     },
     /** Tell the console which of its fixtures are selected here (it scrolls to and highlights their faders; [] = none). */
     publishSelection(consoleIds) {
-      bus?.postMessage({ type: "stage-select", consoleIds });
+      bus?.postMessage({ type: MSG.STAGE_SELECT, consoleIds });
     },
     /**
      * The console's value for a channel that the stage should take now, or
@@ -150,7 +148,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
         pending.set(channel, { value, until: Date.now() + PENDING_MS });
         values.push({ channel, value });
       }
-      if (values.length) bus.postMessage({ type: "set", values });
+      if (values.length) bus.postMessage({ type: MSG.SET, values });
     },
   };
 }

@@ -5,6 +5,11 @@
 //
 // Each page passes a snapshot of what it knows (its own state plus what the
 // other page has sent over the live link); buildTrace() turns that into rows.
+// Styles: theme.css.
+
+import { DMX_ATTRS as ATTRS, DMX_LABELS as LABEL } from "./attributes.js";
+import { formatAddress } from "./address.js";
+import { escapeHtml as esc } from "./html.js";
 
 /**
  * @typedef {{ channel: number, max: number }} PatchTarget
@@ -26,12 +31,9 @@
  * @typedef {{ title: string, subtitle: string, sections: { heading: string, rows: Row[] }[] }} Trace
  */
 
-const ATTRS = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];
-const LABEL = { dimmer: "Dimmer", pan: "Pan", tilt: "Tilt", red: "Red", green: "Green", blue: "Blue", zoom: "Zoom" };
-
 const scaled = (level, max) => Math.round((level * max) / 255);
 /** Channel as shown to people: "45", or "2/45" (universe/channel) with several universes. */
-const addr = (s, ch) => ((s.universes ?? 1) > 1 ? `${Math.floor((ch - 1) / 512) + 1}/${((ch - 1) % 512) + 1}` : String(ch));
+const addr = (s, ch) => formatAddress(ch, s.universes ?? 1);
 /** "F3", or "F3 · Name" when the fader has its own name. */
 const faderLabel = (f) => (f.name && f.name !== `F${f.num}` ? `F${f.num} · ${f.name}` : `F${f.num}`);
 
@@ -236,7 +238,7 @@ function traceFixture(s, id) {
 }
 
 /** @param {Snapshot} s @param {TraceTarget} target @returns {Trace} */
-export function buildTrace(s, target) {
+function buildTrace(s, target) {
   if (target.kind === "fader") return traceFader(s, target.fader);
   if (target.kind === "channel") return traceChannel(s, target.channel);
   if (target.kind === "fixture") return traceFixture(s, target.id);
@@ -246,34 +248,6 @@ export function buildTrace(s, target) {
 // ---------------------------------------------------------------------
 // Popover card
 // ---------------------------------------------------------------------
-
-const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-
-const STYLE = `
-.trace-pop {
-  position: fixed; z-index: 1000; width: 340px; max-height: min(70vh, 520px); overflow: auto;
-  background: #1b1f27; color: #e8e4dc; border: 1px solid #3a4150; border-radius: 8px;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
-  font: 12px/1.45 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-}
-.trace-pop[hidden] { display: none; }
-.trace-pop .t-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; padding: 8px 10px 6px; border-bottom: 1px solid #2a303b; }
-.trace-pop .t-title { font-weight: 600; font-size: 13px; }
-.trace-pop .t-sub { color: #9a9488; font-size: 11px; }
-.trace-pop .t-close { background: none; border: 0; color: #9a9488; font: inherit; cursor: pointer; padding: 0 2px; }
-.trace-pop .t-close:hover { color: #e8e4dc; }
-.trace-pop .t-sec { padding: 6px 10px 8px; }
-.trace-pop .t-sec + .t-sec { border-top: 1px solid #2a303b; }
-.trace-pop .t-h { color: #e2a13a; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
-.trace-pop .t-row { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
-.trace-pop .t-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trace-pop .t-val { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; text-align: right; }
-.trace-pop .t-note { grid-column: 1 / -1; color: #9a9488; font-size: 11px; margin-top: -1px; }
-.trace-pop .on .t-val { color: #6fbf7a; }
-.trace-pop .muted { color: #6c7280; }
-.trace-pop .warn .t-val, .trace-pop .warn .t-note { color: #e2a13a; }
-.trace-pop .t-foot { padding: 4px 10px 7px; color: #6c7280; font-size: 10px; }
-`;
 
 function rowHtml(r) {
   const pad = (r.depth ?? 0) * 14;
@@ -289,12 +263,6 @@ function rowHtml(r) {
  * re-renders it from a fresh snapshot (call it whenever values change).
  */
 export function createTracePopover() {
-  if (!document.getElementById("trace-style")) {
-    const style = document.createElement("style");
-    style.id = "trace-style";
-    style.textContent = STYLE;
-    document.head.append(style);
-  }
   const el = document.createElement("div");
   el.className = "trace-pop";
   el.hidden = true;

@@ -1,7 +1,6 @@
-import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress } from "./patch.js";
+import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress, clampChannel as wholeChannel } from "./patch.js";
+import { newId } from "../shared/ids.js";
 
-export const MOUNT_TYPES = /** @type {const} */ (["fixed", "movable"]);
-export const COLOR_MODES = /** @type {const} */ (["single", "multi"]);
 export const MAX_FIXTURES = 64;
 export const MAX_FIXTURE_GROUPS = 32;
 /** Max DMX channels per fixture (UI picker 1…64; real moving lights often use 20–40). */
@@ -34,30 +33,18 @@ export const MAX_FIXTURE_QTY = 16;
 const CHANNEL_ROLES = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];
 
 /** @param {unknown} list @returns {(ChannelRole | null)[]} */
-export function normalizeRoles(list) {
+function normalizeRoles(list) {
   if (!Array.isArray(list)) return [];
   return list.slice(0, MAX_FIXTURE_CHANNELS).map((r) => (CHANNEL_ROLES.includes(r) ? r : null));
 }
 
-/** @param {string} prefix @returns {string} */
-function newId(prefix) {
-  try {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // non-secure context
-  }
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 /** @returns {string} */
-export function newFixtureId() {
+function newFixtureId() {
   return newId("inst");
 }
 
 /** @returns {string} */
-export function newGroupId() {
+function newGroupId() {
   return newId("grp");
 }
 
@@ -71,19 +58,15 @@ export function normalizeColorMode(value) {
   return value === "multi" ? "multi" : "single";
 }
 
-/** @param {unknown} value @returns {number | null} */
-function clampChannel(value) {
-  const n = Math.round(Number(value));
-  if (!Number.isFinite(n) || n < 1 || n > DMX_CHANNEL_MAX) return null;
-  return n;
-}
+/** A channel number (rounded), or null when it isn't one. @param {unknown} value @returns {number | null} */
+const clampChannel = (value) => wholeChannel(Math.round(Number(value)));
 
 /**
  * @param {unknown} start
  * @param {unknown} end
  * @returns {{ channelStart: number, channelEnd: number } | null}
  */
-export function normalizeChannelRange(start, end) {
+function normalizeChannelRange(start, end) {
   let a = clampChannel(start);
   let b = clampChannel(end);
   if (a == null && b == null) return null;
@@ -129,7 +112,7 @@ export function channelCount(fixture) {
  * @param {number} startB
  * @param {number} endB
  */
-export function rangesOverlap(startA, endA, startB, endB) {
+function rangesOverlap(startA, endA, startB, endB) {
   return startA <= endB && startB <= endA;
 }
 
@@ -191,7 +174,7 @@ export function nextAvailableRange(fixtures, width = 1, universe = null) {
 }
 
 /** @param {unknown} name @param {number} [index] */
-export function normalizeGroupName(name, index = 0) {
+function normalizeGroupName(name, index = 0) {
   const text = typeof name === "string" ? name.trim().slice(0, 40) : "";
   return text || `Group ${index + 1}`;
 }
@@ -201,7 +184,7 @@ export function normalizeGroupName(name, index = 0) {
  * @param {number} [index]
  * @returns {FixtureGroup | null}
  */
-export function normalizeFixtureGroup(value, index = 0) {
+function normalizeFixtureGroup(value, index = 0) {
   if (!value || typeof value !== "object") return null;
   const obj = /** @type {Record<string, unknown>} */ (value);
   const id =
@@ -385,14 +368,4 @@ export function formatChannelRange(fixture) {
   const count = channelCount(fixture);
   if (count === 1) return `Ch${formatAddress(fixture.channelStart)}`;
   return `Ch${formatAddress(fixture.channelStart)}×${count}`;
-}
-
-/** @param {MountType} mount */
-export function mountLabel(mount) {
-  return mount === "movable" ? "Movable" : "Fixed";
-}
-
-/** @param {ColorMode} color */
-export function colorModeLabel(color) {
-  return color === "multi" ? "Multi-color" : "Single color";
 }

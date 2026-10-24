@@ -24,7 +24,7 @@ const VENDOR_IDS = new Set(["0403"]);
 const calloutPath = (p) => p.replace(/^\/dev\/tty\./, "/dev/cu.");
 
 /** USB serial devices that look like a DMX USB Pro. */
-export async function listDevices() {
+async function listDevices() {
   const ports = await SerialPort.list();
   return ports
     .filter((p) => VENDOR_IDS.has((p.vendorId ?? "").toLowerCase()) || /enttec/i.test(p.manufacturer ?? ""))

@@ -4,13 +4,10 @@
 
 import { FADER_COUNT, setUniverseCount } from "../console/patch.js";
 import { parseSet, serializeSet } from "../console/set.js";
-import { normalizeTransitionFadeTime, resolveActiveTune } from "../console/tunes.js";
+import { normalizeCueFadeTime, resolveActiveSong } from "../console/songs.js";
 import { computeChannelLevels, easeFade, liveLevel } from "../shared/engine.js";
+import { LIVE_FIELDS, SNAPSHOT_FIELDS } from "../shared/live-fields.js";
 
-/** Set fields that change while playing (sent on their own, many times a second). */
-export const LIVE_FIELDS = ["master", "cross", "fromSub", "toSub", "fromRow", "toRow", "selectedRow", "fadeTime"];
-/** Blackout buttons remember what they cut (null = not blacked out). */
-export const SNAPSHOT_FIELDS = ["masterBlackoutSnapshot", "fromSubBlackoutSnapshot", "toSubBlackoutSnapshot"];
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -32,16 +29,16 @@ export function createShow(saved) {
   /** client id → faders it holds flashed / blacked out */
   const holds = new Map();
 
-  const activeTune = () => resolveActiveTune(set.tunes, set.activeTuneId);
-  const rows = () => activeTune().transitions.map((t) => t.levels);
+  const activeSong = () => resolveActiveSong(set.songs, set.activeSongId);
+  const rows = () => activeSong().cues.map((t) => t.levels);
 
   /** Keep Current / Next / selected inside the song; Next always follows Current. */
   function clampPlayback() {
-    const n = activeTune().transitions.length;
-    set.activeTuneId = activeTune().id;
-    set.selectedRow = clamp(Math.round(set.selectedRow) || 0, 0, Math.max(0, n - 1));
-    set.fromRow = clamp(Math.round(set.fromRow) || 0, 0, Math.max(0, n - 1));
-    set.toRow = n < 2 ? set.fromRow : (set.fromRow + 1) % n;
+    const n = activeSong().cues.length;
+    set.activeSongId = activeSong().id;
+    set.selectedCue = clamp(Math.round(set.selectedCue) || 0, 0, Math.max(0, n - 1));
+    set.fromCue = clamp(Math.round(set.fromCue) || 0, 0, Math.max(0, n - 1));
+    set.toCue = n < 2 ? set.fromCue : (set.fromCue + 1) % n;
     setUniverseCount(set.universes);
   }
   if (set) clampPlayback();
@@ -91,10 +88,10 @@ export function createShow(saved) {
       clampPlayback();
     },
 
-    /** @param {[string, number, number][]} cells [transition id, fader index, level] */
+    /** @param {[string, number, number][]} cells [cue id, fader index, level] */
     applyLevels(cells) {
       const byId = new Map();
-      for (const tune of set.tunes) for (const t of tune.transitions) byId.set(t.id, t);
+      for (const song of set.songs) for (const t of song.cues) byId.set(t.id, t);
       for (const cell of cells) {
         if (!Array.isArray(cell)) continue;
         const [id, fader, value] = cell;
@@ -121,11 +118,11 @@ export function createShow(saved) {
 
     /** GO: fade from the selected cue to the next one (its fade time), then advance. */
     go(now) {
-      const n = activeTune().transitions.length;
+      const n = activeSong().cues.length;
       if (n < 2) return;
-      set.fromRow = set.selectedRow;
+      set.fromCue = set.selectedCue;
       clampPlayback();
-      const seconds = normalizeTransitionFadeTime(activeTune().transitions[set.toRow]?.fadeTime);
+      const seconds = normalizeCueFadeTime(activeSong().cues[set.toCue]?.fadeTime);
       set.fadeTime = seconds;
       set.cross = 0;
       fade = { start: 0, target: 100, durationMs: seconds * 1000, startedAt: now, pausedAt: null, mode: "go" };
@@ -161,9 +158,9 @@ export function createShow(saved) {
         set.cross = 100;
         return { arrived: null };
       }
-      const arrived = set.toRow;
-      set.fromRow = arrived;
-      set.selectedRow = arrived;
+      const arrived = set.toCue;
+      set.fromCue = arrived;
+      set.selectedCue = arrived;
       set.cross = 0;
       clampPlayback();
       return { arrived };

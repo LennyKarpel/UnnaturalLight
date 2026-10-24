@@ -1,7 +1,5 @@
 import {
   FADER_COUNT,
-  MAX_ROWS,
-  MIN_ROWS,
   defaultPatch,
   normalizeFaderPatch,
   MAX_UNIVERSES,
@@ -11,17 +9,16 @@ import {
   normalizeFixtures,
 } from "./fixtures.js";
 import {
-  DEFAULT_TRANSITION_FADE_TIME,
-  defaultTransitionName,
-  normalizeTunes,
-  normalizeTransitionFadeTime,
-  resolveActiveTune,
-  tunesFromLegacyRows,
-  TRANSITION_FADE_TIMES,
-} from "./tunes.js";
+  DEFAULT_CUE_FADE_TIME,
+  normalizeSongs,
+  normalizeCueFadeTime,
+  resolveActiveSong,
+} from "./songs.js";
+import { CONSOLE_SESSION_KEY as SESSION_KEY } from "../shared/stage-bus.js";
+import { clamp, clampInt } from "../shared/numbers.js";
 
-export const SET_VERSION = 2;
-export const SET_APP = "UnnaturalLight";
+const SET_VERSION = 2;
+const SET_APP = "UnnaturalLight";
 export const DEFAULT_NAV_ORDER = [
   "set",
   "songs",
@@ -29,49 +26,6 @@ export const DEFAULT_NAV_ORDER = [
   "fixtures",
   "patch",
 ];
-const SESSION_KEY = "unnaturallight.setlist.session.v1";
-const LEGACY_SESSION_KEYS = [
-  "unnaturallight.session.v1",
-  "naturallight.session.v1",
-  "sunlight.session.v1",
-];
-
-// Re-export transition naming helpers used by app.js (was scene naming).
-export {
-  defaultTransitionName,
-  defaultTuneName,
-  createTune,
-  createTransition,
-  normalizeTunes,
-  normalizeTuneName,
-  normalizeTransitionFadeTime,
-  moveTune,
-  moveTransition,
-  MAX_TUNES,
-  MIN_TRANSITIONS,
-  MAX_TRANSITIONS,
-  TRANSITION_FADE_TIMES,
-  DEFAULT_TRANSITION_FADE_TIME,
-  blankLevels,
-  newTuneId,
-  newTransitionId,
-  resolveActiveTune,
-} from "./tunes.js";
-
-/** @deprecated Use defaultTransitionName */
-export function defaultSceneName(index) {
-  return defaultTransitionName(index);
-}
-
-/** @deprecated Use normalizeTransitionNames via tunes */
-export function normalizeSceneNames(names, count) {
-  const source = Array.isArray(names) ? names : [];
-  return Array.from({ length: count }, (_, i) => {
-    const raw = source[i];
-    const text = typeof raw === "string" ? raw.trim() : "";
-    return text || defaultTransitionName(i);
-  });
-}
 
 /** @param {unknown} order @returns {string[]} */
 export function normalizeNavOrder(order) {
@@ -79,15 +33,8 @@ export function normalizeNavOrder(order) {
   const source = Array.isArray(order) ? order : [];
   const next = [];
   for (const item of source) {
-    if (typeof item !== "string") continue;
-    // Legacy page ids.
-    let page = item;
-    // The Songs page was called Tunes for a while.
-    if (page === "faders" || page === "tunes") page = "songs";
-    if (page === "show" || page === "setlist") page = "set";
-    if (page === "instruments") page = "fixtures";
-    if (!allowed.has(page) || next.includes(page)) continue;
-    next.push(page);
+    if (!allowed.has(item) || next.includes(item)) continue;
+    next.push(item);
   }
   for (const page of DEFAULT_NAV_ORDER) {
     if (!next.includes(page)) next.push(page);
@@ -142,26 +89,26 @@ export function normalizeFaderNames(names) {
  *   fromSub?: number,
  *   toSub?: number,
  *   fadeTime?: number,
- *   fromRow: number,
- *   toRow: number,
- *   selectedRow?: number,
- *   tunes: import("./tunes.js").Tune[],
- *   activeTuneId?: string | null,
+ *   fromCue: number,
+ *   toCue: number,
+ *   selectedCue?: number,
+ *   songs: import("./songs.js").Song[],
+ *   activeSongId?: string | null,
  *   faderNames?: string[],
  *   fixtureGroups?: import("./fixtures.js").FixtureGroup[],
  *   fixtures?: import("./fixtures.js").Fixture[],
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
-/** Universe count (1…MAX_UNIVERSES); older sets have one. */
+/** Universe count (1…MAX_UNIVERSES). */
 export function normalizeUniverses(value) {
   const n = Math.round(Number(value));
   return Number.isFinite(n) ? Math.max(1, Math.min(MAX_UNIVERSES, n)) : 1;
 }
 
 export function serializeSet(state) {
-  const tunes = normalizeTunes(state.tunes);
-  const active = resolveActiveTune(tunes, state.activeTuneId);
+  const songs = normalizeSongs(state.songs);
+  const active = resolveActiveSong(songs, state.activeSongId);
   const fixtureGroups = normalizeFixtureGroups(state.fixtureGroups);
   return {
     version: SET_VERSION,
@@ -174,13 +121,13 @@ export function serializeSet(state) {
     cross: clamp(state.cross, 0, 100),
     fromSub: clamp(state.fromSub ?? 100, 0, 100),
     toSub: clamp(state.toSub ?? 100, 0, 100),
-    fadeTime: normalizeTransitionFadeTime(state.fadeTime),
+    fadeTime: normalizeCueFadeTime(state.fadeTime),
     universes: normalizeUniverses(state.universes),
-    fromRow: state.fromRow,
-    toRow: state.toRow,
-    selectedRow: state.selectedRow ?? 0,
-    tunes,
-    activeTuneId: active.id,
+    fromCue: state.fromCue,
+    toCue: state.toCue,
+    selectedCue: state.selectedCue ?? 0,
+    songs,
+    activeSongId: active.id,
     faderNames: normalizeFaderNames(state.faderNames),
     fixtureGroups,
     fixtures: normalizeFixtures(state.fixtures, fixtureGroups),
@@ -188,14 +135,14 @@ export function serializeSet(state) {
   };
 }
 
-/** Stable snapshot for dirty checks (ignores savedAt / selectedRow). */
+/** Stable snapshot for dirty checks (ignores savedAt / selectedCue). */
 export function setSnapshot(state) {
-  const { savedAt: _savedAt, selectedRow: _selectedRow, ...rest } = serializeSet(state);
+  const { savedAt: _savedAt, selectedCue: _selectedCue, ...rest } = serializeSet(state);
   return JSON.stringify(rest);
 }
 
 /** @param {object | null} [stage] the stage page's layout, saved in the same file */
-export function setToJson(state, stage = null) {
+function setToJson(state, stage = null) {
   const data = serializeSet(state);
   return `${JSON.stringify(stage ? { ...data, stage } : data, null, 2)}\n`;
 }
@@ -210,11 +157,11 @@ export function setToJson(state, stage = null) {
  *   fromSub: number,
  *   toSub: number,
  *   fadeTime: number,
- *   fromRow: number,
- *   toRow: number,
- *   selectedRow: number,
- *   tunes: import("./tunes.js").Tune[],
- *   activeTuneId: string,
+ *   fromCue: number,
+ *   toCue: number,
+ *   selectedCue: number,
+ *   songs: import("./songs.js").Song[],
+ *   activeSongId: string,
  *   faderNames: string[],
  *   fixtureGroups: import("./fixtures.js").FixtureGroup[],
  *   fixtures: import("./fixtures.js").Fixture[],
@@ -227,86 +174,39 @@ export function parseSet(data) {
   }
 
   const obj = /** @type {Record<string, unknown>} */ (data);
-  if (
-    obj.app != null &&
-    obj.app !== SET_APP &&
-    obj.app !== "NaturalLight" &&
-    obj.app !== "SunLight"
-  ) {
+  // A set file has these; the console's live state (sent to the server) doesn't.
+  if ((obj.app != null && obj.app !== SET_APP) || (obj.kind != null && obj.kind !== "set")) {
     throw new Error("This file is not an UnnaturalLight set.");
   }
-  // Older files: kind "setlist" (and "show" before that).
-  if (obj.kind != null && obj.kind !== "set" && obj.kind !== "setlist" && obj.kind !== "show") {
-    throw new Error("This file is not an UnnaturalLight set.");
-  }
-
-  const version = obj.version == null ? 1 : Number(obj.version);
-  if (version !== 1 && version !== SET_VERSION) {
+  if (obj.version != null && obj.version !== SET_VERSION) {
     throw new Error(`Unsupported set version: ${obj.version}`);
   }
 
   const patchSource = Array.isArray(obj.patch) ? obj.patch : [];
   const patch = defaultPatch().map((_, i) => normalizeFaderPatch(patchSource[i]));
 
-  const legacyFadeTime = normalizeTransitionFadeTime(
-    obj.fadeTime,
-    DEFAULT_TRANSITION_FADE_TIME,
-  );
+  // Set-level fade time: the default for a cue without its own.
+  const fadeTime = normalizeCueFadeTime(obj.fadeTime, DEFAULT_CUE_FADE_TIME);
+  const songs = normalizeSongs(obj.songs, fadeTime);
+  const active = resolveActiveSong(songs, typeof obj.activeSongId === "string" ? obj.activeSongId : null);
+  const cueCount = active.cues.length;
 
-  /** @type {import("./tunes.js").Tune[]} */
-  let tunes;
-  const tuneSource = Array.isArray(obj.tunes)
-    ? obj.tunes
-    : Array.isArray(obj.songs)
-      ? obj.songs
-      : null;
-  if (tuneSource && tuneSource.length > 0) {
-    tunes = normalizeTunes(tuneSource, legacyFadeTime);
-  } else {
-    // v1 flat rows/names → one tune of transitions
-    let rows = Array.isArray(obj.rows) ? obj.rows : [];
-    rows = rows
-      .filter(Array.isArray)
-      .slice(0, MAX_ROWS)
-      .map((row) =>
-        Array.from({ length: FADER_COUNT }, (_, i) => clampByte(row[i] ?? 0)),
-      );
-    while (rows.length < MIN_ROWS) {
-      rows.push(Array.from({ length: FADER_COUNT }, () => 0));
-    }
-    tunes = tunesFromLegacyRows(rows, obj.names, legacyFadeTime);
-  }
-
-  const activeId =
-    typeof obj.activeTuneId === "string"
-      ? obj.activeTuneId
-      : typeof obj.activeSongId === "string"
-        ? obj.activeSongId
-        : null;
-  const active = resolveActiveTune(tunes, activeId);
-  const transitionCount = active.transitions.length;
-
-  const setName = normalizeSetName(
-    obj.setName ?? obj.setlistName ?? obj.showName,
-  );
+  const setName = normalizeSetName(obj.setName);
   const navOrder = normalizeNavOrder(obj.navOrder);
   const faderNames = normalizeFaderNames(obj.faderNames);
-  // Older sets called fixtures "instruments".
-  const fixtureGroups = normalizeFixtureGroups(obj.fixtureGroups ?? obj.instrumentGroups);
-  const fixtures = normalizeFixtures(obj.fixtures ?? obj.instruments, fixtureGroups);
+  const fixtureGroups = normalizeFixtureGroups(obj.fixtureGroups);
+  const fixtures = normalizeFixtures(obj.fixtures, fixtureGroups);
   const master = clamp(Number(obj.master ?? 100), 0, 100);
   const cross = clamp(Number(obj.cross ?? 0), 0, 100);
   const fromSub = clamp(Number(obj.fromSub ?? 100), 0, 100);
   const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
-  // Legacy set-level field; live GO uses each transition’s fadeTime.
-  const fadeTime = legacyFadeTime;
   const universes = normalizeUniverses(obj.universes);
-  let fromRow = clampInt(Number(obj.fromRow ?? 0), 0, transitionCount - 1);
-  let toRow = (fromRow + 1) % transitionCount;
-  const selectedRow = clampInt(
-    Number(obj.selectedRow ?? 0),
+  let fromCue = clampInt(Number(obj.fromCue ?? 0), 0, cueCount - 1);
+  let toCue = (fromCue + 1) % cueCount;
+  const selectedCue = clampInt(
+    Number(obj.selectedCue ?? 0),
     0,
-    transitionCount - 1,
+    cueCount - 1,
   );
 
   return {
@@ -318,11 +218,11 @@ export function parseSet(data) {
     toSub,
     fadeTime,
     universes,
-    fromRow,
-    toRow,
-    selectedRow,
-    tunes,
-    activeTuneId: active.id,
+    fromCue,
+    toCue,
+    selectedCue,
+    songs,
+    activeSongId: active.id,
     faderNames,
     fixtureGroups,
     fixtures,
@@ -343,7 +243,7 @@ export function downloadSet(state, filename, stage = null) {
 }
 
 /** @param {unknown} [setName] */
-export function defaultFilename(setName) {
+function defaultFilename(setName) {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const base = normalizeSetName(setName)
     .toLowerCase()
@@ -365,28 +265,11 @@ export function saveSession(state) {
 /** @returns {ReturnType<typeof parseSet> | null} */
 export function loadSession() {
   try {
-    let raw = localStorage.getItem(SESSION_KEY);
-    for (const key of LEGACY_SESSION_KEYS) {
-      if (raw) break;
-      raw = localStorage.getItem(key);
-    }
+    const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     return parseSet(JSON.parse(raw));
   } catch (err) {
     console.warn("Could not load session", err);
     return null;
   }
-}
-
-function clamp(value, min, max) {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
-
-function clampInt(value, min, max) {
-  return clamp(Math.round(value), min, max);
-}
-
-function clampByte(value) {
-  return clampInt(Number(value), 0, 255);
 }

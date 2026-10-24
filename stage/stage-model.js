@@ -3,6 +3,10 @@
 
 import * as THREE from "three";
 import { normalizeProfile } from "./fixture-library.js";
+import { clamp, clampByte } from "../shared/numbers.js";
+import { hexFromRgb, rgbFromHex } from "../shared/color.js";
+import { newId } from "../shared/ids.js";
+import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
 
 // ---------------------------------------------------------------------
 // Coordinates (metres): origin at floor centre of the box.
@@ -55,37 +59,22 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
 // DMX attributes (each 0–255)
 // ---------------------------------------------------------------------
 
-export const DMX_ATTRS = /** @type {const} */ (["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"]);
-export const DMX_LABELS = { dimmer: "Dimmer", pan: "Pan", tilt: "Tilt", red: "Red", green: "Green", blue: "Blue", zoom: "Zoom" };
-/** Short names used for console fader names, e.g. "Inst 1 Dim". */
-export const DMX_SHORT = { dimmer: "Dim", pan: "Pan", tilt: "Tilt", red: "R", green: "G", blue: "B", zoom: "Zoom" };
 /** Pan / tilt value that means "at zero" (Home). */
-export const DMX_CENTRE = 128;
-
-const toByte = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+const DMX_CENTRE = 128;
 
 /** DMX 0–255 → angle −limit…+limit, with 128 exactly 0. */
-export function angleFromDmx(v, limit) {
+function angleFromDmx(v, limit) {
   return v >= DMX_CENTRE ? ((v - DMX_CENTRE) / 127) * limit : ((v - DMX_CENTRE) / 128) * limit;
 }
 
 /** Angle → nearest DMX 0–255 (inverse of angleFromDmx). */
-export function dmxFromAngle(deg, limit) {
+function dmxFromAngle(deg, limit) {
   if (!limit) return DMX_CENTRE;
-  return toByte(deg >= 0 ? DMX_CENTRE + (deg / limit) * 127 : DMX_CENTRE + (deg / limit) * 128);
+  return clampByte(deg >= 0 ? DMX_CENTRE + (deg / limit) * 127 : DMX_CENTRE + (deg / limit) * 128);
 }
 
-export const beamFromZoom = (v, min, max) => min + (v / 255) * (max - min);
-export const zoomFromBeam = (deg, min, max) => (max > min ? toByte(((deg - min) / (max - min)) * 255) : 0);
-
-export function hexFromRgb(r, g, b) {
-  return `#${[r, g, b].map((c) => toByte(c).toString(16).padStart(2, "0")).join("")}`;
-}
-
-export function rgbFromHex(hex) {
-  const n = parseInt(String(hex).slice(1), 16);
-  return Number.isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
-}
+const beamFromZoom = (v, min, max) => min + (v / 255) * (max - min);
+export const zoomFromBeam = (deg, min, max) => (max > min ? clampByte(((deg - min) / (max - min)) * 255) : 0);
 
 /** Recompute the derived look / angles from the fixture's DMX values. */
 export function deriveFromDmx(inst) {
@@ -99,7 +88,7 @@ export function deriveFromDmx(inst) {
 
 /** Set one DMX attribute (clamped to 0–255) and update the derived values. */
 export function setDmx(inst, attr, v) {
-  inst.dmx[attr] = toByte(v);
+  inst.dmx[attr] = clampByte(v);
   deriveFromDmx(inst);
 }
 
@@ -152,12 +141,8 @@ export function linkChannels(inst) {
 }
 
 
-export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const round = (v, n = 2) => Math.round(v * 10 ** n) / 10 ** n;
 
-export function newId() {
-  try { return crypto.randomUUID(); } catch { return `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`; }
-}
 
 export function baseQuat(inst) {
   const { yaw, pitch, roll } = inst.base;
@@ -174,7 +159,7 @@ export function beamDir(inst) {
 }
 
 /** Yaw/pitch that make local forward point along v. */
-export function frameFacing(v) {
+function frameFacing(v) {
   const h = Math.hypot(v.x, v.z);
   return { yaw: round(Math.atan2(-v.x, -v.z) / DEG), pitch: round(Math.atan2(v.y, h) / DEG), roll: 0 };
 }
@@ -236,7 +221,7 @@ export function isInside(inst, box) {
   return Math.abs(inst.x) <= w / 2 && Math.abs(inst.z) <= d / 2 && inst.y >= 0 && inst.y <= h;
 }
 
-export const FACE_NAMES = {
+const FACE_NAMES = {
   "x-": "Stage-right wall", "x+": "Stage-left wall",
   "y-": "Floor", "y+": "Ceiling",
   "z-": "Upstage wall", "z+": "Downstage (audience) plane",
@@ -279,7 +264,7 @@ export function createFixture(x, y, z, n, box) {
   const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
   /** @type {Fixture} */
   const inst = {
-    id: newId(),
+    id: newId("i"),
     name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
@@ -345,23 +330,10 @@ export function normalizeFixture(raw, i) {
   let zoomMin = clamp(num(raw.zoomMin, 5), 1, 120);
   let zoomMax = clamp(num(raw.zoomMax, 60), 1, 120);
   if (zoomMax < zoomMin) [zoomMin, zoomMax] = [zoomMax, zoomMin];
-  let dmx;
-  if (raw.dmx && typeof raw.dmx === "object") {
-    dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, toByte(num(raw.dmx[a], a === "pan" || a === "tilt" ? DMX_CENTRE : 0))]));
-  } else {
-    // Older saves stored angles / 0–1 / hex: convert to DMX values.
-    const color = /^#[0-9a-f]{6}$/i.test(raw.color) ? raw.color : PALETTE[i % PALETTE.length];
-    const [red, green, blue] = rgbFromHex(color);
-    dmx = {
-      dimmer: toByte(clamp(num(raw.intensity, 0.75), 0, 1) * 255),
-      pan: dmxFromAngle(clamp(num(raw.pan, 0), -panLimit, panLimit), panLimit),
-      tilt: dmxFromAngle(clamp(num(raw.tilt, 0), -tiltLimit, tiltLimit), tiltLimit),
-      red, green, blue,
-      zoom: zoomFromBeam(clamp(num(raw.beam, 24), zoomMin, zoomMax), zoomMin, zoomMax),
-    };
-  }
+  const rawDmx = raw.dmx || {};
+  const dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, clampByte(num(rawDmx[a], a === "pan" || a === "tilt" ? DMX_CENTRE : 0))]));
   const inst = {
-    id: typeof raw.id === "string" ? raw.id : newId(),
+    id: typeof raw.id === "string" ? raw.id : newId("i"),
     name: typeof raw.name === "string" ? raw.name : `Fixture ${i + 1}`,
     x: num(raw.x, 0), y: num(raw.y, 3), z: num(raw.z, 0),
     base: { yaw: num(b.yaw, 0), pitch: num(b.pitch, -45), roll: num(b.roll, 0) },
@@ -376,7 +348,7 @@ export function normalizeFixture(raw, i) {
 }
 
 /** What gets saved for a fixture (the derived look is left out). */
-export function serializeFixture(inst) {
+function serializeFixture(inst) {
   const { color, pan, tilt, intensity, beam, ...saved } = inst;
   return saved;
 }
@@ -423,7 +395,7 @@ export const RIG_TYPES = {
  * axis along local +y; tilt rotates it about x (0 = flat, 90 = upright
  * facing the audience), then yaw turns it about the vertical.
  */
-export function rigQuat(rig) {
+function rigQuat(rig) {
   return new THREE.Quaternion().setFromEuler(new THREE.Euler(rig.tilt * DEG, rig.yaw * DEG, 0, "YXZ"));
 }
 
@@ -459,7 +431,7 @@ function localSlot(rig, i) {
  *   line: zero points along −axis (straight down when flat); "up" is local
  *     +z (towards the audience when flat), so pan swings along the line.
  */
-export function rigSlot(rig, i) {
+function rigSlot(rig, i) {
   const q = rigQuat(rig);
   const c = new THREE.Vector3(rig.x, rig.y, rig.z);
   const pos = localSlot(rig, i).applyQuaternion(q).add(c);
@@ -514,14 +486,13 @@ export function normalizeRig(raw, i) {
   const type = RIG_TYPES[raw?.type] ? raw.type : "circle";
   const d = RIG_TYPES[type].defaults;
   return {
-    id: typeof raw?.id === "string" ? raw.id : newId(),
+    id: typeof raw?.id === "string" ? raw.id : newId("i"),
     name: typeof raw?.name === "string" ? raw.name : `${RIG_TYPES[type].prefix} ${i + 1}`,
     type,
     x: num(raw?.x, 0), y: num(raw?.y, 5), z: num(raw?.z, 0),
     yaw: num(raw?.yaw, d.yaw),
     tilt: clamp(num(raw?.tilt, d.tilt), -90, 90),
-    // `diameter` is the older name for a circle's size.
-    size: clamp(num(raw?.size ?? raw?.diameter, d.size), 0.5, 50),
+    size: clamp(num(raw?.size, d.size), 0.5, 50),
     count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_FIXTURES),
     /** Console type its members are registered as (null = stage only). */
     consoleType: normalizeType(raw?.consoleType),
@@ -552,7 +523,7 @@ export const TRANSPARENT_OPACITY = 0.1;
 /** Which sides are transparent. Default: all of them. */
 export const DEFAULT_TRANSPARENT = { sl: true, sr: true, ceiling: true, downstage: true, upstage: true };
 
-export function normalizeTransparent(raw) {
+function normalizeTransparent(raw) {
   const out = { ...DEFAULT_TRANSPARENT };
   for (const key of Object.keys(out)) {
     if (typeof raw?.[key] === "boolean") out[key] = raw[key];
@@ -568,8 +539,7 @@ export function parseStage(data) {
     d: clamp(Number(raw.d) || 8, 1, 100),
     h: clamp(Number(raw.h) || 6, 1, 50),
   };
-  // Older stage files called fixtures "instruments".
-  const list = Array.isArray(data?.fixtures) ? data.fixtures : Array.isArray(data?.instruments) ? data.instruments : [];
+  const list = Array.isArray(data?.fixtures) ? data.fixtures : [];
   const fixtures = list.slice(0, MAX_FIXTURES).map(normalizeFixture);
   const rigs = (Array.isArray(data?.rigs) ? data.rigs : []).map(normalizeRig);
   // A member whose rig is gone becomes a free fixture; a rig keeps the

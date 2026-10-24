@@ -12,9 +12,7 @@
  * unreachable, this page's stage is sent on connecting instead.
  */
 
-const RECONNECT_MS = 1000;
-/** Shared with the console (console/server-link.js): other machines need the server's token. */
-const TOKEN_KEY = "unnaturallight.token";
+import { openServerSocket } from "../shared/server-socket.js";
 
 /**
  * @param {{
@@ -23,36 +21,13 @@ const TOKEN_KEY = "unnaturallight.token";
  * }} api
  */
 export function createShowLink(api) {
-  /** @type {WebSocket | null} */
-  let ws = null;
   let connected = false;
   /** Edited here while not connected: send it on connecting. */
   let unsent = false;
 
-  const params = new URLSearchParams(location.search);
-  let token = params.get("token");
-  try {
-    token ??= sessionStorage.getItem(TOKEN_KEY);
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  } catch { /* storage unavailable */ }
-
-  function send(stage) {
-    ws.send(JSON.stringify({ type: "stage", stage }));
-  }
-
-  function connect() {
-    const url = new URL("/ws", location.href);
-    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("role", "stage");
-    if (token) url.searchParams.set("token", token);
-    ws = new WebSocket(url);
-    ws.addEventListener("message", (e) => {
-      let msg;
-      try {
-        msg = JSON.parse(e.data);
-      } catch {
-        return;
-      }
+  const socket = openServerSocket({
+    role: "stage",
+    onMessage(msg) {
       if (msg.type === "hello") {
         connected = true;
         if (msg.stage && !unsent) api.onStage(msg.stage);
@@ -61,18 +36,20 @@ export function createShowLink(api) {
       } else if (msg.type === "stage" && msg.stage) {
         api.onStage(msg.stage);
       }
-    });
-    ws.addEventListener("close", () => {
+    },
+    onClose() {
       connected = false;
-      setTimeout(connect, RECONNECT_MS);
-    });
+    },
+  });
+
+  function send(stage) {
+    socket.send({ type: "stage", stage });
   }
-  connect();
 
   return {
     /** The stage was edited here: keep it with the show. */
     send(stage) {
-      if (connected && ws?.readyState === WebSocket.OPEN) send(stage);
+      if (connected) send(stage);
       else unsent = true;
     },
   };

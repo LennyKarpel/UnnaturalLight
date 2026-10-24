@@ -5,6 +5,11 @@
 // Needs internet while browsing. A picked profile is saved with the light,
 // so placed lights keep working offline.
 
+import { DMX_LABELS as LABEL } from "../shared/attributes.js";
+import { escapeHtml as esc } from "../shared/html.js";
+/** Console fixtures are capped at this many channels. */
+import { MAX_FIXTURE_CHANNELS } from "../console/fixtures.js";
+
 // The OFL API only allows requests from its own site and http://localhost:8080
 // (what ./server.sh serves); from anywhere else the library's files on
 // GitHub are used instead (they allow any origin; listing a manufacturer's
@@ -12,8 +17,6 @@
 const API = "https://open-fixture-library.org/api/v1";
 const RAW = "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-library/master/fixtures";
 const GITHUB_LIST = "https://api.github.com/repos/OpenLightingProject/open-fixture-library/contents/fixtures";
-/** Console fixtures are capped at this many channels. */
-export const MAX_FIXTURE_CHANNELS = 64;
 
 /**
  * @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} DmxAttr
@@ -50,7 +53,7 @@ async function either(primary, fallback) {
 const titleFromKey = (key) => key.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 /** @returns {Promise<{ key: string, name: string, count: number | null }[]>} */
-export async function listManufacturers() {
+async function listManufacturers() {
   const list = await either(
     async () => Object.entries(await getJson(`${API}/manufacturers`)).map(([key, m]) => ({ key, name: m.name, count: m.fixtureCount })),
     async () => Object.entries(await getJson(`${RAW}/manufacturers.json`))
@@ -63,7 +66,7 @@ export async function listManufacturers() {
 const FIXTURE_LIST_CACHE = "unnaturallight.stage.oflFixtures.";
 
 /** @returns {Promise<{ key: string, name: string }[]>} */
-export async function listFixtures(manufacturer) {
+async function listFixtures(manufacturer) {
   const list = await either(
     async () => (await getJson(`${API}/manufacturers/${encodeURIComponent(manufacturer)}`)).fixtures.map(({ key, name }) => ({ key, name })),
     async () => {
@@ -82,7 +85,7 @@ export async function listFixtures(manufacturer) {
   return list.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export const loadFixture = (manufacturer, fixture) =>
+const loadFixture = (manufacturer, fixture) =>
   getJson(`${RAW}/${encodeURIComponent(manufacturer)}/${encodeURIComponent(fixture)}.json`);
 
 // ---------------------------------------------------------------------
@@ -124,7 +127,7 @@ function classify(ch) {
 }
 
 /** Modes of a fixture, with whether each can be used here (and why not). */
-export function modesOf(fixture) {
+function modesOf(fixture) {
   return (fixture.modes ?? []).map((mode, index) => {
     const n = Array.isArray(mode.channels) ? mode.channels.length : 0;
     const matrix = (mode.channels ?? []).some((c) => c && typeof c === "object");
@@ -139,7 +142,7 @@ export function modesOf(fixture) {
  * channels, …) is kept by name so the console can still give it a fader.
  * @returns {FixtureProfile}
  */
-export function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, modeIndex) {
+function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, modeIndex) {
   const mode = fixture.modes[modeIndex];
   const available = fixture.availableChannels ?? {};
   // Pixel fixtures define channels as templates ("Red $pixelKey"), used in
@@ -207,8 +210,6 @@ export function normalizeProfile(raw) {
 // ---------------------------------------------------------------------
 
 const LAST_KEY = "unnaturallight.stage.lastFixture";
-const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const LABEL = { dimmer: "Dimmer", pan: "Pan", tilt: "Tilt", red: "Red", green: "Green", blue: "Blue", zoom: "Zoom" };
 
 /**
  * Mount a fixture picker in `root`. `onChange(profile | null)` fires when a

@@ -11,7 +11,7 @@
       <!-- The set name, set buttons, DMX outputs and status are in the header of
            the page around the console (../index.html). -->
       <header class="header">
-        <h1>UnnaturalLight <span>· Console</span></h1>
+        <h1 class="app-title">UnnaturalLight <span>· Console</span></h1>
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
@@ -29,12 +29,12 @@
             <p class="page-intro-hint">Songs in this set · click to play · drag to reorder</p>
           </div>
           <div class="patch-actions">
-            <button id="addTuneBtn" type="button" class="btn-quiet">+ Song</button>
+            <button id="addSongBtn" type="button" class="quiet">+ Song</button>
           </div>
         </div>
-        <div id="tuneScroll" class="tune-scroll">
-          <div id="tuneEmpty" class="fixture-empty" hidden>No songs yet.</div>
-          <div id="tuneList" class="tune-list" role="list" aria-label="Songs"></div>
+        <div id="songScroll" class="song-scroll">
+          <div id="songEmpty" class="fixture-empty" hidden>No songs yet.</div>
+          <div id="songList" class="song-list" role="list" aria-label="Songs"></div>
         </div>
       </section>
 
@@ -42,9 +42,9 @@
         <div class="faders-stage">
           <div class="faders-stage-main">
             <section class="transport">
-              <div class="active-tune-bar">
-                <span class="active-tune-label">Song</span>
-                <span id="activeTuneLabel" class="active-tune-name">Song 1</span>
+              <div class="active-song-bar">
+                <span class="active-song-label">Song</span>
+                <span id="activeSongLabel" class="active-song-name">Song 1</span>
               </div>
 
               <div class="transport-main">
@@ -55,13 +55,13 @@
                       <span id="crossFromLabel" class="go-slot-name">A</span>
                     </div>
                     <div class="crossfade-title go-title">
-                      <button id="goBtn" type="button" class="go-btn" title="GO — transition to the next cue">
+                      <button id="goBtn" type="button" class="go-btn" title="GO — fade to the next cue">
                         GO
                       </button>
                       <output id="crossValue" class="go-progress">0%</output>
                     </div>
                     <div class="cross-to-label go-slot">
-                      <span class="go-slot-label" title="The cue GO transitions to">Up next</span>
+                      <span class="go-slot-label" title="The cue GO fades to">Up next</span>
                       <span id="crossToLabel" class="go-slot-name">B</span>
                       <span id="goNextFade" class="go-next-fade">4s</span>
                     </div>
@@ -73,8 +73,8 @@
                 </div>
 
                 <div class="row-actions">
-                  <button id="addRowBtn" type="button" aria-label="Add cue" title="Add cue">+</button>
-                  <button id="removeRowBtn" type="button" aria-label="Remove cue" title="Remove cue">−</button>
+                  <button id="addCueBtn" type="button" aria-label="Add cue" title="Add cue">+</button>
+                  <button id="removeCueBtn" type="button" aria-label="Remove cue" title="Remove cue">−</button>
                 </div>
               </div>
             </section>
@@ -126,7 +126,7 @@
           </aside>
         </div>
 
-        <div id="rowsScroll" class="rows-scroll">
+        <div id="cuesScroll" class="cues-scroll">
           <main id="rows" class="rows" aria-label="Cues"></main>
         </div>
       </section>
@@ -145,19 +145,19 @@
         <section class="selected-group" aria-label="Live cue">
           <div class="selected-group-head">
             <div>
-              <h3 id="currentSceneTitle">A</h3>
+              <h3 id="currentCueTitle">A</h3>
               <p class="selected-group-hint">Live cue faders · click name to rename</p>
             </div>
             <button
-              id="channelsSceneMenuBtn"
+              id="channelsCueMenuBtn"
               type="button"
-              class="scene-menu-btn"
+              class="cue-menu-btn"
               title="Cue options"
               aria-label="Cue options"
               aria-haspopup="menu"
               aria-expanded="false"
             >
-              <span class="scene-menu-dots" aria-hidden="true"></span>
+              <span class="cue-menu-dots" aria-hidden="true"></span>
             </button>
           </div>
           <div id="selectedGroupFaders" class="faders selected-group-faders"></div>
@@ -170,7 +170,7 @@
             <h2>Fixtures</h2>
           </div>
           <div class="patch-actions">
-            <button id="addFixtureGroupBtn" type="button" class="btn-quiet">+ Group</button>
+            <button id="addFixtureGroupBtn" type="button" class="quiet">+ Group</button>
           </div>
         </div>
 
@@ -239,67 +239,35 @@
       </section>
     </div>
 
-    <dialog id="confirmDialog" class="dialog">
-      <form method="dialog" class="dialog-body">
-        <h2 id="confirmTitle">Are you sure?</h2>
-        <p id="confirmMessage">This cannot be undone.</p>
-        <div class="dialog-actions">
-          <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
-          <button value="confirm" type="submit" id="confirmConfirmBtn">Confirm</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="sceneNameDialog" class="dialog">
-      <form method="dialog" class="dialog-body" id="sceneNameForm">
-        <h2 id="sceneNameDialogTitle">New cue</h2>
-        <label class="dialog-field">
-          Name
-          <input
-            id="sceneNameInput"
-            type="text"
-            maxlength="40"
-            autocomplete="off"
-            spellcheck="false"
-            required
-          />
-        </label>
-        <div class="dialog-actions">
-          <button value="cancel" type="submit" formnovalidate class="btn-quiet">Cancel</button>
-          <button value="confirm" type="submit" id="sceneNameConfirmBtn">Add</button>
-        </div>
-      </form>
-    </dialog>
-
-    <div id="sceneMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel scene-menu-panel">
+    <div id="cuePicker" class="popup-menu" hidden>
+      <div class="menu popup-menu-panel cue-picker-panel">
         <div class="popup-menu-bar">
           <span class="popup-menu-label">Cues</span>
         </div>
-        <div id="sceneMenuList" class="popup-menu-list" role="menu" aria-label="Cues"></div>
+        <div id="cuePickerList" class="popup-menu-list" role="menu" aria-label="Cues"></div>
       </div>
     </div>
 
-    <div id="sceneRowMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Cue actions"></div>
+    <div id="cueMenu" class="popup-menu" hidden>
+      <div class="menu popup-menu-panel small-menu-panel">
+        <div id="cueMenuList" class="popup-menu-list" role="menu" aria-label="Cue actions"></div>
       </div>
     </div>
 
-    <div id="channelsSceneMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="channelsSceneMenuList" class="popup-menu-list" role="menu" aria-label="Cue options"></div>
+    <div id="channelsCueMenu" class="popup-menu" hidden>
+      <div class="menu popup-menu-panel small-menu-panel">
+        <div id="channelsCueMenuList" class="popup-menu-list" role="menu" aria-label="Cue options"></div>
       </div>
     </div>
 
     <div id="faderNameMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel scene-row-menu-panel">
+      <div class="menu popup-menu-panel small-menu-panel">
         <div id="faderNameMenuList" class="popup-menu-list" role="menu" aria-label="Fader actions"></div>
       </div>
     </div>
 
     <div id="countMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel count-menu-panel">
+      <div class="menu popup-menu-panel count-menu-panel">
         <div class="popup-menu-bar">
           <span class="popup-menu-label">Channels</span>
         </div>
@@ -308,7 +276,7 @@
     </div>
 
     <div id="fixtureGroupMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel fixture-group-menu-panel">
+      <div class="menu popup-menu-panel fixture-group-menu-panel">
         <div class="popup-menu-bar">
           <span class="popup-menu-label">Group</span>
         </div>
@@ -317,7 +285,7 @@
     </div>
 
     <div id="channelMenu" class="popup-menu popup-menu-flyout" hidden>
-      <div class="popup-menu-panel" id="channelMenuRoot">
+      <div class="menu popup-menu-panel" id="channelMenuRoot">
         <div class="popup-menu-bar">
           <span class="popup-menu-label">Ranges</span>
         </div>
@@ -331,7 +299,7 @@
         />
         <div id="channelMenuList" class="popup-menu-list" role="menu" aria-label="Channel groups"></div>
       </div>
-      <div class="popup-menu-panel popup-menu-submenu" id="channelMenuSub" hidden>
+      <div class="menu popup-menu-panel popup-menu-submenu" id="channelMenuSub" hidden>
         <div class="popup-menu-bar">
           <span id="channelMenuSubLabel" class="popup-menu-label">Channels</span>
         </div>

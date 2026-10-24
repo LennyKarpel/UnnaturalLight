@@ -35,7 +35,7 @@ const SESSION_FILE = path.join(DATA_DIR, "session.json");
 const FRAME_MS = 25;
 const SAVE_DELAY_MS = 500;
 /** Only these are served (never node_modules, server/ or its data). */
-const PUBLIC = ["index.html", "console/", "stage/", "shared/"];
+const PUBLIC = ["index.html", "page/", "console/", "stage/", "shared/"];
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -274,7 +274,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   console.log(`    DMX       : ${flag("--fake-dmx") ? "fake output (--fake-dmx)" : "Enttec DMX USB Pro via USB"}`);
   console.log(`    this Mac  : ${local}`);
   if (LAN) {
-    for (const ip of lanAddresses()) console.log(`    remote    : http://${ip}:${PORT}/console/console.html?token=${TOKEN}`);
+    for (const ip of lanAddresses()) console.log(`    remote    : http://${ip}:${PORT}/index.html?token=${TOKEN}`);
   } else {
     console.log("    remote    : off (start with --lan to allow other machines)");
   }

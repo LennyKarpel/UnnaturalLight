@@ -95,7 +95,7 @@ You can also open each on its own: `localhost:8080/console/console.html` and `lo
 
 ### Running from another computer
 
-Start the server with `./server.sh --lan`. The terminal prints a **remote** address with a `token=` on the end; open that address on the other computer (same network). Any number of consoles can be open at once, here or elsewhere: they all show and edit the same show, and a move on one appears on the others. The DMX interfaces stay plugged into the server's computer. Other computers can't connect without the token, which changes each time the server starts.
+Start the server with `./server.sh --lan`. The terminal prints a **remote** address with a `token=` on the end; open that address on the other computer (same network). It opens the combined page (console and stage); use the Console / Both / Stage switch to show just one. Any number of consoles can be open at once, here or elsewhere: they all show and edit the same show, and a move on one appears on the others. The DMX interfaces stay plugged into the server's computer. Other computers can't connect without the token, which changes each time the server starts.
 
 ---
 
@@ -401,7 +401,7 @@ With several universes, channel numbers are shown and typed as **universe/channe
 To keep copies, share them or move to another computer:
 
 - **Console** (buttons in the page header): **Save set** downloads the set (songs, cues, patch, fixtures, fader names, universes) as a file; **Load set** opens one; **New set** starts fresh (it asks first if you have unsaved changes). Click the set's name beside the title (or **⋮ → Rename**) to rename it.
-- The set file also holds the **stage** (box size, lights, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; an older set file without one leaves the stage as it is. A `stage.json` from the stage's old **Export** button loads through **Load set** too (it replaces just the stage). **New set** keeps the stage.
+- The set file also holds the **stage** (box size, lights, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; one saved without it (the show server was offline) leaves the stage as it is. **New set** keeps the stage.
 
 ---
 
@@ -414,7 +414,7 @@ To keep copies, share them or move to another computer:
 | `←` `→` | pan (`⇧` ×10) |
 | `↑` `↓` | tilt (`⇧` ×10) |
 | `+` `−` | dimmer (`⇧` ×10) |
-| `]` `[` | beam wider / narrower (`⇧` ×10) |
+| `]` `[` | zoom wider / narrower (`⇧` ×10) |
 | `H` | Home (pan / tilt to 128) |
 | `T` | Aim at spot |
 | `Z` | Set zero here |
@@ -460,7 +460,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | The console says **Connecting to the show server…** | Start `./server.sh` (or check it's still running in its terminal). The console reconnects by itself. |
 | **Connect DMX Pro** is greyed out | The console isn't connected to the show server (see above). |
 | **No DMX USB Pro found** | Plug it into the computer running the server, check the USB cable, close other software using it, unplug and replug. |
-| Another computer can't open the console | Start the server with `--lan` and use the full address it prints, including `?token=…`. |
+| Another computer can't open the console | Start the server with `--lan` and use the full address it prints, including `?token=…`. The token changes each time the server starts. |
 | The fixture library won't load | Check your internet connection. Generic console types still work. |
 | A light wasn't added to the console | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the light's inspector. |
 | Moving a light on the stage also moved another | They share a fader in the console's patch. |
@@ -495,20 +495,38 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the pages on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
 
+The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
+
 | Path | What's in it |
 |---|---|
 | `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider, and the header with the console's set name, set buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`) |
+| `page/page.js`, `page.css` | The combined page's header, panes and set menu, and its styles |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
 | `server/show.js` | The show as the server holds it: set, live mix, timed fades, held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/data/` | `session.json` (the set, with the stage under `stage`) and `dmx.json` (which device is on which universe); not in git |
-| `console/console.html`, `app.js`, `styles.css` | Console page, logic and styles |
+| `console/console.html`, `styles.css` | Console page and styles |
+| `console/app.js` | Starts the console and wires its controls; set new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
+| `console/state.js` | The console's state (the set being worked on, the active song's cues, status), shared by its modules |
+| `console/dom.js` | The console page's elements |
+| `console/live.js` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
+| `console/faders.js` | Fader names and menu, and what's drawn on fader rows (color bars, pan / tilt pads, blackout / flash buttons, fixture outlines) |
+| `console/songs-page.js`, `cues.js` | Songs page: the song list, and the cue rows with their menus |
+| `console/patch-page.js`, `fixtures-page.js` | Patch and Fixtures pages (and the channel / count / group pickers) |
+| `console/nav.js` | Page tabs: set name, tab order, routing |
 | `console/server-link.js` | Console side of the show-server link |
-| `console/patch.js` | Fader patch; universe and channel-address helpers |
-| `console/fixtures.js`, `set.js`, `tunes.js` | Fixtures, set save / load, songs and cues (called tunes and transitions in the code) |
+| `console/patch.js` | Fader patch; the set's universe count (channel addresses for the current set) |
+| `console/fixtures.js`, `set.js`, `songs.js` | Fixtures, set save / load, songs and cues |
 | `console/stage-link.js` | Console side of the live link with the stage |
-| `stage/stage.html`, `stage.css`, `stage.js` | Stage page (with the import map for three.js), styles, 3D view / plan / inspector / input |
+| `stage/stage.html`, `stage.css` | Stage page (with the import map for three.js) and styles |
+| `stage/stage.js` | Starts the stage; keeps up with other stage pages and the show server; ⌥-click traces |
+| `stage/state.js` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the page is in the middle of (placing, aiming) |
+| `stage/view3d.js`, `plan.js` | The 3D view and the plan view, with their mouse handling |
+| `stage/sidebar.js` | Fixture list, inspector and key strip |
+| `stage/actions.js`, `keys.js` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
+| `stage/dialogs.js` | Box size, View settings, Place rig and Place fixture dialogs |
+| `stage/link.js` | Linking stage lights to console fixtures and channels, and registering them in the console |
 | `stage/stage-model.js` | Light and rig data, DMX values ↔ angles / color / beam, aiming maths, save format |
 | `stage/console-link.js` | Stage side of the live link |
 | `stage/show-link.js` | Stage side of the show-server link: keeps the stage with the show |
@@ -516,10 +534,94 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B), used by both pages in place of the browser's |
+| `shared/theme.css` | The look of the whole app: colors, fonts, title bars, and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
+| `shared/ask.js` | The confirm / name dialog (new set, new song, remove …), used by the console and the page header |
+| `shared/server-socket.js` | The WebSocket to the show server (token, reconnecting), used by the console and the stage |
+| `shared/stage-bus.js` | The console ↔ stage live link's channel and message names |
+| `shared/live-fields.js` | Which set fields change while playing, used by the server and the console |
+| `shared/address.js` | Universes and channel addresses (`2/45` ↔ 557) |
+| `shared/attributes.js` | Light attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
+| `shared/color.js`, `numbers.js`, `html.js`, `ids.js` | Small helpers: hex ↔ R/G/B, clamping to 0–255 and ranges, escaping text for HTML, new ids |
 
-**Show server link.** Consoles connect to `/ws` (other machines add `?token=`). On connect the server sends `hello` (set, live mix, DMX status); an empty server takes the first console's set (`seed`). Consoles send only what changed: the whole `set` for structural edits, single-cell `levels` while dragging, `live` fields (master, subs, crossfade, Current / Next, fade time, blackout snapshots), `hold` (flash / blackout buttons held, released if the console disconnects), `go` / `pause` / `stop`, and `dmx-connect` / `dmx-disconnect` (answered with a `reply`). The server rebroadcasts edits to the other consoles and sends `live` on every fade step and `dmx` when output status changes. A value just changed on a console wins over the server's broadcasts for 0.6 s so dragging doesn't jitter.
+### How it all talks
 
-**Live link.** The console and stage talk over a `BroadcastChannel` named `unnaturallight.dmx` (same origin, any tabs or frames). The console sends its output levels for every universe, which faders feed each channel, its fixtures, fader names and levels, and the master / submaster / crossfade state, on every change and once a second. The stage sends "set channel N to V" requests, register / unregister requests for lights it places or deletes, and its light list (for traces). With several consoles open in one browser, every one sends its output; each message carries the newest show-server message it reflects (the server numbers its messages to consoles, `seq`, always increasing), and the stage drops anything older than what it already has, so a console the browser runs slowly or has frozen (a background tab) can't hold the stage back or pull it to an earlier moment (a flash that was already let go, say). A change made in a console is marked as local, and for a moment after it the stage ignores other consoles' copies, which may not include it yet. Only the console holding the `unnaturallight.stage-link` Web Lock carries out the stage's set / register / unregister requests, so nothing is applied twice. The console's reply to a register request reaches every stage tab; each tab acts only on replies for lights it asked about, so a second stage window never undoes another's new lights. The stage takes the console's latest values once per frame (however fast messages arrive) and draws its 3D view only when something changed, since in the split view it shares one browser thread with the console.
+```
+   browser (this computer or another one)            show computer
+  ┌──────────────────────────────────────┐        ┌──────────────────────────┐
+  │  console ──┐                         │  /ws   │  show server             │
+  │            │ BroadcastChannel        │◀──────▶│  (server/server.js)      │    USB    ┌───────────────┐
+  │            │ "unnaturallight.dmx"    │        │   · holds the show       │──────────▶│ DMX USB Pro   │──▶ lights
+  │  stage  ◀──┘                         │◀──────▶│   · runs fades, 40 Hz    │  (one per │ (per universe)│
+  │            (+ localStorage between   │ /ws?   │   · saves session.json   │  universe)└───────────────┘
+  │             stage tabs)              │ role=  └──────────────────────────┘
+  └──────────────────────────────────────┘ stage
+```
+
+There are four links. The **show server** is the one that counts: it holds the show, runs the fades and drives the DMX interfaces, so closing or backgrounding a browser tab never affects the lights. Every console and stage page is a view of it.
+
+#### 1. Console ↔ show server (WebSocket `/ws`)
+
+`console/server-link.js`, over `shared/server-socket.js`.
+
+- **Connecting.** The server answers with `hello`: the set, the live mix (master, submasters, crossfade, Current / Next, fade time, blackout snapshots) and the DMX status. An empty server (first run) takes the first console's set (`seed`).
+- **Console → server: only what changed.**
+
+  | Message | When |
+  |---|---|
+  | `set` | the set's structure changed (the whole set) |
+  | `levels` | single fader cells, while dragging |
+  | `live` | live fields (`shared/live-fields.js`) |
+  | `hold` | flash / blackout buttons held |
+  | `go` / `pause` / `stop` | transport |
+  | `stage` | a set file with a stage was loaded |
+  | `dmx-connect` / `dmx-disconnect` / `get-stage` | requests, answered with a `reply` |
+
+- **Server → consoles.** Each edit is passed on to the other consoles. `live` is sent on every fade step, and `dmx` whenever the output status changes. Every message to a console carries `seq`, a number that always increases (the stage link uses it, see 3).
+- **No jitter while dragging.** A value just changed on a console wins over the server's broadcasts for 0.6 s.
+- **Dropped connection.** The console retries every second. Held flash / blackout buttons are released. Edits made while disconnected aren't sent: on reconnecting, the console takes the server's show.
+
+#### 2. Stage ↔ show server (WebSocket `/ws?role=stage`)
+
+`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, lights) with the show, so it's in the set file and the same on every computer.
+
+- **Connecting.** `hello` carries the server's stage. The page sends its own stage instead if the server has none yet, or if the page was edited while it couldn't reach the server.
+- **Edits.** After an edit made on the stage page, it sends the whole stage (`stage`), and the server passes it on to the other stage pages. Values that only followed the console aren't sent; the console already has them.
+- **Set files.** A console's **Save set** asks for the stage (`get-stage`) to put it in the file; **Load set** sends a file's stage to the server, which passes it to the stage pages.
+- **What stage pages hear.** Only `stage` messages: no set, fades or `seq`.
+
+#### 3. Console ↔ stage, live (BroadcastChannel `unnaturallight.dmx`)
+
+`console/stage-link.js` ↔ `stage/console-link.js`; the channel and message names are in `shared/stage-bus.js`. A `BroadcastChannel` connects pages of the same site in the same browser (tabs, windows, or the two frames of the combined page) and nothing else. So on each computer the stage follows a console open in that browser.
+
+- **Console → stage: `levels`.** Output levels for every universe, which faders feed each channel, the console's fixtures, fader names and levels, and the master / submaster / crossfade state. It's sent on every change and once a second. With no message for 2.5 s, the stage shows the console as offline; while the console is closed, the stage reads the fixtures from the console's saved session.
+- **Stage → console:**
+
+  | Message | What |
+  |---|---|
+  | `set` | set channel N to V |
+  | `register` / `unregister` | for lights it places or deletes |
+  | `stage` | its light list, for traces |
+  | `stage-select` | which fixtures are selected, so the console highlights them |
+
+- **Hello.** A stage that opens sends `hello`, and consoles answer at once. A console that opens sends `stage-hello`, and stages send their lights again.
+- **Several consoles in one browser.** They all send their output, each stamped with the newest server `seq` it reflects. The stage drops anything older than what it already has, so a console the browser runs slowly (a background tab) can't pull it back to an earlier moment, such as a flash that was already let go.
+- **The console you're working in wins.** A change made in a console is marked `local`, and for 0.6 s afterwards the stage ignores other consoles' copies, which may not include it yet.
+- **Nothing applied twice.** Only the console holding the `unnaturallight.stage-link` Web Lock carries out the stage's `set` / `register` / `unregister` requests. The reply to a register request (`registered`) reaches every stage tab, and each tab acts only on replies for lights it asked about.
+- **Smooth drawing.** A value just sent from the stage wins over the console's broadcasts for 0.6 s, so dragging doesn't jitter. The stage takes the console's latest values once per frame and redraws only when something changed, because in the combined page it shares one browser thread with the console.
+
+#### 4. Stage ↔ stage (browser storage)
+
+Stage pages in the same browser also share the stage through `localStorage` (`unnaturallight.stage.v1`): each save there fires a `storage` event in the other stage tabs, which take it in. A page keeps its own values for linked channels (those follow the console).
+
+#### DMX output
+
+Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved, and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.js`). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
+
+#### Other computers
+
+By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the combined page with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before its frames load, and the console and stage frames read it from there. A console or stage page opened on its own takes `?token=…` the same way.
+
+### Other details
 
 **Channel numbering.** Channels run on across universes (universe 2 channel 1 = 513, up to 8 × 512); the UI shows `universe/channel` when there's more than one universe.
 
@@ -527,4 +629,4 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 
 **Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.setlist.session.v1`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage.v1`. Combined-page layout: `unnaturallight.shell`.
 
-**Stage (`stage` in the set file and `session.json`; version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges). Version 1 files (angles, 0–1 intensity, hex color, beam degrees) still load.
+**Stage (`stage` in the set file and `session.json`; version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

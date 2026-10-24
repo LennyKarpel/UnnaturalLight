@@ -20,15 +20,14 @@
  * broadcasts so dragging doesn't jitter (as the stage link does).
  *
  * Other machines open the console with ?token=… (printed by the server).
+ * The connection itself (token, reconnecting) is ../shared/server-socket.js.
  */
 
-/** Set fields that change while playing (mirrors LIVE_FIELDS in server/show.js). */
-export const LIVE_FIELDS = ["master", "cross", "fromSub", "toSub", "fromRow", "toRow", "selectedRow", "fadeTime"];
-export const SNAPSHOT_FIELDS = ["masterBlackoutSnapshot", "fromSubBlackoutSnapshot", "toSubBlackoutSnapshot"];
+import { openServerSocket } from "../shared/server-socket.js";
+import { LIVE_FIELDS, SNAPSHOT_FIELDS } from "../shared/live-fields.js";
+
 /** How long a value changed here wins over the server's broadcasts. */
 const PENDING_MS = 600;
-const RECONNECT_MS = 1000;
-const TOKEN_KEY = "unnaturallight.token";
 
 /**
  * @typedef {{
@@ -56,10 +55,10 @@ function structureKey(set) {
   return JSON.stringify(rest, (key, value) => (key === "levels" ? undefined : value));
 }
 
-/** transition id → copy of its levels */
+/** cue id → copy of its levels */
 function levelsById(set) {
   const map = new Map();
-  for (const tune of set.tunes) for (const t of tune.transitions) map.set(t.id, [...t.levels]);
+  for (const song of set.songs) for (const t of song.cues) map.set(t.id, [...t.levels]);
   return map;
 }
 
@@ -67,23 +66,17 @@ const holdsKey = (flashing, blackedOut) => `${[...flashing].sort((a, b) => a - b
 
 /** @param {ServerLinkApi} api */
 export function createServerLink(api) {
-  /** @type {WebSocket | null} */
-  let ws = null;
   let connected = false;
   let queued = false;
   /** What the server and this console agree on (null until the server's hello). */
   let agreed = null;
-  /** field / "transitionId:fader" → until (ms): changed here, not yet confirmed */
+  /** field / "cueId:fader" → until (ms): changed here, not yet confirmed */
   const pending = new Map();
   let nextRequest = 1;
   /** The newest server message heard (its `seq`), for the stage link. */
   let seq = 0;
   /** request id → resolve */
   const replies = new Map();
-
-  const params = new URLSearchParams(location.search);
-  const token = params.get("token") ?? sessionStorage.getItem(TOKEN_KEY);
-  if (token) sessionStorage.setItem(TOKEN_KEY, token);
 
   const isPending = (key) => {
     const until = pending.get(key);
@@ -95,7 +88,7 @@ export function createServerLink(api) {
   const touch = (key) => pending.set(key, Date.now() + PENDING_MS);
 
   function send(msg) {
-    if (connected && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    if (connected) socket.send(msg);
   }
 
   const liveOf = (v) => Object.fromEntries([...LIVE_FIELDS.map((f) => [f, v.set[f]]), ...SNAPSHOT_FIELDS.map((f) => [f, v.snapshots[f]])]);
@@ -124,8 +117,8 @@ export function createServerLink(api) {
       agreed.levels = levelsById(v.set);
     } else {
       const cells = [];
-      for (const tune of v.set.tunes) {
-        for (const t of tune.transitions) {
+      for (const song of v.set.songs) {
+        for (const t of song.cues) {
           const was = agreed.levels.get(t.id);
           if (!was) continue;
           for (let i = 0; i < t.levels.length; i++) {
@@ -164,18 +157,8 @@ export function createServerLink(api) {
     return out;
   }
 
-  function connect() {
-    const url = new URL("/ws", location.href);
-    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    if (token) url.searchParams.set("token", token);
-    ws = new WebSocket(url);
-    ws.addEventListener("message", (e) => {
-      let msg;
-      try {
-        msg = JSON.parse(e.data);
-      } catch {
-        return;
-      }
+  const socket = openServerSocket({
+    onMessage(msg) {
       if (Number.isFinite(msg.seq)) seq = Math.max(seq, msg.seq);
       if (msg.type === "hello") {
         connected = true;
@@ -212,18 +195,16 @@ export function createServerLink(api) {
         replies.get(msg.id)?.(msg);
         replies.delete(msg.id);
       }
-    });
-    ws.addEventListener("close", () => {
+    },
+    onClose() {
       const was = connected;
       connected = false;
       agreed = null;
       for (const resolve of replies.values()) resolve({ ok: false, error: "Lost the show server" });
       replies.clear();
       if (was) api.onConnection(false);
-      setTimeout(connect, RECONNECT_MS);
-    });
-  }
-  connect();
+    },
+  });
 
   return {
     get connected() {

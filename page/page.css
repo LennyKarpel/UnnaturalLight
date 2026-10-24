@@ -1,0 +1,122 @@
+/* The combined page (../index.html): its header and the stage / console panes. */
+
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13px;
+}
+.bar {
+  height: var(--bar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: var(--panel);
+  gap: 12px;
+  border-bottom: 1px solid var(--track);
+}
+.show-controls button, .swap { padding: 3px 9px; white-space: nowrap; }
+.show-controls select { padding: 2px 4px; }
+.show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
+
+/* Set name (click to rename) and its ⋮ menu, from the console. */
+.brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.set-name {
+  min-width: 0;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  padding: 1px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.set-name:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.set-name-input {
+  width: 14rem;
+  border-color: var(--accent);
+  padding: 1px 4px;
+}
+.dots { padding: 3px 7px; }
+.dots span {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+  margin: 5px 0;
+}
+.menu {
+  position: fixed;
+  z-index: 10;
+  min-width: 140px;
+}
+
+/* Console status message, then the set and DMX buttons. */
+.status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.status[data-state="connected"] { color: var(--ok); }
+.status[data-state="error"] { color: var(--warn); }
+.show-controls { display: inline-flex; align-items: center; gap: 6px; }
+.show-controls[hidden] { display: none; }
+.sep { width: 1px; height: 18px; background: var(--track); }
+
+.controls { display: flex; align-items: center; gap: 8px; flex: none; }
+/* Panes: stage on the left, console on the right (⇄ swaps them). Frames are absolutely
+   placed so a hidden console stays rendered (its fades and DMX output
+   keep running) underneath the stage in Stage view. */
+.panes { position: relative; height: calc(100% - var(--bar)); }
+.panes iframe {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border: 0;
+  background: var(--bg);
+}
+.divider {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  margin-left: -3px;
+  cursor: col-resize;
+  z-index: 3;
+  background: transparent;
+}
+.divider::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--track);
+}
+.divider:hover::after, body.dragging .divider::after { background: var(--accent); width: 2px; left: 2px; }
+/* Grip in the middle: a small pill, so it reads as draggable. */
+.divider .grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 44px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--track);
+  z-index: 1;
+  pointer-events: none;
+}
+.divider:hover .grip, body.dragging .divider .grip { border-color: var(--accent); }
+body.dragging iframe { pointer-events: none; }
+body.dragging { cursor: col-resize; user-select: none; }
