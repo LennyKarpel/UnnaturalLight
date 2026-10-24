@@ -3,9 +3,11 @@
  * (same origin, other tabs; works whether or not the DMX Pro is connected).
  *
  * Console → stage: the 512 output levels, which fader(s) each patched
- * channel comes from, and the console's fixtures — on every output change made
- * here (marked `local`), and from the leader (below) for changes from the
- * server, when the stage says hello, and as a heartbeat.
+ * channel comes from, and the console's fixtures — on every output change
+ * (marked `local` if made here, not from the server), when the stage says
+ * hello, and as a heartbeat. Every open console sends; each message carries
+ * the newest show-server message it reflects (`seq`), and the stage keeps
+ * the newest, so a console the browser runs slowly can't hold it back.
  *
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
  * are moved (in the transition(s) currently on the output) so the output
@@ -28,6 +30,7 @@ const HEARTBEAT_MS = 1000;
 /**
  * @typedef {{
  *   levels: () => Map<number, number>,
+ *   serverSeq: () => number,
  *   patch: () => { channel: number, max: number }[][],
  *   live: () => { rows: number[][], fromRow: number, toRow: number, fromSub: number, toSub: number, cross: number, master: number },
  *   fixtures: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
@@ -55,10 +58,7 @@ let trace = null;
 /**
  * Several console tabs in this browser all mirror the show server, so only
  * one of them (whichever holds the lock) carries out the stage's edits
- * (otherwise each tab would register the same light again) and passes on
- * changes that came from the server. A change made in a console is sent by
- * that console straight away (marked `local`), so it never waits on the
- * leader, which may be in a background window the browser runs slowly.
+ * (otherwise each tab would register the same light again).
  */
 let leader = false;
 /** This console, so the stage can tell consoles apart. */
@@ -70,7 +70,7 @@ const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
 
 /**
  * Tell the stage the output changed (coalesced to one message per tick).
- * `local: false` = the change came from the server (only the leader sends it).
+ * `local: false` = the change came from the server.
  */
 export function notifyStage({ local = true } = {}) {
   if (local) localChange = true;
@@ -107,7 +107,6 @@ function send() {
   trace?.refresh();
   const local = localChange;
   localChange = false;
-  if (!leader && !local) return;
   const levels = outputLevels();
   /** channel → 1-based fader numbers patched to it */
   const faders = new Map();
@@ -118,6 +117,7 @@ function send() {
     type: "levels",
     source: SOURCE_ID,
     local,
+    seq: api.serverSeq(),
     levels,
     faders: [...faders.entries()],
     fixtures: api.fixtures().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({

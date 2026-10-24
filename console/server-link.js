@@ -76,6 +76,8 @@ export function createServerLink(api) {
   /** field / "transitionId:fader" → until (ms): changed here, not yet confirmed */
   const pending = new Map();
   let nextRequest = 1;
+  /** The newest server message heard (its `seq`), for the stage link. */
+  let seq = 0;
   /** request id → resolve */
   const replies = new Map();
 
@@ -174,6 +176,7 @@ export function createServerLink(api) {
       } catch {
         return;
       }
+      if (Number.isFinite(msg.seq)) seq = Math.max(seq, msg.seq);
       if (msg.type === "hello") {
         connected = true;
         pending.clear();
@@ -225,6 +228,10 @@ export function createServerLink(api) {
   return {
     get connected() {
       return connected;
+    },
+    /** The newest server message heard (0 = none yet). */
+    get seq() {
+      return seq;
     },
     /** The console changed: send what's different (once per tick). */
     sync() {

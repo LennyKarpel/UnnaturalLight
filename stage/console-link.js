@@ -63,12 +63,21 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
   /** The console last worked in, and until when its messages win. */
   let activeSource = null;
   let activeUntil = 0;
+  /**
+   * The newest show-server message any console's output reflected (its
+   * `seq`). A console the browser runs slowly (a background tab) can send
+   * copies that are seconds out of date; they're dropped.
+   */
+  let newestSeq = 0;
 
   bus?.addEventListener("message", (e) => {
     const msg = e.data;
     if (msg?.type === "stage-hello") { onStageHello(); return; }
     if (msg?.type === "registered" && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
     if (msg?.type !== "levels" || !Array.isArray(msg.levels)) return;
+    const seq = Number.isFinite(msg.seq) ? msg.seq : 0;
+    if (!msg.local && seq < newestSeq) return;
+    newestSeq = Math.max(newestSeq, seq);
     lastHeard = Date.now();
     if (msg.local) {
       activeSource = msg.source;

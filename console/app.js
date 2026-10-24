@@ -2124,12 +2124,20 @@ function flashGroup(fader) {
 
 const dimmerFaderList = () => Array.from({ length: FADER_COUNT }, (_, i) => i).filter(isDimmerFader);
 
-/** While `btn` is held, `faders()` are in `set` (blackout / flash); released, they're out. */
-function holdButton(btn, set, faders) {
+/**
+ * While `btn` is held, `faders()` are in `set` (blackout / flash); released,
+ * they're out. `serverSet()` is the server's copy, which still has them until
+ * it hears the release: drop them there too, so the output (and the stage)
+ * let go at once.
+ */
+function holdButton(btn, set, serverSet, faders) {
   let held = [];
   const release = () => {
     if (!held.length) return;
-    for (const f of held) set.delete(f);
+    for (const f of held) {
+      set.delete(f);
+      serverSet().delete(f);
+    }
     held = [];
     pushToDmx({ persist: false });
   };
@@ -2155,14 +2163,14 @@ function addDimmerButtons(grid, fader, col) {
   blackout.dataset.fader = String(fader);
   blackout.textContent = "B";
   blackout.title = `Blackout ${faderName(fader)}: output 0 while held`;
-  holdButton(blackout, blackedOutFaders, () => [fader]);
+  holdButton(blackout, blackedOutFaders, () => serverBlackedOut, () => [fader]);
   const flash = document.createElement("button");
   flash.type = "button";
   flash.className = "dim-btn dim-flash";
   flash.dataset.fader = String(fader);
   flash.textContent = "F";
   flash.title = `Flash ${faderName(fader)}: full and white while held`;
-  holdButton(flash, flashingFaders, () => flashGroup(fader));
+  holdButton(flash, flashingFaders, () => serverFlashing, () => flashGroup(fader));
   box.append(blackout, flash);
   grid.append(box);
 }
@@ -5449,6 +5457,7 @@ try { if (window.parent !== window) window.parent.onConsoleHeader?.(consoleHeade
 // Live link to the Stage page: send output levels, apply fader moves made there.
 startStageLink({
   levels: computeChannelLevels,
+  serverSeq: () => serverLink?.seq ?? 0,
   patch: () => patch,
   live: () => ({ rows, fromRow, toRow, fromSub, toSub, cross, master }),
   fixtures: () => fixtures,

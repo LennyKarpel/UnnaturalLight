@@ -94,9 +94,18 @@ const dmx = createDmx({
 /** @type {Map<import("ws").WebSocket, { id: string, role: "console" | "stage" }>} */
 const clients = new Map();
 
+/**
+ * Numbers every message to consoles, always increasing (a clock reading, so
+ * also across restarts): a console tells the stage which server message its
+ * output reflects, so the stage can drop late copies from a console the
+ * browser runs slowly.
+ */
+let lastSeq = 0;
+const nextSeq = () => (lastSeq = Math.max(lastSeq + 1, Date.now()));
+
 /** Send to every client of `role` (consoles by default) but `except`. */
 function broadcast(msg, except = null, role = "console") {
-  const text = JSON.stringify(msg);
+  const text = JSON.stringify(role === "console" ? { ...msg, seq: nextSeq() } : msg);
   for (const [ws, client] of clients) {
     if (ws !== except && client.role === role && ws.readyState === ws.OPEN) ws.send(text);
   }
@@ -221,7 +230,7 @@ wss.on("connection", (ws, req) => {
   clients.set(ws, client);
   ws.send(JSON.stringify(role === "stage"
     ? { type: "hello", stage }
-    : { type: "hello", clientId: client.id, set: show.serialized(), live: show.live(), outputs: dmx.status() }));
+    : { type: "hello", seq: nextSeq(), clientId: client.id, set: show.serialized(), live: show.live(), outputs: dmx.status() }));
   ws.on("message", (data) => {
     let msg;
     try {

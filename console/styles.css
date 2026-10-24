@@ -831,6 +831,25 @@ button:disabled {
   margin-bottom: 0.75rem;
 }
 
+/* Wide: the submaster and master sit beside the transport only, and the
+   Live strip runs underneath all three, to the right edge. */
+@media (min-width: 901px) {
+  .faders-stage-main {
+    display: contents;
+  }
+
+  .faders-stage .transport {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+
+  .faders-stage .live-row {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 .active-tune-bar {
   display: flex;
   align-items: baseline;
