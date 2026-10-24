@@ -13,6 +13,7 @@ import {
   registerLayout, registerLabels, applyFixture,
 } from "./stage-model.js";
 import { createConsoleLink } from "./console-link.js";
+import { createShowLink } from "./show-link.js";
 import { createFixturePicker } from "./fixture-library.js";
 import { createTracePopover } from "../shared/trace.js";
 
@@ -82,10 +83,23 @@ function stopFlash() {
 }
 
 let saveTimer = 0;
-function save() {
+let shareQueued = false;
+/** Set up at boot (below): keeps the stage with the show on the show server. */
+let showLink = null;
+/**
+ * Save the stage in this browser and (`share`: an edit made here) on the
+ * show server, for the other stage pages and the set file. Values that only
+ * followed the console aren't shared: the console has them, and every open
+ * stage page would otherwise send the whole stage many times a second.
+ */
+function save({ share = true } = {}) {
+  shareQueued ||= share;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize())); } catch { /* storage unavailable */ }
+    const data = serialize();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+    if (shareQueued) showLink?.send(data);
+    shareQueued = false;
   }, 200);
 }
 
@@ -1845,33 +1859,6 @@ for (const [k, el] of Object.entries(boxInputs)) {
 
 document.getElementById("addBtn").addEventListener("click", (e) => { e.currentTarget.blur(); togglePlaceFixture(); });
 
-document.getElementById("exportBtn").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "stage.json";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
-
-const importFile = document.getElementById("importFile");
-document.getElementById("importBtn").addEventListener("click", () => importFile.click());
-importFile.addEventListener("change", async () => {
-  const file = importFile.files?.[0];
-  importFile.value = "";
-  if (!file) return;
-  try {
-    loadData(JSON.parse(await file.text()));
-  } catch {
-    return;
-  }
-  syncBoxInputs();
-  updateBox();
-  updateSurfaces();
-  renderInspector();
-  changed();
-});
-
 // ---------------------------------------------------------------------
 // View settings dialog
 // ---------------------------------------------------------------------
@@ -2011,6 +1998,9 @@ const consoleLink = createConsoleLink({
   onRegistered: (results) => onRegistered(results),
 });
 const consoleStatusEl = document.getElementById("consoleStatus");
+// In the combined page (../index.html) the console is always beside the
+// stage, so the pill only matters when the stage is open on its own.
+consoleStatusEl.hidden = window.parent !== window;
 
 const sortedConsoleFixtures = () => [...consoleLink.fixtures()].sort((a, b) => a.channelStart - b.channelStart);
 const consoleFixtureById = (id) => consoleLink.fixtures().find((c) => c.id === id) ?? null;
@@ -2050,7 +2040,7 @@ function applyConsoleLevels() {
   }
   updateConsoleStatus();
   requestRegistrations();
-  if (moved) { syncScene(); drawPlan(); renderList(); save(); publishStage(); }
+  if (moved) { syncScene(); drawPlan(); renderList(); save({ share: false }); publishStage(); }
   syncInspector();
   renderHud();
   trace.refresh();
@@ -2346,19 +2336,19 @@ function onRegistered(results) {
 }
 
 // ---------------------------------------------------------------------
-// Other stage windows
+// Other stage pages, and the show server
 // ---------------------------------------------------------------------
-// Every stage window saves the whole stage, so without this the last one
-// to save would undo the others' edits. When another window saves, take its
-// stage, but keep this window's selection, and for linked channels the
-// values this window heard from the console (the other copy may be a moment
-// older). A save that changes nothing else is ignored, so console moves
-// (which every window saves) don't redraw the inspector under your cursor.
+// The show server keeps the stage with the show (show-link.js), and every
+// stage page saves the whole stage, so without this the last one to save
+// would undo the others' edits. When another page saves (in this browser,
+// or anywhere via the server), take its stage, but keep this page's
+// selection, and for linked channels the values this page heard from the
+// console (the other copy may be a moment older). A save that changes
+// nothing else is ignored, so console moves don't redraw the inspector
+// under your cursor.
 
-window.addEventListener("storage", (e) => {
-  if (e.key !== STORAGE_KEY || !e.newValue) return;
-  let data;
-  try { data = JSON.parse(e.newValue); } catch { return; }
+/** @param {unknown} data a stage another page saved */
+function takeStage(data) {
   const before = JSON.stringify(serialize());
   const mine = new Map(state.fixtures.map((i) => [i.id, i]));
   const selected = state.selected;
@@ -2372,12 +2362,18 @@ window.addEventListener("storage", (e) => {
     }
   }
   state.selected = selected.filter((id) => byId(id));
-  if (JSON.stringify(serialize()) === before) return;
+  if (JSON.stringify(serialize()) === before) return false;
   syncBoxInputs();
   updateBox();
   updateSurfaces();
   renderInspector();
   changed({ persist: false });
+  return true;
+}
+
+window.addEventListener("storage", (e) => {
+  if (e.key !== STORAGE_KEY || !e.newValue) return;
+  try { takeStage(JSON.parse(e.newValue)); } catch { /* not a stage */ }
 });
 
 // Place fixture: pick its console type first.
@@ -2477,5 +2473,10 @@ updateSurfaces();
 setPlanView(planView);
 updateBox();
 renderInspector();
-changed();
+changed({ persist: false });
 resize();
+showLink = createShowLink({
+  current: serialize,
+  // Also keep it in this browser, for the next time it opens.
+  onStage: (data) => { if (takeStage(data)) save({ share: false }); },
+});

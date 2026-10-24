@@ -3,8 +3,8 @@ import { FADER_COUNT, MAX_ROWS, MIN_ROWS } from "./patch.js";
 export const MAX_TUNES = 32;
 export const MIN_TRANSITIONS = MIN_ROWS;
 export const MAX_TRANSITIONS = MAX_ROWS;
-/** Allowed fade-in seconds to arrive at a transition (GO). */
-export const TRANSITION_FADE_TIMES = [2, 4, 6, 8, 10];
+/** Allowed fade-in seconds to arrive at a transition (GO): 0 (a snap) to 20. */
+export const TRANSITION_FADE_TIMES = Array.from({ length: 21 }, (_, i) => i);
 export const DEFAULT_TRANSITION_FADE_TIME = 4;
 
 /**
@@ -21,15 +21,20 @@ export const DEFAULT_TRANSITION_FADE_TIME = 4;
  * }} Tune
  */
 
+/** The nearest allowed time (null if not a number). */
+function cleanFadeTime(value) {
+  if (value === "" || value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return TRANSITION_FADE_TIMES.reduce((best, t) => (Math.abs(t - n) < Math.abs(best - n) ? t : best));
+}
+
 /** @param {unknown} value @param {number} [fallback] */
 export function normalizeTransitionFadeTime(
   value,
   fallback = DEFAULT_TRANSITION_FADE_TIME,
 ) {
-  const n = Number(value);
-  if (TRANSITION_FADE_TIMES.includes(n)) return n;
-  if (TRANSITION_FADE_TIMES.includes(fallback)) return fallback;
-  return DEFAULT_TRANSITION_FADE_TIME;
+  return cleanFadeTime(value) ?? cleanFadeTime(fallback) ?? DEFAULT_TRANSITION_FADE_TIME;
 }
 
 /** @param {string} prefix @returns {string} */

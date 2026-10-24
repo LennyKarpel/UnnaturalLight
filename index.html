@@ -12,7 +12,9 @@
         --muted: #9a9488;
         --accent: #e2a13a;
         --track: #2a303b;
-        --bar: 34px;
+        --ok: #6fbf7a;
+        --warn: #c45c4a;
+        --bar: 43px; /* same height as the panes' title bars */
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; overflow: hidden; }
@@ -31,7 +33,136 @@
         background: var(--panel);
         border-bottom: 1px solid var(--track);
       }
-      .bar h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+      .bar { gap: 12px; }
+      .bar h1 { margin: 0; font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; }
+      .show-controls button, .show-controls select, .dots {
+        border: 1px solid var(--track);
+        border-radius: 5px;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        padding: 3px 9px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .show-controls select { background: var(--bg); color: var(--ink); padding: 2px 4px; }
+      .show-controls button:hover:not(:disabled), .dots:hover { color: var(--ink); border-color: var(--muted); }
+      .show-controls button:disabled { opacity: 0.35; cursor: default; }
+      .show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
+
+      /* Set name (click to rename) and its ⋮ menu, from the console. */
+      .brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .set-name {
+        min-width: 0;
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted);
+        padding: 1px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .set-name:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+      .set-name-input {
+        width: 14rem;
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        font: inherit;
+        padding: 1px 4px;
+      }
+      .dots { padding: 3px 7px; }
+      .dots span {
+        display: block;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+        margin: 5px 0;
+      }
+      .menu {
+        position: fixed;
+        z-index: 10;
+        min-width: 140px;
+        padding: 4px;
+        background: var(--panel);
+        border: 1px solid var(--track);
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+      }
+      .menu button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        font: inherit;
+        padding: 5px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .menu button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+      /* Console status message, then the set and DMX buttons. */
+      .status {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted);
+      }
+      .status[data-state="connected"] { color: var(--ok); }
+      .status[data-state="error"] { color: var(--warn); }
+      .show-controls { display: inline-flex; align-items: center; gap: 6px; }
+      .show-controls[hidden] { display: none; }
+      .pill {
+        padding: 2px 8px;
+        border: 1px solid var(--track);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .pill.is-on { border-color: var(--ok); background: var(--ok); color: #0b1a0e; }
+      .sep { width: 1px; height: 18px; background: var(--track); }
+
+      dialog {
+        width: min(360px, calc(100vw - 32px));
+        padding: 16px;
+        border: 1px solid var(--track);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+      dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+      dialog h2 { margin: 0 0 8px; font-size: 15px; }
+      dialog p { margin: 0 0 12px; color: var(--muted); line-height: 1.4; }
+      dialog input {
+        width: 100%;
+        margin-bottom: 12px;
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--track);
+        border-radius: 4px;
+        font: inherit;
+        padding: 5px 7px;
+      }
+      dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+      dialog button {
+        border: 1px solid var(--track);
+        border-radius: 5px;
+        background: none;
+        color: var(--ink);
+        font: inherit;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      dialog button[value="confirm"] { background: var(--accent); border-color: var(--accent); color: #1a1408; font-weight: 600; }
       .seg { display: inline-flex; border: 1px solid var(--track); border-radius: 5px; overflow: hidden; }
       .seg button {
         border: 0;
@@ -44,7 +175,7 @@
       .seg button + button { border-left: 1px solid var(--track); }
       .seg button:hover { color: var(--ink); }
       .seg button.on { background: var(--accent); color: #1a1408; font-weight: 600; }
-      .controls { display: flex; align-items: center; gap: 8px; }
+      .controls { display: flex; align-items: center; gap: 8px; flex: none; }
       .swap {
         border: 1px solid var(--track);
         border-radius: 5px;
@@ -109,8 +240,25 @@
   </head>
   <body>
     <header class="bar">
-      <h1>UnnaturalLight</h1>
+      <div class="brand">
+        <h1>UnnaturalLight</h1>
+        <span id="setName" class="set-name" role="button" tabindex="0" title="Click to rename" hidden></span>
+        <button type="button" id="setMenuBtn" class="dots" title="Set options" aria-label="Set options" aria-haspopup="menu" aria-expanded="false" hidden><span></span></button>
+      </div>
+      <span id="status" class="status" data-state="idle"></span>
       <div class="controls">
+        <!-- The console's set and DMX controls (shown once the console is up). -->
+        <span id="showControls" class="show-controls" hidden>
+          <button type="button" id="newSetBtn">New set</button>
+          <button type="button" id="saveBtn">Save set</button>
+          <button type="button" id="loadBtn">Load set</button>
+          <input id="loadFile" type="file" accept="application/json,.json" hidden />
+          <span class="sep"></span>
+          <select id="universeCount" title="Universes in this set (one DMX USB Pro each)"></select>
+          <span id="outputBtns" class="show-controls"></span>
+          <span id="serverPill" class="pill" title="Not connected to the show server">Server · offline</span>
+          <span class="sep"></span>
+        </span>
         <button type="button" class="swap" id="swapBtn" title="Swap sides (Both view)" aria-label="Swap sides">⇄</button>
         <div class="seg" role="group" aria-label="Show">
           <button type="button" data-mode="console" title="Show only the console">Console</button>
@@ -125,9 +273,26 @@
       <iframe id="consoleFrame" src="console/console.html" title="Console" allow="serial"></iframe>
     </main>
 
+    <div id="setMenu" class="menu" role="menu" aria-label="Set actions" hidden>
+      <button type="button" role="menuitem" data-act="rename">Rename</button>
+    </div>
+
+    <dialog id="askDialog">
+      <form method="dialog">
+        <h2 id="askTitle"></h2>
+        <p id="askMessage"></p>
+        <input id="askInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" />
+        <div class="actions">
+          <button type="submit" value="cancel">Cancel</button>
+          <button type="submit" value="confirm" id="askConfirm">OK</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       // Combined page: the console and the stage run in their own frames
-      // (unchanged, still linked live), and this page only lays them out.
+      // (still linked live). This page lays them out and shows the console's
+      // set and DMX controls in its header (bottom of this script).
       const KEY = "unnaturallight.shell";
       const MIN = 20; // % each side keeps in Both view
       const panes = document.getElementById("panes");
@@ -204,6 +369,196 @@
       divider.addEventListener("dblclick", () => { prefs.split = 50; save(); layout(); });
 
       layout();
+
+      // ---------------------------------------------------------------
+      // Set name, set buttons, DMX outputs and status: the console's
+      // (console/app.js consoleHeader), shown up here for the whole page.
+      // ---------------------------------------------------------------
+      const $ = (id) => document.getElementById(id);
+      const setNameEl = $("setName");
+      const setMenuBtn = $("setMenuBtn");
+      const setMenu = $("setMenu");
+      const statusEl = $("status");
+      const universeCount = $("universeCount");
+      const outputBtns = $("outputBtns");
+      const serverPill = $("serverPill");
+      const loadFile = $("loadFile");
+      /** The console's header API, once its frame has started. */
+      let header = null;
+      let unsubscribe = null;
+      let outputsKey = "";
+
+      function render() {
+        const st = header.state();
+        setNameEl.textContent = st.setName;
+        setNameEl.hidden = setMenuBtn.hidden = false;
+        setMenuBtn.setAttribute("aria-label", `Options for set ${st.setName}`);
+        document.title = `${st.setName} · UnnaturalLight`;
+        statusEl.textContent = st.status.text;
+        statusEl.title = st.status.text;
+        statusEl.dataset.state = st.status.state;
+        serverPill.textContent = st.serverLive ? "Server · live" : "Server · offline";
+        serverPill.classList.toggle("is-on", st.serverLive);
+        serverPill.title = st.serverLive
+          ? `Connected to the show server (${st.serverHost}): edits are saved there and it drives the DMX`
+          : "Not connected to the show server: reconnecting…";
+
+        if (universeCount.options.length !== st.maxUniverses) {
+          universeCount.replaceChildren(...Array.from({ length: st.maxUniverses }, (_, i) =>
+            new Option(i === 0 ? "1 universe" : `${i + 1} universes`, String(i + 1))));
+        }
+        universeCount.value = String(st.universes);
+
+        // One universe: Connect DMX Pro / Disconnect. Several: a button per universe.
+        const key = JSON.stringify([st.outputs, st.serverLive]);
+        if (key === outputsKey) return;
+        outputsKey = key;
+        outputBtns.replaceChildren(...st.outputs.map((connected, i) => {
+          const u = i + 1;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.classList.toggle("connected", connected);
+          btn.disabled = !st.serverLive;
+          if (st.outputs.length === 1) {
+            btn.textContent = connected ? "Disconnect" : "Connect DMX Pro";
+            btn.title = "The DMX USB Pro plugs into the machine running the show server";
+          } else {
+            btn.textContent = `U${u}`;
+            btn.title = connected ? `Universe ${u}: connected (click to disconnect)` : `Universe ${u}: connect its DMX USB Pro`;
+          }
+          btn.addEventListener("click", () => header?.toggleOutput(u));
+          return btn;
+        }));
+      }
+
+      // console/app.js calls this when it starts (also after it reloads).
+      window.onConsoleHeader = (api) => {
+        unsubscribe?.();
+        header = api;
+        outputsKey = "";
+        $("showControls").hidden = false;
+        unsubscribe = api.subscribe(render);
+      };
+      if (consoleFrame.contentWindow?.consoleHeader) window.onConsoleHeader(consoleFrame.contentWindow.consoleHeader);
+
+      universeCount.addEventListener("change", () => header?.setUniverses(Number(universeCount.value)));
+
+      // Enter in the name box means the confirm button (the form's first button is Cancel).
+      $("askInput").addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        e.target.form.requestSubmit($("askConfirm"));
+      });
+
+      /**
+       * A small dialog: confirm (no `initial`) or ask for a name.
+       * Resolves true / the trimmed name, or null when cancelled.
+       */
+      function ask({ title, message = "", confirmLabel = "OK", initial = null }) {
+        const dlg = $("askDialog");
+        const input = $("askInput");
+        $("askTitle").textContent = title;
+        $("askMessage").textContent = message;
+        $("askMessage").hidden = !message;
+        $("askConfirm").textContent = confirmLabel;
+        input.hidden = initial === null;
+        input.value = initial ?? "";
+        return new Promise((resolve) => {
+          const onSubmit = (e) => {
+            if (e.submitter?.value !== "confirm" || input.hidden || input.value.trim()) return;
+            e.preventDefault();
+            input.focus();
+          };
+          const onClose = () => {
+            dlg.removeEventListener("submit", onSubmit);
+            const ok = dlg.returnValue === "confirm";
+            resolve(!ok ? null : input.hidden ? true : input.value.trim());
+          };
+          dlg.addEventListener("submit", onSubmit);
+          dlg.addEventListener("close", onClose, { once: true });
+          dlg.returnValue = "";
+          dlg.showModal();
+          if (!input.hidden) input.select();
+        });
+      }
+
+      $("newSetBtn").addEventListener("click", async () => {
+        if (!header) return;
+        if (header.isDirty() && !(await ask({ title: "New set?", message: "Discard unsaved changes and start a blank set?", confirmLabel: "Continue" }))) return;
+        const name = await ask({ title: "New set", confirmLabel: "Create", initial: "" });
+        if (name) header.newSet(name);
+      });
+      $("saveBtn").addEventListener("click", () => header?.saveSet());
+      $("loadBtn").addEventListener("click", () => { loadFile.value = ""; loadFile.click(); });
+      loadFile.addEventListener("change", async () => {
+        const file = loadFile.files?.[0];
+        if (!file || !header) return;
+        if (header.isDirty() && !(await ask({
+          title: "Unsaved changes",
+          message: "The current set has changed since it was last saved. Load another set anyway and discard those changes?",
+          confirmLabel: "Load anyway",
+        }))) return;
+        header.loadSet(await file.text(), file.name);
+      });
+
+      /** Rename the set in place (Enter or clicking away keeps it, Esc cancels). */
+      function beginRename() {
+        if (!header || setNameEl.hidden) return;
+        const input = document.createElement("input");
+        input.className = "set-name-input";
+        input.maxLength = 40;
+        input.value = header.state().setName;
+        input.setAttribute("aria-label", "Set name");
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        setNameEl.hidden = true;
+        setNameEl.after(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = (commit) => {
+          if (done) return;
+          done = true;
+          if (commit && input.value.trim()) header.rename(input.value.trim());
+          input.remove();
+          setNameEl.hidden = false;
+        };
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") finish(true);
+          if (e.key === "Escape") finish(false);
+        });
+        input.addEventListener("blur", () => finish(true));
+      }
+      setNameEl.addEventListener("click", beginRename);
+      setNameEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); beginRename(); }
+      });
+
+      // ⋮ menu (Rename).
+      const closeSetMenu = () => {
+        setMenu.hidden = true;
+        setMenuBtn.setAttribute("aria-expanded", "false");
+      };
+      setMenuBtn.addEventListener("click", () => {
+        if (!setMenu.hidden) { closeSetMenu(); return; }
+        const r = setMenuBtn.getBoundingClientRect();
+        setMenu.hidden = false;
+        setMenu.style.top = `${r.bottom + 4}px`;
+        setMenu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - setMenu.offsetWidth - 8))}px`;
+        setMenuBtn.setAttribute("aria-expanded", "true");
+      });
+      setMenu.addEventListener("click", (e) => {
+        const act = e.target.closest("[data-act]")?.dataset.act;
+        if (!act) return;
+        closeSetMenu();
+        if (act === "rename") beginRename();
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!setMenu.hidden && !setMenu.contains(e.target) && !setMenuBtn.contains(e.target)) closeSetMenu();
+      }, true);
+      // A press inside a frame doesn't reach this page: close when it takes focus.
+      window.addEventListener("blur", closeSetMenu);
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSetMenu(); });
     </script>
   </body>
 </html>

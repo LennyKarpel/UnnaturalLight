@@ -53,89 +53,29 @@ body {
   overflow: hidden;
 }
 
+/* Title bar, like the stage's (the set controls are in the page header, ../index.html). */
 .header {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 1.5rem;
-  align-items: end;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.brand {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.55rem 1rem;
-  min-width: 0;
-}
-
-.brand h1 {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(2rem, 4vw, 2.75rem);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1;
-}
-
-.set-name-group {
-  display: flex;
   align-items: center;
-  gap: 0.2rem;
-  min-width: 0;
+  /* Same height as the stage's title bar (stage/stage.css), side by side. */
+  min-height: 43px;
+  margin: -1rem -0.75rem 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--track);
+  background: var(--panel);
 }
 
-.set-name {
+.header h1 {
   margin: 0;
-  min-width: 0;
-  max-width: min(28rem, 100%);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--display);
-  font-size: clamp(1.05rem, 2.2vw, 1.35rem);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--muted);
-  line-height: 1.1;
-  cursor: pointer;
-  border-radius: 4px;
+  font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
-.set-name:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-.set-name-input {
-  font-family: var(--display);
-  font-size: clamp(1.05rem, 2.2vw, 1.35rem);
-  font-weight: 500;
-  min-width: 8rem;
-  max-width: min(18rem, 50vw);
-  color: var(--ink);
-}
-
-.set-menu-btn {
-  width: 1.45rem;
-  height: 1.45rem;
-}
-
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-#newSetBtn,
-#saveBtn,
-#loadBtn {
-  border-color: #3a4250;
-  background: linear-gradient(180deg, #2a303b, #1b1f27);
+.header h1 span {
+  color: var(--accent);
 }
 
 .dialog {
@@ -822,8 +762,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.universe-controls { display: inline-flex; align-items: center; gap: 0.3rem; }
-.universe-controls select,
 .meter-universe {
   background: var(--panel);
   color: var(--ink);
@@ -832,49 +770,12 @@ button:disabled {
   padding: 0.3rem 0.4rem;
   font: inherit;
 }
-.universe-btn { min-width: 2.6rem; }
-
-button.connected {
-  border-color: #3d6b45;
-  background: linear-gradient(180deg, #243528, #162018);
-}
-
 .btn-quiet {
   background: transparent;
   border-color: #3a4250;
   padding: 0.35rem 0.65rem;
   font-size: 0.85rem;
   font-weight: 500;
-}
-
-.status {
-  min-width: 8.5rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.status[data-state="connected"] {
-  color: var(--ok);
-}
-
-.status[data-state="error"] {
-  color: var(--warn);
-}
-
-/* Show server connection, always visible in the header (green = connected). */
-.server-pill {
-  padding: 2px 8px;
-  border: 1px solid var(--track);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.server-pill.is-on {
-  border-color: var(--ok);
-  background: var(--ok);
-  color: #0b1a0e;
 }
 
 /* Covers the console while the show server is unreachable (edits would be lost). */
@@ -1800,7 +1701,8 @@ button.connected {
   align-self: center;
 }
 
-.fader-row.is-selected .fader-row-hint {
+/* The selected cue doesn't need "Click to make live" (CURRENT / UP NEXT stay). */
+.fader-row.is-selected:not(.is-current):not(.is-next) .fader-row-hint {
   display: none;
 }
 

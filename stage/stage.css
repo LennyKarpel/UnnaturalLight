@@ -34,12 +34,15 @@ header {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1.25rem;
+  /* Same height as the console's title bar (console/styles.css), side by side. */
+  min-height: 43px;
   padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--track);
   background: var(--panel);
 }
 header h1 {
   margin: 0;
+  font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
   font-size: 15px;
   letter-spacing: 0.04em;
   font-weight: 600;

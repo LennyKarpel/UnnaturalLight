@@ -151,7 +151,8 @@ export function createShow(saved) {
      */
     tick(now) {
       if (!set || !fade || fade.pausedAt != null) return null;
-      const t = Math.min(1, (now - fade.startedAt) / fade.durationMs);
+      // A 0 s fade arrives at once.
+      const t = fade.durationMs > 0 ? Math.min(1, (now - fade.startedAt) / fade.durationMs) : 1;
       set.cross = fade.start + (fade.target - fade.start) * easeFade(t);
       if (t < 1) return { arrived: null };
       const wasGo = fade.mode === "go";

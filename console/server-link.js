@@ -7,8 +7,10 @@
  *   console → server   edits as they happen: the whole set when its structure
  *                      changes, single fader levels while dragging, the live
  *                      mix (master, subs, crossfade, Current / Next), held
- *                      flash / blackout buttons, GO / pause / stop, and
- *                      DMX connect / disconnect
+ *                      flash / blackout buttons, GO / pause / stop,
+ *                      DMX connect / disconnect, and the stage from a
+ *                      loaded set file (stage pages keep it up to date
+ *                      themselves, see ../stage/show-link.js)
  *   server → console   the same, from other consoles, plus fade steps and
  *                      DMX status
  *
@@ -236,6 +238,10 @@ export function createServerLink(api) {
     command(type) {
       flush();
       send({ type });
+    },
+    /** Replace the stage kept with the show (from a loaded set file). */
+    sendStage(stage) {
+      send({ type: "stage", stage });
     },
     /** Ask the server something; resolves with its reply ({ ok, error? }). */
     request(msg) {

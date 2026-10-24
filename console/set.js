@@ -22,8 +22,6 @@ import {
 
 export const SET_VERSION = 2;
 export const SET_APP = "UnnaturalLight";
-/** @deprecated Prefer TRANSITION_FADE_TIMES / per-transition fadeTime */
-export const FADE_TIMES = TRANSITION_FADE_TIMES;
 export const DEFAULT_NAV_ORDER = [
   "set",
   "songs",
@@ -176,9 +174,7 @@ export function serializeSet(state) {
     cross: clamp(state.cross, 0, 100),
     fromSub: clamp(state.fromSub ?? 100, 0, 100),
     toSub: clamp(state.toSub ?? 100, 0, 100),
-    fadeTime: FADE_TIMES.includes(Number(state.fadeTime))
-      ? Number(state.fadeTime)
-      : 4,
+    fadeTime: normalizeTransitionFadeTime(state.fadeTime),
     universes: normalizeUniverses(state.universes),
     fromRow: state.fromRow,
     toRow: state.toRow,
@@ -198,8 +194,10 @@ export function setSnapshot(state) {
   return JSON.stringify(rest);
 }
 
-export function setToJson(state) {
-  return `${JSON.stringify(serializeSet(state), null, 2)}\n`;
+/** @param {object | null} [stage] the stage page's layout, saved in the same file */
+export function setToJson(state, stage = null) {
+  const data = serializeSet(state);
+  return `${JSON.stringify(stage ? { ...data, stage } : data, null, 2)}\n`;
 }
 
 /**
@@ -332,8 +330,8 @@ export function parseSet(data) {
   };
 }
 
-export function downloadSet(state, filename) {
-  const blob = new Blob([setToJson(state)], { type: "application/json" });
+export function downloadSet(state, filename, stage = null) {
+  const blob = new Blob([setToJson(state, stage)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

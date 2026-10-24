@@ -8,34 +8,10 @@
   </head>
   <body>
     <div class="app">
+      <!-- The set name, set buttons, DMX outputs and status are in the header of
+           the page around the console (../index.html). -->
       <header class="header">
-        <div class="brand">
-          <h1>UnnaturalLight</h1>
-          <div class="set-name-group">
-            <p id="setNameDisplay" class="set-name" hidden></p>
-            <button
-              id="setMenuBtn"
-              type="button"
-              class="scene-menu-btn set-menu-btn"
-              title="Set options"
-              aria-label="Set options"
-              aria-haspopup="menu"
-              aria-expanded="false"
-              hidden
-            >
-              <span class="scene-menu-dots" aria-hidden="true"></span>
-            </button>
-          </div>
-        </div>
-        <div class="controls">
-          <button id="newSetBtn" type="button">New set</button>
-          <button id="saveBtn" type="button">Save set</button>
-          <button id="loadBtn" type="button">Load set</button>
-          <input id="loadFile" type="file" accept="application/json,.json" hidden />
-          <button id="connectBtn" type="button">Connect DMX Pro</button>
-          <span id="serverPill" class="server-pill" title="Not connected to the show server">Server · offline</span>
-          <span id="status" class="status" data-state="idle">Disconnected</span>
-        </div>
+        <h1>UnnaturalLight <span>· Console</span></h1>
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
@@ -263,20 +239,6 @@
       </section>
     </div>
 
-    <dialog id="dirtyDialog" class="dialog">
-      <form method="dialog" class="dialog-body">
-        <h2>Unsaved changes</h2>
-        <p>
-          The current set has changed since it was last saved.
-          Load another set anyway and discard those changes?
-        </p>
-        <div class="dialog-actions">
-          <button value="cancel" type="submit" class="btn-quiet">Cancel</button>
-          <button value="confirm" type="submit" id="dirtyConfirmBtn">Load anyway</button>
-        </div>
-      </form>
-    </dialog>
-
     <dialog id="confirmDialog" class="dialog">
       <form method="dialog" class="dialog-body">
         <h2 id="confirmTitle">Are you sure?</h2>
@@ -321,12 +283,6 @@
     <div id="sceneRowMenu" class="popup-menu" hidden>
       <div class="popup-menu-panel scene-row-menu-panel">
         <div id="sceneRowMenuList" class="popup-menu-list" role="menu" aria-label="Cue actions"></div>
-      </div>
-    </div>
-
-    <div id="setMenu" class="popup-menu" hidden>
-      <div class="popup-menu-panel scene-row-menu-panel">
-        <div id="setMenuList" class="popup-menu-list" role="menu" aria-label="Set actions"></div>
       </div>
     </div>
 

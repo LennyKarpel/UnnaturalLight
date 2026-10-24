@@ -43,7 +43,7 @@ In a terminal, from the UnnaturalLight folder:
 
 The first time, it installs what it needs (`npm install`). Then your browser opens **http://localhost:8080** with the Console and the Stage side by side. Keep the terminal running while you work; press **Ctrl+C** in it to stop (the show is saved first).
 
-The terminal runs the **show server**: it holds the show, runs the fades and sends DMX to the interfaces. The browser pages are views of it, so closing, reloading or hiding a tab never affects the lights. The **Server · live** pill in the console's header turns green while the console is connected to it (**Server · offline** while it reconnects). The stage reaches the server through the console: its **Console · live** pill shows that link.
+The terminal runs the **show server**: it holds the show, runs the fades and sends DMX to the interfaces. The browser pages are views of it, so closing, reloading or hiding a tab never affects the lights. The **Server · live** pill in the page header (top bar) turns green while the console is connected to it (**Server · offline** while it reconnects). The stage reaches the server through the console; when the stage is open on its own, its **Console · live** pill shows that link.
 
 | Command | Does |
 |---|---|
@@ -69,8 +69,8 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 6. **Point it somewhere:** press `T` and click a spot on the floor; the light swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
-9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the console header.
-10. **Save:** everything autosaves on the show server. To keep a file, use **Save set** in the console and **Export** on the stage.
+9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the page header (top bar).
+10. **Save:** everything autosaves on the show server. To keep a file, use **Save set** in the page header: it holds the whole show, console and stage.
 
 ---
 
@@ -89,8 +89,9 @@ The page shows the Stage on the left and the Console on the right. The switch at
 - The page remembers your choice, the split and the sides.
 - Cues keep fading and DMX keeps flowing in every view: both run on the show server.
 - Keyboard shortcuts go to whichever side you last clicked in.
+- **The page header** (top bar) holds the console's set controls, in every view: the set's name (click it, or **⋮ → Rename**, to rename it), **New set**, **Save set**, **Load set**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **UnnaturalLight · Stage** and **UnnaturalLight · Console**.
 
-You can also open each on its own: `localhost:8080/console/console.html` and `localhost:8080/stage/stage.html`. If you do, open both in the same browser so they can talk to each other.
+You can also open each on its own: `localhost:8080/console/console.html` and `localhost:8080/stage/stage.html`. If you do, open both in the same browser so they can talk to each other. The console on its own has no set or DMX controls (they're in the combined page's header), so use the combined page to manage sets or connect DMX.
 
 ### Running from another computer
 
@@ -282,8 +283,8 @@ Switch with the tabs along the top (drag them to reorder):
 
 - A **song** holds as many **cues** as you like (at least 2). Each cue is one look: a value for every fader.
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
-- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time (2–10 s). When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
-- Each cue's **In** time is the length of the transition *into* that cue.
+- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards are labelled **CURRENT** and **UP NEXT** at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
+- Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
 - Click a cue's row to make it LIVE. Use its **⋮** menu to name or remove it, **⋮⋮** to drag it, and **+** to add a new cue at the end.
 - You can have up to 32 songs.
 
@@ -314,13 +315,13 @@ The Patch page connects **faders to DMX channels**. A fader can drive several ch
 
 ### Connecting to your lights
 
-Plug your Enttec DMX USB Pro into the computer running the show server and click **Connect DMX Pro** in the header; the server finds it. The status next to it shows when it's connected. The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **Disconnect** makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
+Plug your Enttec DMX USB Pro into the computer running the show server and click **Connect DMX Pro** in the page header; the server finds it. The status message in the header shows when it's connected. The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **Disconnect** makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
 
 ---
 
 ## 6. Console and Stage together
 
-When both are open (the combined page does this for you), the stage's header shows **Console · live** in green. Otherwise it says **Console · offline**, and the stage simply works on its own.
+The combined page always has both open, so its stage pane shows no link pill. On its own, the stage's header shows **Console · live** in green when a console is open in the same browser; otherwise it says **Console · offline**, and the stage simply works on its own.
 
 ### Lights set themselves up in the console
 
@@ -370,7 +371,7 @@ The card updates live. ⌥-click something else to trace that; `Esc` or ✕ clos
 
 A DMX **universe** is 512 channels sent down one cable by one interface. For bigger rigs:
 
-1. In the console header, change **1 universe** to the number you need (up to 8). It's saved with the set.
+1. In the page header, change **1 universe** to the number you need (up to 8). It's saved with the set.
 2. Each universe gets its own button, **U1, U2, …**. Plug in one Enttec DMX USB Pro per universe and click its button to connect it; it turns green when connected. Connect them one at a time: each button takes a device not already on another universe, and remembers it (by serial number) from then on.
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
@@ -385,14 +386,12 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work: the console's set on the show server (`server/data/session.json`), the stage in the browser. Closing and reopening the page, or restarting the server, brings it all back. Stage windows open in the same browser keep each other up to date: an edit in one (placing, moving, renaming, deleting a light…) shows in the others within a moment, so no window's later save undoes another's work. A light being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
+**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's set and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a light…) shows in the others within a moment, so no window's later save undoes another's work. A light being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
-- **Console:** **Save set** downloads the set (songs, cues, patch, fixtures, fader names, universes) as a file; **Load set** opens one; **New set** starts fresh (it asks first if you have unsaved changes). Click the set's name beside the title to rename it.
-- **Stage:** **Export** downloads the stage (box size, lights, rigs, view settings) as `stage.json`; **Import** opens one.
-
-Save both: the set and the stage are separate files.
+- **Console** (buttons in the page header): **Save set** downloads the set (songs, cues, patch, fixtures, fader names, universes) as a file; **Load set** opens one; **New set** starts fresh (it asks first if you have unsaved changes). Click the set's name beside the title (or **⋮ → Rename**) to rename it.
+- The set file also holds the **stage** (box size, lights, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; an older set file without one leaves the stage as it is. A `stage.json` from the stage's old **Export** button loads through **Load set** too (it replaces just the stage). **New set** keeps the stage.
 
 ---
 
@@ -488,12 +487,12 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 
 | Path | What's in it |
 |---|---|
-| `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider |
+| `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider, and the header with the console's set name, set buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`) |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
 | `server/show.js` | The show as the server holds it: set, live mix, timed fades, held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
-| `server/data/` | `session.json` (the set) and `dmx.json` (which device is on which universe); not in git |
+| `server/data/` | `session.json` (the set, with the stage under `stage`) and `dmx.json` (which device is on which universe); not in git |
 | `console/console.html`, `app.js`, `styles.css` | Console page, logic and styles |
 | `console/server-link.js` | Console side of the show-server link |
 | `console/patch.js` | Fader patch; universe and channel-address helpers |
@@ -502,6 +501,7 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 | `stage/stage.html`, `stage.css`, `stage.js` | Stage page (with the import map for three.js), styles, 3D view / plan / inspector / input |
 | `stage/stage-model.js` | Light and rig data, DMX values ↔ angles / color / beam, aiming maths, save format |
 | `stage/console-link.js` | Stage side of the live link |
+| `stage/show-link.js` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
@@ -516,4 +516,4 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 
 **Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.setlist.session.v1`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage.v1`. Combined-page layout: `unnaturallight.shell`.
 
-**Stage file (`stage.json`, version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges). Version 1 files (angles, 0–1 intensity, hex color, beam degrees) still load.
+**Stage (`stage` in the set file and `session.json`; version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges). Version 1 files (angles, 0–1 intensity, hex color, beam degrees) still load.

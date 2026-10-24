@@ -46,7 +46,6 @@ import {
   defaultTuneName,
   defaultTransitionName,
   downloadSet,
-  FADE_TIMES,
   createTune,
   createTransition,
   loadSession,
@@ -167,7 +166,7 @@ let master = boot.master;
 let cross = boot.cross; // 0 = full From, 100 = full To
 let fromSub = boot.fromSub ?? 100;
 let toSub = boot.toSub ?? 100;
-let fadeTime = FADE_TIMES.includes(boot.fadeTime) ? boot.fadeTime : 4;
+let fadeTime = normalizeTransitionFadeTime(boot.fadeTime);
 let fromRow = boot.fromRow;
 let toRow = boot.toRow;
 let selectedRow = boot.selectedRow ?? 0;
@@ -212,11 +211,16 @@ let fromSubBlackoutSnapshot = null;
 /** @type {number | null} */
 let toSubBlackoutSnapshot = null;
 
-/** @type {HTMLElement} */
-let setNameDisplay = requireEl("setNameDisplay", HTMLElement);
-const setMenuBtn = requireEl("setMenuBtn", HTMLButtonElement);
-const setMenu = requireEl("setMenu", HTMLElement);
-const setMenuList = requireEl("setMenuList", HTMLElement);
+// The set name, set buttons, DMX outputs and status are drawn in the header
+// of the page around the console (../index.html), which calls consoleHeader
+// (bottom of this file) and is told here when any of it changes.
+/** Last status message (state: idle | connected | error). */
+let status = { text: "", state: "idle" };
+let serverLive = false;
+/** @type {Set<() => void>} */
+const headerListeners = new Set();
+const notifyHeader = () => { for (const fn of headerListeners) fn(); };
+
 const rowsScroll = requireEl("rowsScroll", HTMLElement);
 const rowsEl = requireEl("rows", HTMLElement);
 const liveFadersEl = requireEl("liveFaders", HTMLElement);
@@ -235,10 +239,7 @@ const faderNameMenu = requireEl("faderNameMenu", HTMLElement);
 const faderNameMenuList = requireEl("faderNameMenuList", HTMLElement);
 const patchTableEl = requireEl("patchTable", HTMLElement);
 const patchConflictsEl = requireEl("patchConflicts", HTMLElement);
-const connectBtn = requireEl("connectBtn", HTMLButtonElement);
 const blackoutBtn = requireEl("blackoutBtn", HTMLButtonElement);
-const statusEl = requireEl("status", HTMLElement);
-const serverPill = requireEl("serverPill", HTMLElement);
 const masterInput = requireEl("master", HTMLInputElement);
 const masterValue = requireEl("masterValue", HTMLOutputElement);
 const fromSubInput = requireEl("fromSub", HTMLInputElement);
@@ -266,11 +267,6 @@ const activeTuneLabel = requireEl("activeTuneLabel", HTMLElement);
 const pageSet = requireEl("page-set", HTMLElement);
 const identityBtn = requireEl("identityBtn", HTMLButtonElement);
 const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
-const newSetBtn = requireEl("newSetBtn", HTMLButtonElement);
-const saveBtn = requireEl("saveBtn", HTMLButtonElement);
-const loadBtn = requireEl("loadBtn", HTMLButtonElement);
-const loadFile = requireEl("loadFile", HTMLInputElement);
-const dirtyDialog = requireEl("dirtyDialog", HTMLDialogElement);
 const confirmDialog = requireEl("confirmDialog", HTMLDialogElement);
 const confirmTitle = requireEl("confirmTitle", HTMLElement);
 const confirmMessage = requireEl("confirmMessage", HTMLElement);
@@ -445,7 +441,6 @@ function abortInlineEdits() {
   endInlineRename?.();
   endInlineFixtureRename?.();
   endInlineTuneRename?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -589,8 +584,6 @@ function beginInlineFaderRename(index, target) {
 
 /** @type {null | (() => void)} */
 let closeFaderNameMenu = null;
-/** @type {null | (() => void)} */
-let closeSetMenu = null;
 
 /**
  * @param {HTMLElement} anchor
@@ -601,7 +594,6 @@ let closeSetMenu = null;
 function openFaderNameMenu(anchor, index, clientX, clientY) {
   closeFaderNameMenu?.();
   closeSceneRowMenu?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
@@ -708,8 +700,8 @@ function showFaderInPatch(index) {
 }
 
 function setStatus(text, state = "idle") {
-  statusEl.textContent = text;
-  statusEl.dataset.state = state;
+  status = { text, state };
+  notifyHeader();
 }
 
 function isUnpatched(targets) {
@@ -1004,6 +996,11 @@ function updateScenesButton() {
   channelsSceneMenuBtn.title = `Options for ${cueLabel(selectedRow)}`;
 }
 
+/** Label at the top right of a cue: CURRENT, UP NEXT, or how to make it current. */
+function rowHint(r) {
+  return r === fromRow ? "Current" : r === toRow ? "Up next" : "Click to make live";
+}
+
 function setSelectedRow(index) {
   if (index < 0 || index >= rows.length) return;
   stopTimedFade();
@@ -1017,6 +1014,8 @@ function setSelectedRow(index) {
     bank.classList.toggle("is-selected", selected);
     bank.classList.toggle("is-current", r === fromRow);
     bank.classList.toggle("is-next", r === toRow);
+    const hint = bank.querySelector(".fader-row-hint");
+    if (hint) hint.textContent = rowHint(r);
     const head = bank.querySelector(".fader-row-head");
     if (head) head.setAttribute("aria-pressed", selected ? "true" : "false");
   }
@@ -1037,7 +1036,6 @@ let closeChannelsSceneMenu = null;
 function pickScene({ anchor, clientX, clientY }) {
   closeScenePicker?.();
   closeChannelsSceneMenu?.();
-  closeSetMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
@@ -1845,12 +1843,7 @@ function renderRows() {
 
     const hint = document.createElement("span");
     hint.className = "fader-row-hint";
-    hint.textContent =
-      r === fromRow
-        ? "Live"
-        : r === toRow
-          ? "Up next"
-          : "Click to make live";
+    hint.textContent = rowHint(r);
 
     head.append(dragHandle, titleGroup, fadeGroup, hint);
     wireTransitionRowDrag(bank, dragHandle, r);
@@ -2545,7 +2538,6 @@ function pickFixtureGroup({ anchor, current }) {
   closeFixtureGroupPicker?.();
   closeCountPicker?.();
   closeChannelPicker?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2638,7 +2630,6 @@ function pickCount({ anchor, current }) {
   closeCountPicker?.();
   closeChannelPicker?.();
   closeFixtureGroupPicker?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -2727,7 +2718,6 @@ function pickChannel({ anchor, current }) {
   closeChannelPicker?.();
   closeCountPicker?.();
   closeFixtureGroupPicker?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeSceneRowMenu?.();
@@ -3216,16 +3206,9 @@ function toggleFadePause() {
 }
 
 function syncSetNameUi() {
-  const label = normalizeSetName(setName);
-  setName = label;
-  if (setNameDisplay.isConnected) {
-    setNameDisplay.hidden = false;
-    setNameDisplay.textContent = label;
-    setNameDisplay.title = "Click to rename";
-  }
-  setMenuBtn.hidden = false;
-  setMenuBtn.setAttribute("aria-label", `Options for set ${label}`);
-  document.title = `${label} · UnnaturalLight`;
+  setName = normalizeSetName(setName);
+  document.title = `${setName} · UnnaturalLight`;
+  notifyHeader();
 }
 
 function applySetName(name) {
@@ -3235,176 +3218,6 @@ function applySetName(name) {
   syncSetNameUi();
   persistSession();
   return true;
-}
-
-function wireSetNameDisplay(el) {
-  el.title = "Click to rename";
-  el.setAttribute("role", "button");
-  el.tabIndex = 0;
-  el.addEventListener("click", () => {
-    beginInlineSetRename();
-  });
-  el.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      beginInlineSetRename();
-    }
-  });
-}
-
-/** Edit the set name in place with a text input. */
-function beginInlineSetRename() {
-  abortInlineEdits();
-  if (!(setNameDisplay instanceof HTMLElement) || !setNameDisplay.isConnected) {
-    const el = document.getElementById("setNameDisplay");
-    if (!(el instanceof HTMLElement)) return;
-    setNameDisplay = el;
-  }
-
-  const title = setNameDisplay;
-  const parent = title.parentElement;
-  if (!parent) return;
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "scene-title-input set-name-input";
-  input.maxLength = 40;
-  input.value = setName;
-  input.setAttribute("aria-label", "Set name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
-  title.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineRename === finishAbort) endInlineRename = null;
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim();
-    if (commit && next) applySetName(next);
-
-    const restored = document.createElement("p");
-    restored.id = "setNameDisplay";
-    restored.className = "set-name";
-    restored.textContent = setName;
-
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-
-    setNameDisplay = restored;
-    wireSetNameDisplay(restored);
-    syncSetNameUi();
-  };
-
-  const finishAbort = () => finish(false);
-  endInlineRename = finishAbort;
-
-  const onKeydown = (event) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-
-  const onBlur = () => finish(true);
-
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
-}
-
-/**
- * @param {HTMLElement} anchor
- * @returns {Promise<"rename" | null>}
- */
-function openSetMenu(anchor) {
-  closeSetMenu?.();
-  closeChannelsSceneMenu?.();
-  closeScenePicker?.();
-  closeSceneRowMenu?.();
-  closeFaderNameMenu?.();
-  closeChannelPicker?.();
-  closeCountPicker?.();
-  closeFixtureGroupPicker?.();
-
-  return new Promise((resolve) => {
-    let settled = false;
-
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(value);
-    };
-
-    const onDocPointer = (event) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (setMenu.contains(target) || anchor.contains(target)) return;
-      finish(null);
-    };
-
-    const onDocKeydown = (event) => {
-      if (event.key === "Escape") finish(null);
-    };
-
-    const cleanup = () => {
-      setMenu.hidden = true;
-      anchor.setAttribute("aria-expanded", "false");
-      if (closeSetMenu === finishNull) closeSetMenu = null;
-      document.removeEventListener("pointerdown", onDocPointer, true);
-      document.removeEventListener("keydown", onDocKeydown, true);
-    };
-
-    const finishNull = () => finish(null);
-    closeSetMenu = finishNull;
-
-    setMenuList.replaceChildren();
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "popup-menu-item";
-    item.setAttribute("role", "menuitem");
-    item.textContent = "Rename";
-    item.addEventListener("click", (event) => {
-      event.stopPropagation();
-      finish("rename");
-    });
-    setMenuList.append(item);
-
-    setMenu.hidden = false;
-    anchor.setAttribute("aria-expanded", "true");
-
-    const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 140;
-    const menuHeight = 48;
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    setMenu.style.left = `${left}px`;
-    setMenu.style.top = `${top}px`;
-
-    document.addEventListener("pointerdown", onDocPointer, true);
-    document.addEventListener("keydown", onDocKeydown, true);
-  }).then((action) => {
-    if (action === "rename") beginInlineSetRename();
-    return action;
-  });
 }
 
 function currentSetState() {
@@ -4599,18 +4412,6 @@ function isDirty() {
   return setSnapshot(currentSetState()) !== cleanSnapshot;
 }
 
-function confirmDiscardLoad() {
-  return new Promise((resolve) => {
-    const onClose = () => {
-      dirtyDialog.removeEventListener("close", onClose);
-      resolve(dirtyDialog.returnValue === "confirm");
-    };
-    dirtyDialog.addEventListener("close", onClose);
-    dirtyDialog.returnValue = "";
-    dirtyDialog.showModal();
-  });
-}
-
 /**
  * @param {{ title: string, message: string, confirmLabel?: string }} opts
  * @returns {Promise<boolean>}
@@ -4807,7 +4608,6 @@ function wireCurrentSceneTitle(el) {
 function openChannelsSceneMenu(anchor) {
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
-  closeSetMenu?.();
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
@@ -4915,7 +4715,6 @@ let closeSceneRowMenu = null;
 function openSceneRowMenu(anchor, index) {
   closeSceneRowMenu?.();
   closeFaderNameMenu?.();
-  closeSetMenu?.();
   closeChannelsSceneMenu?.();
   closeScenePicker?.();
   closeChannelPicker?.();
@@ -5010,46 +4809,9 @@ function setUiConnected() {
 // Universes: count, one DMX USB Pro each, Channels-tab meter universe
 // ---------------------------------------------------------------------
 
-const universeControls = document.createElement("span");
-universeControls.className = "universe-controls";
-connectBtn.after(universeControls);
-
-/** Header: universe count, and a Connect button per universe (one DMX USB Pro each). */
+/** The DMX outputs changed: redraw the page header and the meters' universe picker. */
 function renderOutputs() {
-  universeControls.replaceChildren();
-  const count = document.createElement("select");
-  count.className = "universe-count";
-  count.title = "Universes in this set (one DMX USB Pro each)";
-  for (let n = 1; n <= MAX_UNIVERSES; n++) {
-    const opt = document.createElement("option");
-    opt.value = String(n);
-    opt.textContent = n === 1 ? "1 universe" : `${n} universes`;
-    count.append(opt);
-  }
-  count.value = String(universes);
-  count.addEventListener("change", () => setUniverses(Number(count.value)));
-  universeControls.append(count);
-
-  // One universe: the original single button. Several: one per universe.
-  connectBtn.hidden = universes > 1;
-  connectBtn.textContent = dmx.connected ? "Disconnect" : "Connect DMX Pro";
-  connectBtn.classList.toggle("connected", dmx.connected);
-  connectBtn.disabled = !serverLink?.connected;
-  connectBtn.title = "The DMX USB Pro plugs into the machine running the show server";
-  if (universes > 1) {
-    for (let u = 1; u <= universes; u++) {
-      const out = outputs[u - 1];
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "universe-btn";
-      btn.classList.toggle("connected", out.connected);
-      btn.textContent = `U${u}`;
-      btn.title = out.connected ? `Universe ${u}: connected (click to disconnect)` : `Universe ${u}: connect its DMX USB Pro`;
-      btn.disabled = !serverLink?.connected;
-      btn.addEventListener("click", () => void toggleOutput(u));
-      universeControls.append(btn);
-    }
-  }
+  notifyHeader();
   syncMeterUniverse();
 }
 
@@ -5179,8 +4941,6 @@ function routeFromHash() {
     showPage("songs");
   }
 }
-
-connectBtn.addEventListener("click", () => void toggleOutput(1));
 
 function syncMasterUi() {
   masterInput.value = String(Math.round(master));
@@ -5321,7 +5081,7 @@ function applySet(state, { fromServer = false } = {}) {
   cross = state.cross;
   fromSub = state.fromSub ?? 100;
   toSub = state.toSub ?? 100;
-  fadeTime = FADE_TIMES.includes(state.fadeTime) ? state.fadeTime : 4;
+  fadeTime = normalizeTransitionFadeTime(state.fadeTime);
   universes = normalizeUniverses(state.universes);
   setUniverseCount(universes);
   renderOutputs();
@@ -5368,70 +5128,45 @@ function syncTransportFromState() {
   updateFadePauseButton();
 }
 
-setMenuBtn.addEventListener("click", (event) => {
-  event.stopPropagation();
-  if (setMenuBtn.getAttribute("aria-expanded") === "true") {
-    closeSetMenu?.();
-    return;
-  }
-  void openSetMenu(setMenuBtn);
-});
-
-newSetBtn.addEventListener("click", async () => {
-  if (isDirty()) {
-    const ok = await confirmAction({
-      title: "New set?",
-      message: "Discard unsaved changes and start a blank set?",
-      confirmLabel: "Continue",
-    });
-    if (!ok) return;
-  }
-
-  const name = await promptName({
-    title: "New set",
-    confirmLabel: "Create",
-    initial: "",
-  });
-  if (!name) return;
-
+/** Start a blank set called `name` (the page header asks first if there are unsaved changes). */
+function newSet(name) {
   applySet(blankSetState(name));
   markClean();
   persistSession();
   setStatus(`New set · ${setName}`, dmx.connected ? "connected" : "idle");
-});
+}
 
-saveBtn.addEventListener("click", () => {
-  downloadSet(currentSetState());
+/** Download the set, with the stage the show server keeps alongside it. */
+async function saveSet() {
+  const reply = await serverLink.request({ type: "get-stage" });
+  downloadSet(currentSetState(), undefined, reply.ok ? reply.stage : null);
   markClean();
-  setStatus("Set saved", dmx.connected ? "connected" : "idle");
-});
+  setStatus(reply.ok ? "Set saved" : "Set saved (without the stage: the show server is offline)", dmx.connected ? "connected" : "idle");
+}
 
-loadBtn.addEventListener("click", () => {
-  loadFile.value = "";
-  loadFile.click();
-});
-
-loadFile.addEventListener("change", async () => {
-  const file = loadFile.files?.[0];
-  if (!file) return;
-
-  if (isDirty()) {
-    const ok = await confirmDiscardLoad();
-    if (!ok) return;
-  }
-
+/**
+ * Load a set file's text (the page header asks first if there are unsaved
+ * changes). Its stage, if it has one, replaces the stage; a stage file on its
+ * own (from the stage's old Export) replaces just the stage.
+ */
+function loadSet(text, fileName) {
   try {
-    const text = await file.text();
     const data = JSON.parse(text);
+    if (data?.app === "UnnaturalLight.stage") {
+      serverLink.sendStage(data);
+      setStatus(`Stage loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
+      return;
+    }
     applySet(parseSet(data));
     markClean();
-    setStatus(`Set loaded · ${file.name}`, dmx.connected ? "connected" : "idle");
+    if (data.stage && typeof data.stage === "object") serverLink.sendStage(data.stage);
+    setStatus(`Set loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load set";
     setStatus(message, "error");
     console.error(err);
   }
-});
+}
 
 window.addEventListener("hashchange", routeFromHash);
 
@@ -5544,7 +5279,6 @@ ensureFixtureFormGroupPicker();
 suggestFixtureFormStart();
 wireNavReorder();
 applyNavOrder(navOrder);
-wireSetNameDisplay(setNameDisplay);
 syncSetNameUi();
 syncTuneUi();
 syncTransportFromState();
@@ -5684,6 +5418,34 @@ document.addEventListener(
   true,
 );
 
+// For the page header (../index.html): what it shows, and the actions it offers.
+const consoleHeader = {
+  state: () => ({
+    setName,
+    status,
+    serverLive,
+    serverHost: location.host,
+    universes,
+    maxUniverses: MAX_UNIVERSES,
+    outputs: outputs.slice(0, universes).map((out) => out.connected),
+  }),
+  /** Call `fn` now and whenever the header's state changes; returns an unsubscribe. */
+  subscribe(fn) {
+    headerListeners.add(fn);
+    fn();
+    return () => headerListeners.delete(fn);
+  },
+  isDirty,
+  rename: applySetName,
+  newSet,
+  saveSet,
+  loadSet,
+  toggleOutput: (u) => void toggleOutput(u),
+  setUniverses,
+};
+window.consoleHeader = consoleHeader;
+try { if (window.parent !== window) window.parent.onConsoleHeader?.(consoleHeader); } catch { /* not the same origin */ }
+
 // Live link to the Stage page: send output levels, apply fader moves made there.
 startStageLink({
   levels: computeChannelLevels,
@@ -5810,14 +5572,11 @@ serverLink = createServerLink({
   },
   onConnection: (connected) => {
     offlineCover.classList.toggle("is-connected", connected);
-    serverPill.textContent = connected ? "Server · live" : "Server · offline";
-    serverPill.classList.toggle("is-on", connected);
-    serverPill.title = connected
-      ? `Connected to the show server (${location.host}): edits are saved there and it drives the DMX`
-      : "Not connected to the show server: reconnecting…";
+    serverLive = connected;
     renderOutputs();
     if (connected) {
-      setStatus(dmx.connected ? "Connected · DMX Pro connected" : "Connected to the show server", dmx.connected ? "connected" : "idle");
+      // The Server pill shows the connection; clear an "offline" message.
+      setStatus("", "idle");
     } else {
       setStatus("Show server offline — reconnecting…", "error");
     }

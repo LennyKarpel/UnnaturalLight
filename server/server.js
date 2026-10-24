@@ -2,11 +2,14 @@
 //
 //   - serves the console / stage pages (no caching, so a reload always picks up changes)
 //   - holds the show (server/show.js): every console is a remote view of it
+//   - keeps the stage (the 3D layout) with the show, for every stage page
 //   - runs timed fades and sends DMX to the Enttec DMX USB Pro(s) (server/dmx.js),
 //     so closing or backgrounding a browser tab never affects the lights
 //   - saves the show to server/data/session.json
 //
-// Consoles talk to it over a WebSocket at /ws (see console/server-link.js).
+// Consoles talk to it over a WebSocket at /ws (see console/server-link.js),
+// stage pages at /ws?role=stage (see stage/show-link.js; they only hear
+// about the stage).
 //
 // Usage: node server/server.js [port] [--lan] [--fake-dmx] [--no-open]
 //   --lan       listen on the local network too (other machines need the printed token)
@@ -60,6 +63,8 @@ try {
   // First run: the first console to connect provides the show.
 }
 const show = createShow(saved);
+/** The stage (stage page's layout, as stage/stage-model.js serializeStage makes it), or null. */
+let stage = saved?.stage ?? null;
 
 let saveTimer = null;
 function scheduleSave() {
@@ -69,8 +74,9 @@ function scheduleSave() {
 function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  const data = show.serialized();
-  if (!data) return;
+  const set = show.serialized();
+  if (!set) return;
+  const data = stage ? { ...set, stage } : set;
   const tmp = `${SESSION_FILE}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(data)}\n`);
   fs.renameSync(tmp, SESSION_FILE);
@@ -85,12 +91,15 @@ const dmx = createDmx({
 
 // --- WebSocket clients -------------------------------------------------------
 
-/** @type {Map<import("ws").WebSocket, { id: string }>} */
+/** @type {Map<import("ws").WebSocket, { id: string, role: "console" | "stage" }>} */
 const clients = new Map();
 
-function broadcast(msg, except = null) {
+/** Send to every client of `role` (consoles by default) but `except`. */
+function broadcast(msg, except = null, role = "console") {
   const text = JSON.stringify(msg);
-  for (const ws of clients.keys()) if (ws !== except && ws.readyState === ws.OPEN) ws.send(text);
+  for (const [ws, client] of clients) {
+    if (ws !== except && client.role === role && ws.readyState === ws.OPEN) ws.send(text);
+  }
 }
 
 const sendLive = (except = null) => broadcast({ type: "live", live: show.live() }, except);
@@ -137,6 +146,16 @@ async function onMessage(ws, client, msg) {
     case "stop":
       show.stopFade();
       sendLive();
+      return;
+    case "stage":
+      // From a stage page (an edit) or a console (a set file was loaded).
+      if (!msg.stage || typeof msg.stage !== "object") return;
+      stage = msg.stage;
+      broadcast({ type: "stage", stage }, ws, "stage");
+      scheduleSave();
+      return;
+    case "get-stage":
+      reply({ ok: true, stage });
       return;
     case "dmx-connect":
     case "dmx-disconnect":
@@ -196,10 +215,13 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
 
-wss.on("connection", (ws) => {
-  const client = { id: crypto.randomUUID() };
+wss.on("connection", (ws, req) => {
+  const role = new URL(req.url ?? "/", "http://x").searchParams.get("role") === "stage" ? "stage" : "console";
+  const client = { id: crypto.randomUUID(), role };
   clients.set(ws, client);
-  ws.send(JSON.stringify({ type: "hello", clientId: client.id, set: show.serialized(), live: show.live(), outputs: dmx.status() }));
+  ws.send(JSON.stringify(role === "stage"
+    ? { type: "hello", stage }
+    : { type: "hello", clientId: client.id, set: show.serialized(), live: show.live(), outputs: dmx.status() }));
   ws.on("message", (data) => {
     let msg;
     try {
