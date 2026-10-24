@@ -15,6 +15,7 @@ import {
 import { createConsoleLink } from "./console-link.js";
 import { createShowLink } from "./show-link.js";
 import { createFixturePicker } from "./fixture-library.js";
+import { installColorPicker } from "../shared/color-picker.js";
 import { createTracePopover } from "../shared/trace.js";
 
 /** @typedef {import("./stage-model.js").Fixture} Fixture */
@@ -1415,6 +1416,18 @@ function syncInspector() {
   }
 }
 
+/** Nudge keys (e.code): the DMX value they change and which way. */
+const NUDGE_KEYS = {
+  ArrowLeft: ["pan", 1], ArrowRight: ["pan", -1],
+  ArrowUp: ["tilt", 1], ArrowDown: ["tilt", -1],
+  Equal: ["dimmer", 1], NumpadAdd: ["dimmer", 1],
+  Minus: ["dimmer", -1], NumpadSubtract: ["dimmer", -1],
+  BracketLeft: ["zoom", -1], BracketRight: ["zoom", 1],
+};
+
+/** Can this nudge still change any of these fixtures (0–255)? */
+const canNudge = (sel, [attr, dir]) => sel.some((i) => (dir > 0 ? i.dmx[attr] < 255 : i.dmx[attr] > 0));
+
 function renderHud() {
   const sel = selectedFixtures();
   // Keep the keys-bar color picker on the selection's color.
@@ -1422,6 +1435,11 @@ function renderHud() {
   if (kc) {
     kc.disabled = !sel.length;
     if (sel.length && document.activeElement !== kc) kc.value = sel[0].color;
+  }
+  // Keys-bar nudge buttons go dim at 0 / 255 (or with nothing selected).
+  for (const btn of document.querySelectorAll(".keys [data-repeat]")) {
+    const nudge = NUDGE_KEYS[btn.dataset.code];
+    if (nudge) btn.disabled = !canNudge(sel, nudge);
   }
   if (!sel.length) { hudEl.hidden = true; return; }
   hudEl.hidden = false;
@@ -1753,6 +1771,9 @@ keysColor.addEventListener("input", () => {
 });
 keysColor.addEventListener("change", () => keysColor.blur());
 
+// Every color input (keys bar, inspector) opens the shared color picker.
+installColorPicker({ usedLabel: "On stage", usedColors: () => state.fixtures.map((i) => i.color) });
+
 // Keys bar under the 3D view: each key is a button that does what the key
 // does (it sends the same key press). Hold to repeat; ⇧-click for steps of 10.
 document.querySelectorAll(".keys [data-key]").forEach((btn) => {
@@ -1766,9 +1787,11 @@ document.querySelectorAll(".keys [data-key]").forEach((btn) => {
     if (e.button !== 0) return;
     e.preventDefault(); // keep keyboard focus where it was
     press(e.shiftKey);
-    if (!btn.hasAttribute("data-repeat")) return;
+    if (!btn.hasAttribute("data-repeat") || btn.disabled) return;
     btn.classList.add("held");
-    delay = setTimeout(() => { repeat = setInterval(() => press(e.shiftKey), 60); }, 350);
+    // Stops at 0 / 255: the button is disabled then, and gets no pointerup.
+    const again = () => { if (btn.disabled) stop(); else press(e.shiftKey); };
+    delay = setTimeout(() => { repeat = setInterval(again, 60); }, 350);
   });
   for (const type of ["pointerup", "pointerleave", "pointercancel"]) btn.addEventListener(type, stop);
   // Keyboard activation (Tab to it, Enter / Space): one press.
@@ -1819,18 +1842,18 @@ window.addEventListener("keydown", (e) => {
 
   // Every value is 0–255: one key press = 1 step, ⇧ = 10.
   const step = e.shiftKey ? 10 : 1;
-  const nudge = (attr, by) => sel.forEach((i) => setDmx(i, attr, i.dmx[attr] + by));
-  let handled = true;
   // e.code is layout-independent; keeps ⇧/⌥ from changing the key we see.
+  const nudge = NUDGE_KEYS[e.code];
+  if (nudge) {
+    e.preventDefault();
+    if (!canNudge(sel, nudge)) return; // already at 0 / 255
+    const [attr, dir] = nudge;
+    sel.forEach((i) => setDmx(i, attr, i.dmx[attr] + dir * step));
+    changed();
+    return;
+  }
+  let handled = true;
   switch (e.code) {
-    case "ArrowLeft": nudge("pan", step); break;
-    case "ArrowRight": nudge("pan", -step); break;
-    case "ArrowUp": nudge("tilt", step); break;
-    case "ArrowDown": nudge("tilt", -step); break;
-    case "Equal": case "NumpadAdd": nudge("dimmer", step); break;
-    case "Minus": case "NumpadSubtract": nudge("dimmer", -step); break;
-    case "BracketLeft": nudge("zoom", -step); break;
-    case "BracketRight": nudge("zoom", step); break;
     case "KeyH": sel.forEach(homeFixture); break;
     case "KeyZ": sel.filter((i) => !i.rigId).forEach(setZeroHere); break;
     default: handled = false;

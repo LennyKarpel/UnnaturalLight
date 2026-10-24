@@ -1,6 +1,7 @@
 import { notifyStage, startStageLink } from "./stage-link.js";
 import { createServerLink, LIVE_FIELDS } from "./server-link.js";
 import { computeChannelLevels as channelLevelsFor, liveLevel as mixLevel } from "../shared/engine.js";
+import { installColorPicker } from "../shared/color-picker.js";
 import {
   FADER_COUNT,
   CHANNEL_METER_COUNT,
@@ -2287,6 +2288,12 @@ function refreshColorBars() {
     if (input && document.activeElement !== input) setValue(input, color);
   }
 }
+
+// Color bars open the shared color picker (also used by the stage).
+installColorPicker({
+  usedLabel: "In use",
+  usedColors: () => [...document.querySelectorAll(".rgb-bar")].map((bar) => bar.style.getPropertyValue("--rgb")),
+});
 
 /** Trio layout the fader rows were last drawn with (redraw when it changes). */
 let colorBarKey = "";

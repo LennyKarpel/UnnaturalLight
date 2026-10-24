@@ -65,7 +65,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
 3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the light's current values.
 4. **Move a fader** in the console's **Cue 1**: the light on the stage changes with it (brightness, direction, color, beam width).
-5. **Or adjust the light on the stage:** select it and use the arrow keys (pan / tilt), `+` / `−` (dimmer), `[` / `]` (beam width), or the sliders in the inspector. Its faders in the console follow.
+5. **Or adjust the light on the stage:** select it and use `+` / `−` (dimmer), the arrow keys (pan / tilt), `[` / `]` (zoom), or the sliders in the inspector. Its faders in the console follow.
 6. **Point it somewhere:** press `T` and click a spot on the floor; the light swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
@@ -196,16 +196,26 @@ Change them with the keys, or the sliders and numbers in the inspector:
 
 | Key | Does |
 |---|---|
+| `+` / `−` | dimmer up / down |
 | `←` / `→` | pan left / right |
 | `↑` / `↓` | tilt up / down |
-| `+` / `−` | dimmer up / down |
-| `]` / `[` | beam wider / narrower |
+| `]` / `[` | zoom wider / narrower |
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's **Color** picker sets red, green and blue together. **Ranges** set what the ends mean for that light: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
+The inspector's **Color** picker (and **color** in the key strip) sets red, green and blue together (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the lights on the stage). **Ranges** set what the ends mean for that light: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
 
-**The keys bar** along the bottom of the 3D view works with the mouse too: click any key in it to do what that key does (**hold** an arrow, `+`/`−` or `[`/`]` to repeat; **⇧-click** for steps of 10). It also has a **color** picker that sets the color of the selected lights.
+#### The color picker
+
+The console's color bars and the stage's color pickers all open the same picker (`shared/color-picker.js`) instead of the browser's own:
+
+- **Wheel:** hue around the edge, saturation toward the centre. Click or drag. It picks at full brightness; the dimmer sets how bright the light is.
+- **Swatches:** common lighting colors (warm white, white, cool white, amber, orange, red, pink, magenta, UV, blue, cyan, green), then a row of colors already in use (**In use** in the console, **On stage** on the stage).
+- **R / G / B and hex:** the 0–255 values it sets; type in them to set a color exactly.
+
+Every change applies straight away. Click anywhere outside the picker, or press `Esc` or `Enter`, to close it. That click only closes the picker, so nothing under it is clicked (the fixture stays selected). While it's open, keys go to the picker, not the stage or console.
+
+**The keys bar** along the bottom of the 3D view works with the mouse too: click any key in it to do what that key does (**hold** an arrow, `+`/`−` or `[`/`]` to repeat; **⇧-click** for steps of 10). A key goes dim, and a held key stops, once the selected lights reach 0 or 255 in that direction (or when nothing is selected); the keyboard keys stop there too. It also has a **color** picker that sets the color of the selected lights.
 
 ### Aiming
 
@@ -296,7 +306,7 @@ Switch with the tabs along the top (drag them to reorder):
 - **Rename** a fader by right-clicking it (or on the Patch page). Lights placed on the stage name their faders automatically.
 - **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any white channel — go to full too; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognised automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
 - **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labelled with the fixture's name (neighbouring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-page strip, and update when you change the patch.
-- **Color bars:** when three faders side by side control the **red, green and blue** of the same light, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). On the Live strip the bar just shows the color going out. This works for lights placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
+- **Color bars:** when three faders side by side control the **red, green and blue** of the same light, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for lights placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
 - **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Lights placed from the stage are recognised automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
 
 ### Master, submasters, blackout
@@ -505,6 +515,7 @@ Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependenc
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
+| `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B), used by both pages in place of the browser's |
 
 **Show server link.** Consoles connect to `/ws` (other machines add `?token=`). On connect the server sends `hello` (set, live mix, DMX status); an empty server takes the first console's set (`seed`). Consoles send only what changed: the whole `set` for structural edits, single-cell `levels` while dragging, `live` fields (master, subs, crossfade, Current / Next, fade time, blackout snapshots), `hold` (flash / blackout buttons held, released if the console disconnects), `go` / `pause` / `stop`, and `dmx-connect` / `dmx-disconnect` (answered with a `reply`). The server rebroadcasts edits to the other consoles and sends `live` on every fade step and `dmx` when output status changes. A value just changed on a console wins over the server's broadcasts for 0.6 s so dragging doesn't jitter.
 
