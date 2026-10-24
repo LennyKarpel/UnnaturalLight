@@ -35,7 +35,7 @@
       }
       .bar { gap: 12px; }
       .bar h1 { margin: 0; font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; }
-      .show-controls button, .show-controls select, .dots {
+      .show-controls button, .show-controls select, .dots, .swap {
         border: 1px solid var(--track);
         border-radius: 5px;
         background: none;
@@ -46,8 +46,8 @@
         white-space: nowrap;
       }
       .show-controls select { background: var(--bg); color: var(--ink); padding: 2px 4px; }
-      .show-controls button:hover:not(:disabled), .dots:hover { color: var(--ink); border-color: var(--muted); }
-      .show-controls button:disabled { opacity: 0.35; cursor: default; }
+      .show-controls button:hover:not(:disabled), .dots:hover, .swap:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+      .show-controls button:disabled, .swap:disabled { opacity: 0.35; cursor: default; }
       .show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
 
       /* Set name (click to rename) and its ⋮ menu, from the console. */
@@ -176,18 +176,6 @@
       .seg button:hover { color: var(--ink); }
       .seg button.on { background: var(--accent); color: #1a1408; font-weight: 600; }
       .controls { display: flex; align-items: center; gap: 8px; flex: none; }
-      .swap {
-        border: 1px solid var(--track);
-        border-radius: 5px;
-        background: none;
-        color: var(--muted);
-        font: inherit;
-        padding: 3px 9px;
-        cursor: pointer;
-      }
-      .swap:hover { color: var(--ink); border-color: var(--muted); }
-      .swap:disabled { opacity: 0.35; cursor: default; }
-
       /* Panes: stage on the left, console on the right (⇄ swaps them). Frames are absolutely
          placed so a hidden console stays rendered (its fades and DMX output
          keep running) underneath the stage in Stage view. */
