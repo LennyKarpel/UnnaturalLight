@@ -583,6 +583,7 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  requestRender();
 }
 new ResizeObserver(resize).observe(view);
 
@@ -594,7 +595,6 @@ new ResizeObserver(resize).observe(view);
 for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "keyup", "input", "change"]) {
   window.addEventListener(type, requestRender, { capture: true, passive: true });
 }
-new ResizeObserver(requestRender).observe(view);
 setInterval(requestRender, 500);
 
 renderer.setAnimationLoop(() => {

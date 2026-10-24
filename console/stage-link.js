@@ -3,8 +3,9 @@
  * (same origin, other tabs; works whether or not the DMX Pro is connected).
  *
  * Console → stage: the 512 output levels, which fader(s) each patched
- * channel comes from, and the console's fixtures — on every output change, when the
- * stage says hello, and as a heartbeat.
+ * channel comes from, and the console's fixtures — on every output change made
+ * here (marked `local`), and from the leader (below) for changes from the
+ * server, when the stage says hello, and as a heartbeat.
  *
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
  * are moved (in the transition(s) currently on the output) so the output

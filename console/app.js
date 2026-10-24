@@ -885,22 +885,22 @@ function persistSession() {
 
 /**
  * Show the new output here and send the change to the show server (which
- * drives the DMX). `redraw: false` (changes from the server): redraw at the
- * next frame instead, so a burst of messages costs one redraw, and a hidden
- * window doesn't redraw until it's shown.
+ * drives the DMX). `fromServer`: the change came from the server, so redraw
+ * at the next frame (a burst of messages costs one redraw, and a hidden
+ * window waits until it's shown) and let the stage link's leader pass it on.
  */
-function pushToDmx({ persist = true, redraw = true } = {}) {
+function pushToDmx({ persist = true, fromServer = false } = {}) {
   serverLink?.sync();
-  if (redraw) refreshOutput();
-  else refreshOutputSoon();
-  notifyStage({ local: redraw });
+  if (fromServer) refreshOutputSoon();
+  else refreshOutput();
+  notifyStage({ local: !fromServer });
   if (persist) persistSession();
 }
 
-function refreshOutput() {
+function refreshOutput({ selectedGroup = true } = {}) {
   refreshLiveRow();
   refreshChannelRow();
-  refreshSelectedGroup();
+  if (selectedGroup) refreshSelectedGroup();
   refreshColorBars();
   refreshDimmerButtons();
 }
@@ -911,8 +911,8 @@ function refreshOutputSoon() {
   refreshQueued = true;
   requestAnimationFrame(() => {
     refreshQueued = false;
-    syncSlidersFromState();
-    refreshOutput();
+    syncSlidersFromState(); // includes refreshSelectedGroup
+    refreshOutput({ selectedGroup: false });
   });
 }
 
@@ -5769,7 +5769,7 @@ function applyServerLive(live) {
   syncCrossUi();
   updateFadePauseButton();
   if (fromRow !== before.fromRow || selectedRow !== before.selectedRow) showArrivedCue();
-  pushToDmx({ persist: false, redraw: false });
+  pushToDmx({ persist: false, fromServer: true });
 }
 
 serverLink = createServerLink({
@@ -5801,7 +5801,7 @@ serverLink = createServerLink({
       const t = byId.get(id);
       if (t) t.levels[fader] = value;
     }
-    pushToDmx({ redraw: false });
+    pushToDmx({ fromServer: true });
   },
   onOutputs: (list) => {
     outputStatus = list;
