@@ -4,7 +4,6 @@ import { computeChannelLevels as channelLevelsFor, liveLevel as mixLevel } from 
 import {
   FADER_COUNT,
   CHANNEL_METER_COUNT,
-  DMX_CHANNEL_MAX,
   identityPatch,
   savePatch,
   defaultPatch,
@@ -44,7 +43,6 @@ import {
   defaultFaderName,
   defaultSetName,
   defaultTuneName,
-  defaultTransitionName,
   downloadSet,
   createTune,
   createTransition,
@@ -4807,10 +4805,6 @@ function openSceneRowMenu(anchor, index) {
     if (action === "remove") await removeSceneAt(index);
     return action;
   });
-}
-
-function setUiConnected() {
-  renderOutputs();
 }
 
 // ---------------------------------------------------------------------
