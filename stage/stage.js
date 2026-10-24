@@ -30,12 +30,12 @@ function takeStage(data) {
   const mine = new Map(state.fixtures.map((i) => [i.id, i]));
   const selected = state.selected;
   loadData(data);
-  for (const inst of state.fixtures) {
-    const was = mine.get(inst.id);
+  for (const fixture of state.fixtures) {
+    const was = mine.get(fixture.id);
     if (was) {
-      for (const { attr } of linkChannels(inst)) if (inst.dmx[attr] !== was.dmx[attr]) setDmx(inst, attr, was.dmx[attr]);
-    } else if (inst.link.register) {
-      othersRegistering.add(inst.id);
+      for (const { attr } of linkChannels(fixture)) if (fixture.dmx[attr] !== was.dmx[attr]) setDmx(fixture, attr, was.dmx[attr]);
+    } else if (fixture.link.register) {
+      othersRegistering.add(fixture.id);
     }
   }
   state.selected = selected.filter((id) => byId(id));

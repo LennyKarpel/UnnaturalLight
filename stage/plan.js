@@ -108,7 +108,7 @@ function computeFit() {
 
 const toPlan = (a, b) => [(a - planFit.minA) * planFit.scale, (b - planFit.minB) * planFit.scale];
 const fromPlan = (px, py) => [px / planFit.scale + planFit.minA, py / planFit.scale + planFit.minB];
-const instPlan = (p) => toPlan(...toAB(p));
+const fixturePlan = (p) => toPlan(...toAB(p));
 
 export function drawPlan() {
   const size = plan.clientWidth;
@@ -191,46 +191,46 @@ export function drawPlan() {
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     rigOutline(rig).forEach((p, k) => {
-      const [px, py] = instPlan(p);
+      const [px, py] = fixturePlan(p);
       if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
     });
     ctx.stroke();
   }
 
   // Beam axis hit points
-  for (const inst of state.fixtures) {
-    const hits = axisHits(inst, state.box);
-    if (!hits.length || look(inst).intensity <= 0) continue;
+  for (const fixture of state.fixtures) {
+    const hits = axisHits(fixture, state.box);
+    if (!hits.length || look(fixture).intensity <= 0) continue;
     const last = hits[hits.length - 1].point;
-    const [px, py] = instPlan(inst);
-    const [hx, hy] = instPlan(last);
-    ctx.strokeStyle = look(inst).color + "55";
+    const [px, py] = fixturePlan(fixture);
+    const [hx, hy] = fixturePlan(last);
+    ctx.strokeStyle = look(fixture).color + "55";
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(hx, hy); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = look(inst).color;
-    ctx.globalAlpha = 0.3 + 0.7 * look(inst).intensity;
+    ctx.fillStyle = look(fixture).color;
+    ctx.globalAlpha = 0.3 + 0.7 * look(fixture).intensity;
     ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   }
 
   // Fixtures
-  for (const inst of state.fixtures) {
-    const [px, py] = instPlan(inst);
-    const [da, db] = toAB(beamDir(inst));
-    const sel = state.selected.includes(inst.id);
+  for (const fixture of state.fixtures) {
+    const [px, py] = fixturePlan(fixture);
+    const [da, db] = toAB(beamDir(fixture));
+    const sel = state.selected.includes(fixture.id);
     const flat = Math.hypot(da, db);
     const hlen = flat * 22;
     if (hlen > 1) {
-      ctx.strokeStyle = look(inst).color;
+      ctx.strokeStyle = look(fixture).color;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + (da / flat) * hlen, py + (db / flat) * hlen); ctx.stroke();
     }
     ctx.fillStyle = "#0c0e11";
     ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = look(inst).color;
-    ctx.globalAlpha = 0.25 + 0.75 * look(inst).intensity;
+    ctx.fillStyle = look(fixture).color;
+    ctx.globalAlpha = 0.25 + 0.75 * look(fixture).intensity;
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
     if (sel) {
@@ -241,7 +241,7 @@ export function drawPlan() {
     ctx.fillStyle = sel ? "#e8e4dc" : "#9a9488";
     ctx.textAlign = "left";
     ctx.font = "11px system-ui, sans-serif";
-    ctx.fillText(inst.name, px + 12, py - 8);
+    ctx.fillText(fixture.name, px + 12, py - 8);
   }
 
   if (ui.placing || ui.aiming) {
@@ -273,20 +273,20 @@ function planPoint(e) {
 /** Fixture under a plan-canvas point (within 14 px), or null. */
 function planFixtureAt(px, py) {
   let best = null, bestD = 14;
-  for (const inst of state.fixtures) {
-    const [ix, iy] = instPlan(inst);
+  for (const fixture of state.fixtures) {
+    const [ix, iy] = fixturePlan(fixture);
     const d = Math.hypot(ix - px, iy - py);
-    if (d < bestD) { bestD = d; best = inst; }
+    if (d < bestD) { bestD = d; best = fixture; }
   }
   return best;
 }
 
 plan.addEventListener("contextmenu", (e) => {
   planFit = planFit || computeFit();
-  const inst = planFixtureAt(...planPoint(e));
-  if (!inst) return;
+  const fixture = planFixtureAt(...planPoint(e));
+  if (!fixture) return;
   e.preventDefault();
-  openContextMenu(inst.id, e.clientX, e.clientY);
+  openContextMenu(fixture.id, e.clientX, e.clientY);
 });
 
 plan.addEventListener("pointerdown", (e) => {
@@ -319,14 +319,14 @@ plan.addEventListener("pointerdown", (e) => {
 
 plan.addEventListener("pointermove", (e) => {
   if (!planDrag) return;
-  const inst = byId(planDrag.id);
-  if (!inst) return;
+  const fixture = byId(planDrag.id);
+  if (!fixture) return;
   const [a, b] = fromPlan(...planPoint(e));
   const snap = e.altKey ? 0.01 : 0.1;
   const s = (v) => round(Math.round(v / snap) * snap);
-  const p = { x: inst.x, y: inst.y, z: inst.z };
+  const p = { x: fixture.x, y: fixture.y, z: fixture.z };
   setAB(p, s(a + planDrag.da), s(b + planDrag.db));
-  moveFixture(inst, p.x, clamp(p.y, 0, 50), p.z);
+  moveFixture(fixture, p.x, clamp(p.y, 0, 50), p.z);
   changed({ list: false });
 });
 

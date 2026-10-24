@@ -40,12 +40,12 @@ function normalizeRoles(list) {
 
 /** @returns {string} */
 function newFixtureId() {
-  return newId("inst");
+  return newId("fixture");
 }
 
 /** @returns {string} */
 function newGroupId() {
-  return newId("grp");
+  return newId("group");
 }
 
 /** @param {unknown} value @returns {MountType} */

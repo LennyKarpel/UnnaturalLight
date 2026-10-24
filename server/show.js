@@ -30,7 +30,7 @@ export function createShow(saved) {
   const holds = new Map();
 
   const activeSong = () => resolveActiveSong(set.songs, set.activeSongId);
-  const rows = () => activeSong().cues.map((t) => t.levels);
+  const cueLevels = () => activeSong().cues.map((t) => t.levels);
 
   /** Keep Current / Next / selected inside the song; Next always follows Current. */
   function clampPlayback() {
@@ -169,10 +169,10 @@ export function createShow(saved) {
     /** DMX channel → level, as it should go out now. */
     levels() {
       if (!set) return new Map();
-      const r = rows();
+      const levels = cueLevels();
       const flashing = heldUnion("flashing");
       const blackedOut = heldUnion("blackedOut");
-      return computeChannelLevels(set.patch, (i) => (flashing.has(i) ? 255 : blackedOut.has(i) ? 0 : liveLevel(set, r, i)));
+      return computeChannelLevels(set.patch, (i) => (flashing.has(i) ? 255 : blackedOut.has(i) ? 0 : liveLevel(set, levels, i)));
     },
 
     get universes() {

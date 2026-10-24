@@ -43,7 +43,6 @@ import {
   createCue,
   MAX_CUES,
   normalizeSongs,
-  normalizeCueFadeTime,
   resolveActiveSong,
 } from "./songs.js";
 import {
@@ -328,7 +327,7 @@ addCueBtn.addEventListener("click", async () => {
   // New cues are just numbered; double-click one to give it a name.
   song.cues.push(createCue({ name: "" }));
   bindActiveSong();
-  state.selectedCue = state.rows.length - 1;
+  state.selectedCue = state.cueLevels.length - 1;
   state.fromCue = state.selectedCue;
   syncPlaybackPair();
   renderCues();
@@ -376,7 +375,6 @@ function applySet(next, { fromServer = false } = {}) {
   state.cross = next.cross;
   state.fromSub = next.fromSub ?? 100;
   state.toSub = next.toSub ?? 100;
-  state.fadeTime = normalizeCueFadeTime(next.fadeTime);
   state.universes = normalizeUniverses(next.universes);
   setUniverseCount(state.universes);
   renderOutputs();
@@ -740,15 +738,15 @@ startStageLink({
   levels: computeChannelLevels,
   serverSeq: () => state.serverLink?.seq ?? 0,
   patch: () => state.patch,
-  live: () => ({ rows: state.rows, fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
+  live: () => ({ cueLevels: state.cueLevels, fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
   fixtures: () => state.fixtures,
   groups: () => state.fixtureGroups,
   faderInfo: () => Array.from({ length: FADER_COUNT }, (_, i) => ({
     num: i + 1,
     name: faderName(i),
     live: liveLevel(i),
-    from: state.rows[state.fromCue]?.[i] ?? 0,
-    to: state.rows[state.toCue]?.[i] ?? 0,
+    from: state.cueLevels[state.fromCue]?.[i] ?? 0,
+    to: state.cueLevels[state.toCue]?.[i] ?? 0,
     patch: state.patch[i],
   })),
   mix: () => ({ master: state.master, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, fromName: cueLabel(state.fromCue), toName: cueLabel(state.toCue) }),
@@ -806,7 +804,6 @@ function applyServerLive(live) {
   if ("cross" in live) state.cross = live.cross;
   if ("fromSub" in live) state.fromSub = live.fromSub;
   if ("toSub" in live) state.toSub = live.toSub;
-  if ("fadeTime" in live) state.fadeTime = live.fadeTime;
   if ("fromCue" in live) state.fromCue = live.fromCue;
   if ("selectedCue" in live) state.selectedCue = live.selectedCue;
   syncPlaybackPair();

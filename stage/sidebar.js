@@ -41,17 +41,17 @@ export function renderList() {
     return;
   }
   listEl.innerHTML = "";
-  for (const inst of state.fixtures) {
+  for (const fixture of state.fixtures) {
     const row = document.createElement("div");
-    row.className = "item" + (state.selected.includes(inst.id) ? " sel" : "");
+    row.className = "item" + (state.selected.includes(fixture.id) ? " sel" : "");
     row.innerHTML = `
-      <span class="swatch" style="background:${inst.color}"></span>
+      <span class="swatch" style="background:${fixture.color}"></span>
       <span></span>
-      <div class="bar"><div style="width:${Math.round(inst.intensity * 100)}%"></div></div>
-      <span class="pct" title="Dimmer (0–255)">${inst.dmx.dimmer}</span>`;
-    row.children[1].textContent = inst.name + (isInside(inst, state.box) ? "" : "  ·  outside");
-    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "light", id: inst.id }, e) : select(inst.id, e.shiftKey)));
-    row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(inst.id, e.clientX, e.clientY); });
+      <div class="bar"><div style="width:${Math.round(fixture.intensity * 100)}%"></div></div>
+      <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
+    row.children[1].textContent = fixture.name + (isInside(fixture, state.box) ? "" : "  ·  outside");
+    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "light", id: fixture.id }, e) : select(fixture.id, e.shiftKey)));
+    row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);
   }
 }
@@ -170,41 +170,41 @@ export function renderInspector() {
   syncInspector();
 }
 
-function getField(inst, k) {
-  if (k.startsWith("base.")) return inst.base[k.slice(5)];
-  return inst[k];
+function getField(fixture, k) {
+  if (k.startsWith("base.")) return fixture.base[k.slice(5)];
+  return fixture[k];
 }
 
-function setField(inst, k, raw) {
-  if (k === "name") { inst.name = raw; return; }
-  if (k === "color") { setColorHex(inst, raw); return; }
+function setField(fixture, k, raw) {
+  if (k === "name") { fixture.name = raw; return; }
+  if (k === "color") { setColorHex(fixture, raw); return; }
   const v = Number(raw);
   if (!Number.isFinite(v)) return;
   // Ranges change what the same 0–255 values mean, so re-derive afterwards.
-  if (k === "panLimit") { inst.panLimit = clamp(v, 0, 360); deriveFromDmx(inst); }
-  else if (k === "tiltLimit") { inst.tiltLimit = clamp(v, 0, 180); deriveFromDmx(inst); }
-  else if (k === "zoomMin") { inst.zoomMin = clamp(v, 1, Math.min(120, inst.zoomMax)); deriveFromDmx(inst); }
-  else if (k === "zoomMax") { inst.zoomMax = clamp(v, Math.max(1, inst.zoomMin), 120); deriveFromDmx(inst); }
-  else if (k.startsWith("base.")) inst.base[k.slice(5)] = v;
-  else if (k === "x" || k === "y" || k === "z") inst[k] = v;
+  if (k === "panLimit") { fixture.panLimit = clamp(v, 0, 360); deriveFromDmx(fixture); }
+  else if (k === "tiltLimit") { fixture.tiltLimit = clamp(v, 0, 180); deriveFromDmx(fixture); }
+  else if (k === "zoomMin") { fixture.zoomMin = clamp(v, 1, Math.min(120, fixture.zoomMax)); deriveFromDmx(fixture); }
+  else if (k === "zoomMax") { fixture.zoomMax = clamp(v, Math.max(1, fixture.zoomMin), 120); deriveFromDmx(fixture); }
+  else if (k.startsWith("base.")) fixture.base[k.slice(5)] = v;
+  else if (k === "x" || k === "y" || k === "z") fixture[k] = v;
 }
 
 function bindInspector() {
   inspectorEl.querySelectorAll("[data-k]").forEach((el) => {
     el.addEventListener("input", () => {
-      const inst = selectedFixtures()[0];
-      if (!inst) return;
-      setField(inst, el.dataset.k, el.value);
+      const fixture = selectedFixtures()[0];
+      if (!fixture) return;
+      setField(fixture, el.dataset.k, el.value);
       changed({ inspector: el.dataset.k !== "name" });
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     el.addEventListener("input", () => {
-      const inst = selectedFixtures()[0];
+      const fixture = selectedFixtures()[0];
       const v = Number(el.value);
-      if (!inst || el.value === "" || !Number.isFinite(v)) return;
-      setDmx(inst, el.dataset.d, v);
+      if (!fixture || el.value === "" || !Number.isFinite(v)) return;
+      setDmx(fixture, el.dataset.d, v);
       changed();
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
@@ -212,13 +212,13 @@ function bindInspector() {
   inspectorEl.querySelectorAll("[data-multi]").forEach((el) => {
     el.addEventListener("input", () => {
       if (el.dataset.multi === "color") {
-        for (const inst of selectedFixtures()) setColorHex(inst, el.value);
+        for (const fixture of selectedFixtures()) setColorHex(fixture, el.value);
         changed();
         return;
       }
       const v = Number(el.value);
       if (el.value === "" || !Number.isFinite(v)) return;
-      for (const inst of selectedFixtures()) setDmx(inst, "dimmer", v);
+      for (const fixture of selectedFixtures()) setDmx(fixture, "dimmer", v);
       changed();
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
@@ -265,21 +265,21 @@ export function syncInspector() {
     if (colorEl && colorEl !== document.activeElement) colorEl.value = sel[0].color;
     return;
   }
-  const inst = sel[0];
-  if (!inst) return;
+  const fixture = sel[0];
+  if (!fixture) return;
   inspectorEl.querySelectorAll("[data-k]").forEach((el) => {
     const k = el.dataset.k;
     if (el === document.activeElement && el.type !== "range") return;
-    const v = getField(inst, k);
+    const v = getField(fixture, k);
     el.value = typeof v === "number" ? String(round(v)) : v;
   });
-  syncDmxRows(inst);
+  syncDmxRows(fixture);
   const readout = inspectorEl.querySelector("#readout");
   if (readout) {
-    const dir = beamDir(inst);
-    const hits = axisHits(inst, state.box);
+    const dir = beamDir(fixture);
+    const hits = axisHits(fixture, state.box);
     const fmt = (p) => `${round(p.x, 1)}, ${round(p.y, 1)}, ${round(p.z, 1)}`;
-    let html = `<div>${isInside(inst, state.box) ? "Inside" : "<b>Outside</b>"} the box · dir ${round(dir.x)}, ${round(dir.y)}, ${round(dir.z)}</div>`;
+    let html = `<div>${isInside(fixture, state.box) ? "Inside" : "<b>Outside</b>"} the box · dir ${round(dir.x)}, ${round(dir.y)}, ${round(dir.z)}</div>`;
     if (!hits.length) html += `<div>Beam axis misses the box</div>`;
     hits.forEach((h, idx) => {
       const label = hits.length > 1 ? (idx === 0 ? "Enters" : "Exits") : "Hits";

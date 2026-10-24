@@ -260,7 +260,7 @@ scene.add(aimMarker, aimLines);
 /** @type {Map<string, {group: THREE.Group, aim: THREE.Group, body: THREE.Mesh, lens: THREE.Mesh, cone: THREE.Mesh, ring: THREE.Mesh, zero: THREE.Group, axis: THREE.Line, pick: THREE.Mesh}>} */
 const visuals = new Map();
 
-function makeVisual(inst) {
+function makeVisual(fixture) {
   const group = new THREE.Group();
   const aim = new THREE.Group();
   const body = new THREE.Mesh(bodyGeom, new THREE.MeshStandardMaterial({ color: 0x2b2f38, roughness: 0.6, metalness: 0.4 }));
@@ -273,7 +273,7 @@ function makeVisual(inst) {
 
   // Invisible sphere: a bigger target than the fixture itself for click / drag.
   const pick = new THREE.Mesh(pickGeom, new THREE.MeshBasicMaterial({ visible: false }));
-  pick.userData.instId = inst.id;
+  pick.userData.fixtureId = fixture.id;
 
   const ring = new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({ color: 0x00dddd }));
   ring.rotation.x = Math.PI / 2;
@@ -299,7 +299,7 @@ function makeVisual(inst) {
   group.add(aim, ring, zero, pick);
   scene.add(group, axis);
   const v = { group, aim, body, lens, cone, ring, zero, axis, pick };
-  visuals.set(inst.id, v);
+  visuals.set(fixture.id, v);
   return v;
 }
 
@@ -332,29 +332,29 @@ export function syncScene() {
   const diag = Math.hypot(w, d, h);
   uniforms.uCount.value = state.fixtures.length;
 
-  state.fixtures.forEach((inst, i) => {
-    const v = visuals.get(inst.id) || makeVisual(inst);
-    const q = fullQuat(inst);
+  state.fixtures.forEach((fixture, i) => {
+    const v = visuals.get(fixture.id) || makeVisual(fixture);
+    const q = fullQuat(fixture);
     const dir = FORWARD.clone().applyQuaternion(q);
-    const lk = look(inst);
+    const lk = look(fixture);
     const color = new THREE.Color(lk.color);
-    const sel = state.selected.includes(inst.id);
+    const sel = state.selected.includes(fixture.id);
 
-    v.group.position.set(inst.x, inst.y, inst.z);
+    v.group.position.set(fixture.x, fixture.y, fixture.z);
     v.aim.quaternion.copy(q);
-    v.zero.quaternion.copy(baseQuat(inst));
+    v.zero.quaternion.copy(baseQuat(fixture));
     v.zero.visible = sel;
     v.ring.visible = sel;
 
-    const hits = axisHits(inst, state.box);
+    const hits = axisHits(fixture, state.box);
     const len = hits.length ? hits[hits.length - 1].t : diag * 0.6;
     // The visible cone is drawn long and clipped by every wall the
     // fixture is on the inside of, so it ends exactly where it lands
     // on the walls (an outside fixture's beam passes in through the
     // near wall and stops at the far ones).
-    const p = new THREE.Vector3(inst.x, inst.y, inst.z);
+    const p = new THREE.Vector3(fixture.x, fixture.y, fixture.z);
     const coneLen = p.length() + diag * 1.5;
-    const coneR = Math.tan((inst.beam / 2) * DEG) * coneLen;
+    const coneR = Math.tan((fixture.beam / 2) * DEG) * coneLen;
     v.cone.scale.set(coneR, coneR, coneLen);
     v.cone.material.clippingPlanes = wallPlanes.filter((pl) => pl.distanceToPoint(p) >= -1e-3);
     v.cone.material.color.copy(color);
@@ -363,18 +363,18 @@ export function syncScene() {
     v.lens.material.color.copy(color).multiplyScalar(0.25 + 0.75 * lk.intensity);
 
     const pts = v.axis.geometry.attributes.position;
-    pts.setXYZ(0, inst.x, inst.y, inst.z);
-    const end = new THREE.Vector3(inst.x, inst.y, inst.z).addScaledVector(dir, len);
+    pts.setXYZ(0, fixture.x, fixture.y, fixture.z);
+    const end = new THREE.Vector3(fixture.x, fixture.y, fixture.z).addScaledVector(dir, len);
     pts.setXYZ(1, end.x, end.y, end.z);
     pts.needsUpdate = true;
     v.axis.computeLineDistances();
     v.axis.visible = sel;
 
-    uniforms.uPos.value[i].set(inst.x, inst.y, inst.z);
+    uniforms.uPos.value[i].set(fixture.x, fixture.y, fixture.z);
     uniforms.uDir.value[i].copy(dir);
     uniforms.uColor.value[i].set(color.r, color.g, color.b);
-    uniforms.uCosOuter.value[i] = Math.cos((inst.beam / 2) * DEG);
-    uniforms.uCosInner.value[i] = Math.cos((inst.beam / 2) * 0.82 * DEG);
+    uniforms.uCosOuter.value[i] = Math.cos((fixture.beam / 2) * DEG);
+    uniforms.uCosInner.value[i] = Math.cos((fixture.beam / 2) * 0.82 * DEG);
     uniforms.uInt.value[i] = lk.intensity;
   });
 }
@@ -432,12 +432,12 @@ function rayFromEvent(e) {
 function pickFixture(e) {
   rayFromEvent(e);
   const targets = [...visuals.values()].map((v) => v.pick);
-  return raycaster.intersectObjects(targets)[0]?.object.userData.instId ?? null;
+  return raycaster.intersectObjects(targets)[0]?.object.userData.fixtureId ?? null;
 }
 
 /** Horizontal plane through the fixture, or (⇧) a vertical one facing the camera. */
-function dragPlane(inst, vertical) {
-  const p = new THREE.Vector3(inst.x, inst.y, inst.z);
+function dragPlane(fixture, vertical) {
+  const p = new THREE.Vector3(fixture.x, fixture.y, fixture.z);
   if (!vertical) return new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), p);
   const n = new THREE.Vector3();
   camera.getWorldDirection(n);
@@ -507,8 +507,8 @@ export function showAimPreview(p) {
   aimMarker.quaternion.copy(camera.quaternion);
   const pts = aimLines.geometry.attributes.position;
   const sel = selectedFixtures();
-  sel.forEach((inst, k) => {
-    pts.setXYZ(k * 2, inst.x, inst.y, inst.z);
+  sel.forEach((fixture, k) => {
+    pts.setXYZ(k * 2, fixture.x, fixture.y, fixture.z);
     pts.setXYZ(k * 2 + 1, p.x, p.y, p.z);
   });
   pts.needsUpdate = true;
@@ -523,10 +523,10 @@ view.addEventListener("pointerdown", (e) => {
   if (ui.placing || ui.aiming) return;
   const id = pickFixture(e);
   if (!id) return;
-  const inst = byId(id);
-  const plane = dragPlane(inst, e.shiftKey);
+  const fixture = byId(id);
+  const plane = dragPlane(fixture, e.shiftKey);
   const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-  const offset = hit ? new THREE.Vector3(inst.x, inst.y, inst.z).sub(hit) : new THREE.Vector3();
+  const offset = hit ? new THREE.Vector3(fixture.x, fixture.y, fixture.z).sub(hit) : new THREE.Vector3();
   drag3d = { id, shift: e.shiftKey, active: false, plane, offset };
   controls.enabled = false;
   renderer.domElement.setPointerCapture(e.pointerId);
@@ -546,18 +546,18 @@ view.addEventListener("pointermove", (e) => {
     if (!state.selected.includes(drag3d.id)) select(drag3d.id);
     renderer.domElement.style.cursor = "grabbing";
   }
-  const inst = byId(drag3d.id);
-  if (!inst) return;
+  const fixture = byId(drag3d.id);
+  if (!fixture) return;
   const hit = rayFromEvent(e).intersectPlane(drag3d.plane, new THREE.Vector3());
   if (!hit) return;
   hit.add(drag3d.offset);
   const snap = e.altKey ? 0.01 : 0.1;
   const s = (v) => round(Math.round(v / snap) * snap);
   if (drag3d.shift) {
-    moveFixture(inst, inst.x, clamp(s(hit.y), 0, 50), inst.z);
+    moveFixture(fixture, fixture.x, clamp(s(hit.y), 0, 50), fixture.z);
   } else {
     // Keep the camera from flinging it off to the horizon at grazing angles.
-    moveFixture(inst, clamp(s(hit.x), -100, 100), inst.y, clamp(s(hit.z), -100, 100));
+    moveFixture(fixture, clamp(s(hit.x), -100, 100), fixture.y, clamp(s(hit.z), -100, 100));
   }
   changed({ list: false });
 }, true);

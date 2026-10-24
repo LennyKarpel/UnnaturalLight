@@ -14,7 +14,7 @@ function requireEl(id, type) {
 }
 
 export const cuesScroll = requireEl("cuesScroll", HTMLElement);
-export const cuesEl = requireEl("rows", HTMLElement);
+export const cuesEl = requireEl("cues", HTMLElement);
 export const liveFadersEl = requireEl("liveFaders", HTMLElement);
 export const channelLevelsEl = requireEl("channelLevels", HTMLElement);
 export const selectedGroupFadersEl = requireEl("selectedGroupFaders", HTMLElement);

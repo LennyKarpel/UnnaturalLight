@@ -36,7 +36,7 @@ import { endInlineFixtureRename } from "./fixtures-page.js";
 
 /** A cue's own name ("" = none). */
 export function cueName(index) {
-  const name = state.names[index];
+  const name = state.cueNames[index];
   return typeof name === "string" ? name.trim() : "";
 }
 
@@ -413,7 +413,7 @@ export function applyFaderPatchState(wrap, slider, targets) {
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
 export function liveLevel(faderIndex) {
-  return mixLevel({ master: state.master, cross: state.cross, fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue }, state.rows, faderIndex);
+  return mixLevel({ master: state.master, cross: state.cross, fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue }, state.cueLevels, faderIndex);
 }
 
 export function refreshLiveRow() {
@@ -696,7 +696,7 @@ function addPanTiltPad(grid, { pan, tilt }, row, col) {
   pad.title = `Hold and move the mouse: left / right = ${faderName(pan)}, up / down = ${faderName(tilt)} (⇧ = fine)`;
   let held = null;
   const move = (e) => {
-    const levels = state.rows[row];
+    const levels = state.cueLevels[row];
     if (!held || !levels) return;
     const speed = e.shiftKey ? PAD_SPEED_FINE : PAD_SPEED;
     held.pan = Math.max(0, Math.min(255, held.pan + e.movementX * speed));
@@ -718,7 +718,7 @@ function addPanTiltPad(grid, { pan, tilt }, row, col) {
     pushToDmx();
   };
   pad.addEventListener("pointerdown", (e) => {
-    const levels = state.rows[row];
+    const levels = state.cueLevels[row];
     if (e.button !== 0 || e.altKey || !levels) return;
     e.preventDefault();
     e.stopPropagation();
@@ -759,7 +759,7 @@ export function addColorBars(grid, row) {
       input.type = "color";
       input.setAttribute("aria-label", `Color for ${faderName(start)}, ${faderName(start + 1)}, ${faderName(start + 2)}`);
       input.addEventListener("input", () => {
-        const levels = state.rows[row];
+        const levels = state.cueLevels[row];
         if (!levels) return;
         [levels[start], levels[start + 1], levels[start + 2]] = rgbFromHex(input.value);
         syncSlidersFromState();
@@ -775,7 +775,7 @@ export function addColorBars(grid, row) {
 export function refreshColorBars() {
   for (const bar of document.querySelectorAll(".rgb-bar")) {
     const start = Number(bar.dataset.start);
-    const levels = bar.dataset.live ? [liveLevel(start), liveLevel(start + 1), liveLevel(start + 2)] : (state.rows[Number(bar.dataset.row)] ?? []).slice(start, start + 3);
+    const levels = bar.dataset.live ? [liveLevel(start), liveLevel(start + 1), liveLevel(start + 2)] : (state.cueLevels[Number(bar.dataset.row)] ?? []).slice(start, start + 3);
     const color = hexFromRgb(levels[0] ?? 0, levels[1] ?? 0, levels[2] ?? 0);
     bar.style.setProperty("--rgb", color);
     const input = bar.querySelector("input");
@@ -818,10 +818,10 @@ export function refreshFaderPatchLabels() {
 }
 
 export function syncSlidersFromState() {
-  for (let r = 0; r < state.rows.length; r++) {
+  for (let r = 0; r < state.cueLevels.length; r++) {
     for (let i = 0; i < FADER_COUNT; i++) {
-      setValue(cueUi[r].sliders[i], String(state.rows[r][i]));
-      setText(cueUi[r].valueEls[i], String(state.rows[r][i]));
+      setValue(cueUi[r].sliders[i], String(state.cueLevels[r][i]));
+      setText(cueUi[r].valueEls[i], String(state.cueLevels[r][i]));
     }
   }
   refreshSelectedGroup();

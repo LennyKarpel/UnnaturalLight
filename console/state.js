@@ -17,7 +17,6 @@ import {
   defaultSongName,
   createSong,
   normalizeSongs,
-  normalizeCueFadeTime,
   resolveActiveSong,
 } from "./songs.js";
 
@@ -36,7 +35,6 @@ export function blankSetState(setName = defaultSetName()) {
     universes: 1,
     fromSub: 100,
     toSub: 100,
-    fadeTime: 4,
     fromCue: 0,
     toCue: 1,
     selectedCue: 0,
@@ -77,11 +75,11 @@ export const state = {
   songs: bootSongs,
   /** @type {string} */
   activeSongId: resolveActiveSong(bootSongs, boot.activeSongId).id,
-  /** Working views into the active song’s cues (levels share array refs). */
+  /** The active song's cues: each one's levels (the same arrays) and name. */
   /** @type {number[][]} */
-  rows: [],
+  cueLevels: [],
   /** @type {string[]} */
-  names: [],
+  cueNames: [],
   /** @type {string[]} */
   faderNames: normalizeFaderNames(boot.faderNames),
   /** @type {import("./fixtures.js").FixtureGroup[]} */
@@ -95,7 +93,6 @@ export const state = {
   cross: boot.cross, // 0 = full From, 100 = full To
   fromSub: boot.fromSub ?? 100,
   toSub: boot.toSub ?? 100,
-  fadeTime: normalizeCueFadeTime(boot.fadeTime),
   fromCue: boot.fromCue,
   toCue: boot.toCue,
   selectedCue: boot.selectedCue ?? 0,
@@ -129,13 +126,13 @@ export function getActiveSong() {
   return resolveActiveSong(state.songs, state.activeSongId);
 }
 
-/** Rebind rows/names to the active song and clamp Current/Next/selected indices. */
+/** Rebind cueLevels / cueNames to the active song and clamp Current/Next/selected indices. */
 export function bindActiveSong() {
   const song = getActiveSong();
   state.activeSongId = song.id;
-  state.rows = song.cues.map((t) => t.levels);
-  state.names = song.cues.map((t) => t.name);
-  const n = state.rows.length;
+  state.cueLevels = song.cues.map((t) => t.levels);
+  state.cueNames = song.cues.map((t) => t.name);
+  const n = state.cueLevels.length;
   state.selectedCue = Math.min(Math.max(0, state.selectedCue), Math.max(0, n - 1));
   state.fromCue = Math.min(Math.max(0, state.fromCue), Math.max(0, n - 1));
   syncPlaybackPair();
@@ -143,7 +140,7 @@ export function bindActiveSong() {
 
 /** Next is always the following cue in song order (wraps). */
 export function syncPlaybackPair() {
-  const n = state.rows.length;
+  const n = state.cueLevels.length;
   if (n < 2) {
     state.toCue = state.fromCue;
     return;
@@ -172,10 +169,10 @@ export function persistSession() {
 }
 
 export function currentSetState() {
-  // Keep cue names in sync (rows share level array refs already).
+  // Keep cue names in sync (cueLevels shares the level arrays already).
   const song = getActiveSong();
   for (let i = 0; i < song.cues.length; i++) {
-    if (typeof state.names[i] === "string") song.cues[i].name = state.names[i];
+    if (typeof state.cueNames[i] === "string") song.cues[i].name = state.cueNames[i];
   }
   return {
     setName: state.setName,
@@ -184,7 +181,6 @@ export function currentSetState() {
     cross: state.cross,
     fromSub: state.fromSub,
     toSub: state.toSub,
-    fadeTime: state.fadeTime,
     universes: state.universes,
     fromCue: state.fromCue,
     toCue: state.toCue,

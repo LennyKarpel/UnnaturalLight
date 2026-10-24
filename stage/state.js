@@ -100,7 +100,7 @@ export const selectedFixtures = () => state.selected.map(byId).filter(Boolean);
 
 
 export const rigById = (id) => state.rigs.find((r) => r.id === id);
-export const rigOf = (inst) => (inst?.rigId ? rigById(inst.rigId) : null);
+export const rigOf = (fixture) => (fixture?.rigId ? rigById(fixture.rigId) : null);
 export const rigMembers = (rig) => state.fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
 export const syncRig = (rig) => applyRig(rig, rigMembers(rig));
 
@@ -114,30 +114,30 @@ export function commonRig(sel) {
  * Move a fixture. A rig member can't move on its own, so the whole rig
  * shifts by the same amount instead.
  */
-export function moveFixture(inst, x, y, z) {
-  const rig = rigOf(inst);
-  if (!rig) { inst.x = x; inst.y = y; inst.z = z; return; }
-  rig.x = round(rig.x + x - inst.x, 3);
-  rig.y = round(rig.y + y - inst.y, 3);
-  rig.z = round(rig.z + z - inst.z, 3);
+export function moveFixture(fixture, x, y, z) {
+  const rig = rigOf(fixture);
+  if (!rig) { fixture.x = x; fixture.y = y; fixture.z = z; return; }
+  rig.x = round(rig.x + x - fixture.x, 3);
+  rig.y = round(rig.y + y - fixture.y, 3);
+  rig.z = round(rig.z + z - fixture.z, 3);
   syncRig(rig);
 }
 
 /** Make a member fixture for `rig` at slot `k`, copying the look of `like`. */
 function makeRigMember(rig, k, like) {
-  const inst = createFixture(0, 0, 0, state.fixtures.length, state.box);
-  Object.assign(inst, {
+  const fixture = createFixture(0, 0, 0, state.fixtures.length, state.box);
+  Object.assign(fixture, {
     name: `${rig.name} · ${k + 1}`,
     rigId: rig.id, rigIndex: k,
     panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax,
   });
   const { dimmer, red, green, blue, zoom } = like.dmx;
-  Object.assign(inst.dmx, { dimmer, red, green, blue, zoom });
-  deriveFromDmx(inst);
-  inst.link.register = rig.consoleType ?? null;
-  inst.link.universe = rig.universe ?? null;
-  if (rig.fixture) applyFixture(inst, rig.fixture);
-  return inst;
+  Object.assign(fixture.dmx, { dimmer, red, green, blue, zoom });
+  deriveFromDmx(fixture);
+  fixture.link.register = rig.consoleType ?? null;
+  fixture.link.universe = rig.universe ?? null;
+  if (rig.fixture) applyFixture(fixture, rig.fixture);
+  return fixture;
 }
 
 /** Create a rig centred at (x, y, z) from the Place rig dialog's settings. */

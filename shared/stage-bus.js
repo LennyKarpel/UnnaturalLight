@@ -31,7 +31,7 @@ export const MSG = {
 };
 
 /** Where the console saves its session (the stage reads its fixtures while the console is closed). */
-export const CONSOLE_SESSION_KEY = "unnaturallight.setlist.session.v1";
+export const CONSOLE_SESSION_KEY = "unnaturallight.session";
 
 /** The bus, or null where the browser has no BroadcastChannel. */
 export function openStageBus() {

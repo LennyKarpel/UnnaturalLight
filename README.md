@@ -293,7 +293,7 @@ Switch with the tabs along the top (drag them to reorder):
 
 - A **song** holds as many **cues** as you like (at least 2). Each cue is one look: a value for every fader.
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
-- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards are labelled **CURRENT** and **UP NEXT** at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
+- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
 - Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
 - Click a cue's row to make it LIVE. Use its **⋮** menu to name or remove it, **⋮⋮** to drag it, and **+** to add a new cue at the end.
 - You can have up to 32 songs.
@@ -611,7 +611,7 @@ There are four links. The **show server** is the one that counts: it holds the s
 
 #### 4. Stage ↔ stage (browser storage)
 
-Stage pages in the same browser also share the stage through `localStorage` (`unnaturallight.stage.v1`): each save there fires a `storage` event in the other stage tabs, which take it in. A page keeps its own values for linked channels (those follow the console).
+Stage pages in the same browser also share the stage through `localStorage` (`unnaturallight.stage`): each save there fires a `storage` event in the other stage tabs, which take it in. A page keeps its own values for linked channels (those follow the console).
 
 #### DMX output
 
@@ -627,6 +627,6 @@ By default the server listens only on this computer (`127.0.0.1`). With `--lan` 
 
 **Fixture library.** The Open Fixture Library API only accepts requests from its own site and `http://localhost:8080`; from other addresses the stage reads the library's files on GitHub instead (same data; list names from file names; GitHub limits that to about 60 manufacturer lookups an hour, cached).
 
-**Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.setlist.session.v1`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage.v1`. Combined-page layout: `unnaturallight.shell`.
+**Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. Combined-page layout: `unnaturallight.shell`.
 
-**Stage (`stage` in the set file and `session.json`; version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).
+**Stage (`stage` in the set file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

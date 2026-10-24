@@ -33,7 +33,7 @@ const HEARTBEAT_MS = 1000;
  *   levels: () => Map<number, number>,
  *   serverSeq: () => number,
  *   patch: () => { channel: number, max: number }[][],
- *   live: () => { rows: number[][], fromCue: number, toCue: number, fromSub: number, toSub: number, cross: number, master: number },
+ *   live: () => { cueLevels: number[][], fromCue: number, toCue: number, fromSub: number, toSub: number, cross: number, master: number },
  *   fixtures: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
  *   groups: () => { id: string, name: string }[],
  *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
@@ -144,8 +144,8 @@ function applySet(values) {
       const level = clampByte((value * 255) / target.max);
       // …and the pre-master mix that gives it (see liveLevel in app.js).
       const mixed = (level * 100) / L.master;
-      if (t < 1 && L.fromSub > 0) L.rows[L.fromCue][i] = clampByte((mixed * 100) / L.fromSub);
-      if (t > 0 && L.toSub > 0) L.rows[L.toCue][i] = clampByte((mixed * 100) / L.toSub);
+      if (t < 1 && L.fromSub > 0) L.cueLevels[L.fromCue][i] = clampByte((mixed * 100) / L.fromSub);
+      if (t > 0 && L.toSub > 0) L.cueLevels[L.toCue][i] = clampByte((mixed * 100) / L.toSub);
       touched = true;
     }
   }

@@ -8,9 +8,9 @@ import { FADER_COUNT, scaledLevel } from "../console/patch.js";
  */
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max. */
-export function liveLevel(mix, rows, faderIndex) {
-  const a = ((rows[mix.fromCue]?.[faderIndex] ?? 0) * mix.fromSub) / 100;
-  const b = ((rows[mix.toCue]?.[faderIndex] ?? 0) * mix.toSub) / 100;
+export function liveLevel(mix, cueLevels, faderIndex) {
+  const a = ((cueLevels[mix.fromCue]?.[faderIndex] ?? 0) * mix.fromSub) / 100;
+  const b = ((cueLevels[mix.toCue]?.[faderIndex] ?? 0) * mix.toSub) / 100;
   const t = mix.cross / 100;
   const mixed = a * (1 - t) + b * t;
   return Math.round((mixed * mix.master) / 100);

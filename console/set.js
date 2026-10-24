@@ -9,15 +9,13 @@ import {
   normalizeFixtures,
 } from "./fixtures.js";
 import {
-  DEFAULT_CUE_FADE_TIME,
   normalizeSongs,
-  normalizeCueFadeTime,
   resolveActiveSong,
 } from "./songs.js";
 import { CONSOLE_SESSION_KEY as SESSION_KEY } from "../shared/stage-bus.js";
 import { clamp, clampInt } from "../shared/numbers.js";
 
-const SET_VERSION = 2;
+const SET_VERSION = 1;
 const SET_APP = "UnnaturalLight";
 export const DEFAULT_NAV_ORDER = [
   "set",
@@ -88,9 +86,7 @@ export function normalizeFaderNames(names) {
  *   cross: number,
  *   fromSub?: number,
  *   toSub?: number,
- *   fadeTime?: number,
  *   fromCue: number,
- *   toCue: number,
  *   selectedCue?: number,
  *   songs: import("./songs.js").Song[],
  *   activeSongId?: string | null,
@@ -121,10 +117,8 @@ export function serializeSet(state) {
     cross: clamp(state.cross, 0, 100),
     fromSub: clamp(state.fromSub ?? 100, 0, 100),
     toSub: clamp(state.toSub ?? 100, 0, 100),
-    fadeTime: normalizeCueFadeTime(state.fadeTime),
     universes: normalizeUniverses(state.universes),
     fromCue: state.fromCue,
-    toCue: state.toCue,
     selectedCue: state.selectedCue ?? 0,
     songs,
     activeSongId: active.id,
@@ -156,7 +150,6 @@ function setToJson(state, stage = null) {
  *   cross: number,
  *   fromSub: number,
  *   toSub: number,
- *   fadeTime: number,
  *   fromCue: number,
  *   toCue: number,
  *   selectedCue: number,
@@ -185,9 +178,7 @@ export function parseSet(data) {
   const patchSource = Array.isArray(obj.patch) ? obj.patch : [];
   const patch = defaultPatch().map((_, i) => normalizeFaderPatch(patchSource[i]));
 
-  // Set-level fade time: the default for a cue without its own.
-  const fadeTime = normalizeCueFadeTime(obj.fadeTime, DEFAULT_CUE_FADE_TIME);
-  const songs = normalizeSongs(obj.songs, fadeTime);
+  const songs = normalizeSongs(obj.songs);
   const active = resolveActiveSong(songs, typeof obj.activeSongId === "string" ? obj.activeSongId : null);
   const cueCount = active.cues.length;
 
@@ -201,8 +192,9 @@ export function parseSet(data) {
   const fromSub = clamp(Number(obj.fromSub ?? 100), 0, 100);
   const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
   const universes = normalizeUniverses(obj.universes);
-  let fromCue = clampInt(Number(obj.fromCue ?? 0), 0, cueCount - 1);
-  let toCue = (fromCue + 1) % cueCount;
+  const fromCue = clampInt(Number(obj.fromCue ?? 0), 0, cueCount - 1);
+  // Up next is always the cue after the current one (not saved).
+  const toCue = (fromCue + 1) % cueCount;
   const selectedCue = clampInt(
     Number(obj.selectedCue ?? 0),
     0,
@@ -216,7 +208,6 @@ export function parseSet(data) {
     cross,
     fromSub,
     toSub,
-    fadeTime,
     universes,
     fromCue,
     toCue,

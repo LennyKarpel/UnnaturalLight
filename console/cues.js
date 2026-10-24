@@ -205,8 +205,8 @@ function wireCueRowDrag(bank, handle, index) {
     state.fromCue = Math.max(0, indexOf(fromSelId));
     state.toCue = Math.max(0, indexOf(toSelId));
     bindActiveSong();
-    if (state.fromCue === state.toCue && state.rows.length > 1) {
-      state.toCue = (state.fromCue + 1) % state.rows.length;
+    if (state.fromCue === state.toCue && state.cueLevels.length > 1) {
+      state.toCue = (state.fromCue + 1) % state.cueLevels.length;
     }
     renderCues();
     renderSelectedGroup();
@@ -225,10 +225,10 @@ export function renderCues() {
   abortInlineEdits();
   cuesEl.replaceChildren();
   cueUi = [];
-  state.selectedCue = Math.min(Math.max(0, state.selectedCue), Math.max(0, state.rows.length - 1));
+  state.selectedCue = Math.min(Math.max(0, state.selectedCue), Math.max(0, state.cueLevels.length - 1));
 
   syncPlaybackPair();
-  for (let r = 0; r < state.rows.length; r++) {
+  for (let r = 0; r < state.cueLevels.length; r++) {
     const bank = document.createElement("section");
     bank.className = "fader-row";
     bank.dataset.row = String(r);
@@ -364,20 +364,20 @@ export function renderCues() {
 
       const value = document.createElement("div");
       value.className = "value";
-      value.textContent = String(state.rows[r][i]);
+      value.textContent = String(state.cueLevels[r][i]);
       valueEls[i] = value;
 
       const slider = document.createElement("input");
       slider.type = "range";
       slider.min = "0";
       slider.max = "255";
-      slider.value = String(state.rows[r][i]);
+      slider.value = String(state.cueLevels[r][i]);
       slider.setAttribute("aria-label", `${cueLabel(r)} ${faderName(i)}`);
       applyFaderPatchState(wrap, slider, state.patch[i]);
       slider.addEventListener("input", () => {
         setSelectedFader(i);
-        state.rows[r][i] = Number(slider.value);
-        value.textContent = String(state.rows[r][i]);
+        state.cueLevels[r][i] = Number(slider.value);
+        value.textContent = String(state.cueLevels[r][i]);
         pushToDmx();
       });
       sliders[i] = slider;
@@ -403,7 +403,7 @@ function applyCueName(index, name) {
   // An empty name is fine: the cue is then just "Cue N".
   const next = name.trim();
   if (next === cueName(index)) return false;
-  state.names[index] = next;
+  state.cueNames[index] = next;
   const song = getActiveSong();
   if (song.cues[index]) song.cues[index].name = next;
   refreshCueSelects();
@@ -418,7 +418,7 @@ function applyCueName(index, name) {
  * @param {HTMLElement} [target]
  */
 function beginInlineRename(index, target) {
-  if (index < 0 || index >= state.rows.length) return;
+  if (index < 0 || index >= state.cueLevels.length) return;
   abortInlineEdits();
 
   const title =
@@ -675,7 +675,7 @@ function openCueMenu(anchor, index) {
     addItem("Rename", "rename");
     addItem("Remove", "remove", {
       danger: true,
-      disabled: state.rows.length <= MIN_CUES,
+      disabled: state.cueLevels.length <= MIN_CUES,
     });
 
     cueMenu.hidden = false;

@@ -27,7 +27,7 @@ const keysColor = /** @type {HTMLInputElement} */ (document.getElementById("keys
 keysColor.addEventListener("input", () => {
   const sel = selectedFixtures();
   if (!sel.length) return;
-  for (const inst of sel) setColorHex(inst, keysColor.value);
+  for (const fixture of sel) setColorHex(fixture, keysColor.value);
   changed();
 });
 keysColor.addEventListener("change", () => keysColor.blur());

@@ -41,7 +41,7 @@ let flashStart = 0;
 let flashTimer = 0;
 
 /** What a fixture looks like right now (its own settings, or white/full while flashing). */
-export const look = (inst) => (flashing.has(inst.id) ? { color: "#ffffff", intensity: 1 } : inst);
+export const look = (fixture) => (flashing.has(fixture.id) ? { color: "#ffffff", intensity: 1 } : fixture);
 
 function redrawLook() {
   syncScene();
@@ -147,7 +147,7 @@ export function setAiming(on) {
 /** Point every selected fixture's beam at `p` (world, metres). */
 export function applyAim(p) {
   const sel = selectedFixtures();
-  const missed = sel.filter((inst) => !aimAt(inst, p));
+  const missed = sel.filter((fixture) => !aimAt(fixture, p));
   setAiming(false);
   changed();
   if (missed.length) {
@@ -158,17 +158,17 @@ export function applyAim(p) {
 
 export function addFixtureAt(x, y, z) {
   if (state.fixtures.length >= MAX_FIXTURES) { setPlacing(false); return; }
-  const inst = createFixture(x, y, z, state.fixtures.length, state.box);
-  inst.link.register = placeType;
-  inst.link.universe = placeUniverse;
+  const fixture = createFixture(x, y, z, state.fixtures.length, state.box);
+  fixture.link.register = placeType;
+  fixture.link.universe = placeUniverse;
   if (placeFixture) {
-    applyFixture(inst, placeFixture);
+    applyFixture(fixture, placeFixture);
     const same = state.fixtures.filter((i) => i.link.fixture?.model === placeFixture.model).length;
-    inst.name = `${placeFixture.model} ${same + 1}`;
+    fixture.name = `${placeFixture.model} ${same + 1}`;
   }
-  state.fixtures.push(inst);
+  state.fixtures.push(fixture);
   setPlacing(false);
-  select(inst.id);
+  select(fixture.id);
   requestRegistrations();
 }
 
@@ -244,11 +244,11 @@ function duplicateSelected() {
     return;
   }
   // Copies are free fixtures, even when copied from a rig.
-  const copies = src.map((inst) => ({
-    ...structuredClone(inst), id: newId("i"), name: `${inst.name} copy`, x: round(inst.x + 0.5),
+  const copies = src.map((fixture) => ({
+    ...structuredClone(fixture), id: newId("fixture"), name: `${fixture.name} copy`, x: round(fixture.x + 0.5),
     rigId: null, rigIndex: 0,
     // Copies get their own console fixture if the original came from the stage.
-    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.owned ? inst.link.type : inst.link.register, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null },
+    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.owned ? fixture.link.type : fixture.link.register, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
   }));
   state.fixtures.push(...copies);
   state.selected = copies.map((c) => c.id);
@@ -285,8 +285,8 @@ function writeUndo(list) {
 /** What a delete removes: the selection, widened to whole rigs. */
 function deletionIds() {
   const ids = new Set(state.selected);
-  for (const inst of selectedFixtures()) {
-    const rig = rigOf(inst);
+  for (const fixture of selectedFixtures()) {
+    const rig = rigOf(fixture);
     if (rig) rigMembers(rig).forEach((m) => ids.add(m.id));
   }
   return ids;
@@ -295,22 +295,22 @@ function deletionIds() {
 export function deleteSelected() {
   const ids = deletionIds();
   const removed = [];
-  state.fixtures.forEach((inst, index) => { if (ids.has(inst.id)) removed.push({ inst, index }); });
+  state.fixtures.forEach((fixture, index) => { if (ids.has(fixture.id)) removed.push({ fixture, index }); });
   if (!removed.length) return;
-  const rigIds = new Set(removed.map((r) => r.inst.rigId).filter(Boolean));
+  const rigIds = new Set(removed.map((r) => r.fixture.rigId).filter(Boolean));
   const rigs = state.rigs.filter((r) => rigIds.has(r.id));
   writeUndo([...readUndo(), {
     indexes: removed.map((r) => r.index),
-    data: serializeStage(state.box, removed.map((r) => r.inst), state.transparent, rigs),
+    data: serializeStage(state.box, removed.map((r) => r.fixture), state.transparent, rigs),
   }]);
   state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
   state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
   // Lights the stage registered leave the console too (their faders are freed).
-  consoleLink.unregister(removed.filter((r) => r.inst.link.owned).map((r) => r.inst.link.consoleId));
+  consoleLink.unregister(removed.filter((r) => r.fixture.link.owned).map((r) => r.fixture.link.consoleId));
   select(null);
-  const what = rigs.length === 1 && removed.every((r) => r.inst.rigId === rigs[0].id)
+  const what = rigs.length === 1 && removed.every((r) => r.fixture.rigId === rigs[0].id)
     ? rigs[0].name
-    : removed.length === 1 ? removed[0].inst.name : `${removed.length} fixtures`;
+    : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
   setBanner(`Deleted ${what} · ⌘Z to undo`, 4000);
 }
 
@@ -321,8 +321,8 @@ export function undoDelete() {
   const { fixtures, rigs } = parseStage(entry.data);
   // Skip any that are already back (e.g. undone in another window just now).
   const removed = fixtures
-    .map((inst, k) => ({ inst, index: entry.indexes?.[k] ?? state.fixtures.length }))
-    .filter(({ inst }) => !byId(inst.id));
+    .map((fixture, k) => ({ fixture, index: entry.indexes?.[k] ?? state.fixtures.length }))
+    .filter(({ fixture }) => !byId(fixture.id));
   if (state.fixtures.length + removed.length > MAX_FIXTURES) {
     setBanner(`Can't undo: it would go over ${MAX_FIXTURES} fixtures`, 3000);
     return;
@@ -331,18 +331,18 @@ export function undoDelete() {
   if (!removed.length) return;
   state.rigs.push(...rigs.filter((r) => !rigById(r.id)));
   // Re-insert in original order so each lands back at its old index.
-  for (const { inst, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, inst);
+  for (const { fixture, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, fixture);
   rigs.forEach(syncRig);
   // Their console fixtures were removed on delete: register them again.
-  for (const { inst } of removed) {
-    if (!inst.link.owned) continue;
-    inst.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: inst.link.type, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null };
+  for (const { fixture } of removed) {
+    if (!fixture.link.owned) continue;
+    fixture.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.type, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null };
   }
   requestRegistrations();
-  state.selected = removed.map((r) => r.inst.id).filter((id) => byId(id));
+  state.selected = removed.map((r) => r.fixture.id).filter((id) => byId(id));
   renderInspector();
   changed();
-  const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].inst.name : `${removed.length} fixtures`;
+  const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
   setBanner(`Restored ${what}`, 2000);
 }
 

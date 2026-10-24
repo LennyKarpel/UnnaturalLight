@@ -12,7 +12,7 @@ import {
   universeStart,
   formatAddress,
 } from "./patch.js";
-import { MAX_CUES, MIN_CUES, normalizeCueFadeTime } from "./songs.js";
+import { DEFAULT_CUE_FADE_TIME, MAX_CUES, MIN_CUES } from "./songs.js";
 import {
   cuesEl,
   liveFadersEl,
@@ -280,13 +280,11 @@ export function renderLiveRow() {
 }
 
 export function refreshCueSelects() {
-  state.selectedCue = Math.min(Math.max(0, state.selectedCue), state.rows.length - 1);
+  state.selectedCue = Math.min(Math.max(0, state.selectedCue), state.cueLevels.length - 1);
   syncPlaybackPair();
   fillCueTitle(crossFromLabel, state.fromCue);
   fillCueTitle(crossToLabel, state.toCue);
-  const nextFade =
-    getActiveSong().cues[state.toCue]?.fadeTime ??
-    normalizeCueFadeTime(state.fadeTime);
+  const nextFade = getActiveSong().cues[state.toCue]?.fadeTime ?? DEFAULT_CUE_FADE_TIME;
   goNextFade.textContent = `${nextFade}s`;
   goBtn.title = `GO — fade to ${cueLabel(state.toCue)} (${nextFade}s)`;
   goBtn.setAttribute(
@@ -294,13 +292,13 @@ export function refreshCueSelects() {
     `GO to ${cueLabel(state.toCue)} in ${nextFade} seconds`,
   );
   syncSubmasterLabels();
-  removeCueBtn.disabled = state.rows.length <= MIN_CUES;
+  removeCueBtn.disabled = state.cueLevels.length <= MIN_CUES;
   removeCueBtn.setAttribute(
     "aria-label",
     `Remove ${cueLabel(state.selectedCue)}`,
   );
   removeCueBtn.title = `Remove ${cueLabel(state.selectedCue)}`;
-  addCueBtn.disabled = state.rows.length >= MAX_CUES;
+  addCueBtn.disabled = state.cueLevels.length >= MAX_CUES;
   updateCuesButton();
   syncSongUi();
 }
@@ -322,13 +320,13 @@ export function updateCuesButton() {
   channelsCueMenuBtn.title = `Options for ${cueLabel(state.selectedCue)}`;
 }
 
-/** Label at the top right of a cue: CURRENT, UP NEXT, or how to make it current. */
+/** Label at the top right of a cue: LIVE, UP NEXT, or how to make it live. */
 export function cueHint(r) {
-  return r === state.fromCue ? "Current" : r === state.toCue ? "Up next" : "Click to make live";
+  return r === state.fromCue ? "Live" : r === state.toCue ? "Up next" : "Click to make live";
 }
 
 export function setSelectedCue(index) {
-  if (index < 0 || index >= state.rows.length) return;
+  if (index < 0 || index >= state.cueLevels.length) return;
   stopTimedFade();
   state.selectedCue = index;
   // Selecting a cue sets Current; Next follows in song order.
@@ -378,7 +376,7 @@ export function pickCue({ anchor, clientX, clientY }) {
 
     const renderList = () => {
       cuePickerList.replaceChildren();
-      for (let r = 0; r < state.rows.length; r++) {
+      for (let r = 0; r < state.cueLevels.length; r++) {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "menu-item";
@@ -439,14 +437,14 @@ export function pickCue({ anchor, clientX, clientY }) {
 }
 
 export function renderSelectedGroup() {
-  state.selectedCue = Math.min(Math.max(0, state.selectedCue), Math.max(0, state.rows.length - 1));
+  state.selectedCue = Math.min(Math.max(0, state.selectedCue), Math.max(0, state.cueLevels.length - 1));
   updateCuesButton();
   selectedGroupFadersEl.replaceChildren();
 
   const valueEls = [];
   const patchLabelEls = [];
   const sliders = [];
-  const row = state.rows[state.selectedCue] ?? zeros();
+  const row = state.cueLevels[state.selectedCue] ?? zeros();
 
   for (let i = 0; i < FADER_COUNT; i++) {
     const wrap = document.createElement("div");
@@ -478,12 +476,12 @@ export function renderSelectedGroup() {
     applyFaderPatchState(wrap, slider, state.patch[i]);
     slider.addEventListener("input", () => {
       setSelectedFader(i);
-      state.rows[state.selectedCue][i] = Number(slider.value);
-      value.textContent = String(state.rows[state.selectedCue][i]);
+      state.cueLevels[state.selectedCue][i] = Number(slider.value);
+      value.textContent = String(state.cueLevels[state.selectedCue][i]);
       // Keep Songs-page UI in sync if that cue is rendered
       if (cueUi[state.selectedCue]) {
-        cueUi[state.selectedCue].sliders[i].value = String(state.rows[state.selectedCue][i]);
-        cueUi[state.selectedCue].valueEls[i].textContent = String(state.rows[state.selectedCue][i]);
+        cueUi[state.selectedCue].sliders[i].value = String(state.cueLevels[state.selectedCue][i]);
+        cueUi[state.selectedCue].valueEls[i].textContent = String(state.cueLevels[state.selectedCue][i]);
       }
       pushToDmx();
     });
@@ -500,7 +498,7 @@ export function renderSelectedGroup() {
 
 export function refreshSelectedGroup() {
   if (!selectedGroupUi.sliders.length) return;
-  const row = state.rows[state.selectedCue];
+  const row = state.cueLevels[state.selectedCue];
   if (!row) return;
   updateCuesButton();
   for (let i = 0; i < FADER_COUNT; i++) {
@@ -634,7 +632,7 @@ export function updateFadePauseButton() {
   fadePauseBtn.textContent = paused ? "Resume" : "Pause";
   fadePauseBtn.classList.toggle("is-paused", paused);
   goBtn.classList.toggle("is-running", running && !paused);
-  goBtn.disabled = state.rows.length < 2;
+  goBtn.disabled = state.cueLevels.length < 2;
 }
 
 // Timed fades run on the show server (server/show.js), so a hidden or closed
@@ -652,7 +650,7 @@ export function stopTimedFade() {
  * in song order (using that next cue’s fadeTime), then advance.
  */
 export function goNextCue() {
-  if (state.rows.length < 2) return;
+  if (state.cueLevels.length < 2) return;
   state.serverLink?.command("go");
 }
 

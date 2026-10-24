@@ -73,13 +73,13 @@ setInterval(updateConsoleStatus, 1000);
 /** Take the console's current values for linked, patched channels. */
 function applyConsoleLevels() {
   let moved = false;
-  for (const inst of state.fixtures) {
+  for (const fixture of state.fixtures) {
     // Follow the console fixture if its address was changed there.
-    const ci = inst.link.consoleId ? consoleFixtureById(inst.link.consoleId) : null;
-    if (ci && ci.channelStart !== inst.link.start) { inst.link.start = ci.channelStart; moved = true; }
-    for (const { channel, attr } of linkChannels(inst)) {
+    const ci = fixture.link.consoleId ? consoleFixtureById(fixture.link.consoleId) : null;
+    if (ci && ci.channelStart !== fixture.link.start) { fixture.link.start = ci.channelStart; moved = true; }
+    for (const { channel, attr } of linkChannels(fixture)) {
       const v = consoleLink.incoming(channel);
-      if (v != null && v !== inst.dmx[attr]) { setDmx(inst, attr, v); moved = true; }
+      if (v != null && v !== fixture.dmx[attr]) { setDmx(fixture, attr, v); moved = true; }
     }
   }
   updateConsoleStatus();
@@ -93,15 +93,15 @@ function applyConsoleLevels() {
 /** Send values changed on the stage to the console (called from changed()). */
 export function pushToConsole() {
   const entries = [];
-  for (const inst of state.fixtures) {
-    for (const { channel, attr } of linkChannels(inst)) entries.push({ channel, value: inst.dmx[attr] });
+  for (const fixture of state.fixtures) {
+    for (const { channel, attr } of linkChannels(fixture)) entries.push({ channel, value: fixture.dmx[attr] });
   }
   consoleLink.push(entries);
 }
 
-function linkToConsoleFixture(inst, ci) {
+function linkToConsoleFixture(fixture, ci) {
   if (!ci) return;
-  inst.link = { consoleId: ci.id, start: ci.channelStart, layout: layoutFor(ci.mount, ci.color, ci.channelEnd - ci.channelStart + 1) };
+  fixture.link = { consoleId: ci.id, start: ci.channelStart, layout: layoutFor(ci.mount, ci.color, ci.channelEnd - ci.channelStart + 1) };
 }
 
 /** After (re)linking: take the console's values (it wins at link time), then redraw. */
@@ -111,8 +111,8 @@ function afterLinkChange() {
   changed();
 }
 
-export function linkSectionHtml(inst) {
-  const L = inst.link;
+export function linkSectionHtml(fixture) {
+  const L = fixture.link;
   const mode = L.consoleId ?? (L.start ? "manual" : "");
   const opt = (v, text) => `<option value="${escapeHtml(v)}"${v === mode ? " selected" : ""}>${escapeHtml(text)}</option>`;
   const missing = L.consoleId && !consoleFixtureById(L.consoleId);
@@ -180,35 +180,35 @@ function linkRigFrom(rig, id) {
 
 export function bindLinkControls() {
   const sel = selectedFixtures();
-  const inst = sel.length === 1 ? sel[0] : null;
+  const fixture = sel.length === 1 ? sel[0] : null;
   inspectorEl.querySelector('[data-link="target"]')?.addEventListener("change", (e) => {
     const v = e.target.value;
     // Moving off a console fixture the stage registered: remove it there.
-    if (inst.link.owned && v !== inst.link.consoleId) consoleLink.unregister([inst.link.consoleId]);
-    if (v === "") inst.link = { consoleId: null, start: null, layout: [] };
-    else if (v === "manual") inst.link = { consoleId: null, start: inst.link.start ?? 1, layout: inst.link.layout.length ? inst.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
+    if (fixture.link.owned && v !== fixture.link.consoleId) consoleLink.unregister([fixture.link.consoleId]);
+    if (v === "") fixture.link = { consoleId: null, start: null, layout: [] };
+    else if (v === "manual") fixture.link = { consoleId: null, start: fixture.link.start ?? 1, layout: fixture.link.layout.length ? fixture.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
     else {
-      const fixture = inst.link.fixture;
-      linkToConsoleFixture(inst, consoleFixtureById(v));
-      inst.link.fixture = fixture ?? null;
+      const profile = fixture.link.fixture;
+      linkToConsoleFixture(fixture, consoleFixtureById(v));
+      fixture.link.fixture = profile ?? null;
     }
     afterLinkChange();
   });
   inspectorEl.querySelector('[data-link="start"]')?.addEventListener("change", (e) => {
     const v = parseAddr(e.target.value);
-    if (v == null) { e.target.value = addr(inst.link.start); return; }
-    inst.link.start = v;
+    if (v == null) { e.target.value = addr(fixture.link.start); return; }
+    fixture.link.start = v;
     afterLinkChange();
   });
   inspectorEl.querySelectorAll("[data-layout]").forEach((el) => {
     el.addEventListener("change", () => {
-      inst.link.layout[Number(el.dataset.layout)] = el.value || null;
+      fixture.link.layout[Number(el.dataset.layout)] = el.value || null;
       afterLinkChange();
     });
   });
   inspectorEl.querySelectorAll("[data-link-act]").forEach((el) => {
     el.addEventListener("click", () => {
-      const L = inst.link;
+      const L = fixture.link;
       if (el.dataset.linkAct === "add" && L.layout.length < 16) L.layout.push(null);
       if (el.dataset.linkAct === "remove" && L.layout.length > 1) L.layout.pop();
       if (el.dataset.linkAct === "register") {
@@ -221,7 +221,7 @@ export function bindLinkControls() {
       if (el.dataset.linkAct === "preset") {
         const ci = consoleFixtureById(L.consoleId);
         if (L.fixture) L.layout = L.fixture.channels.map((c) => c.attr);
-        else if (ci) linkToConsoleFixture(inst, ci);
+        else if (ci) linkToConsoleFixture(fixture, ci);
       }
       afterLinkChange();
     });
@@ -233,15 +233,15 @@ export function bindLinkControls() {
 }
 
 /** DMX rows in the inspector: values, units, and which channel / fader drives each. */
-export function syncDmxRows(inst) {
-  const chans = new Map(linkChannels(inst).map(({ channel, attr }) => [attr, channel]));
+export function syncDmxRows(fixture) {
+  const chans = new Map(linkChannels(fixture).map(({ channel, attr }) => [attr, channel]));
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     if (el === document.activeElement && el.type !== "range") return;
-    el.value = String(inst.dmx[el.dataset.d]);
+    el.value = String(fixture.dmx[el.dataset.d]);
   });
   inspectorEl.querySelectorAll("[data-note]").forEach((el) => {
     const a = el.dataset.note;
-    const unit = { dimmer: `${Math.round(inst.intensity * 100)}%`, pan: `${inst.pan}°`, tilt: `${inst.tilt}°`, zoom: `${inst.beam}°` }[a] ?? "";
+    const unit = { dimmer: `${Math.round(fixture.intensity * 100)}%`, pan: `${fixture.pan}°`, tilt: `${fixture.tilt}°`, zoom: `${fixture.beam}°` }[a] ?? "";
     const ch = chans.get(a);
     const faders = ch ? consoleLink.fadersFor(ch) : [];
     const chan = ch
@@ -251,13 +251,13 @@ export function syncDmxRows(inst) {
   });
   const status = inspectorEl.querySelector("#linkStatus");
   if (!status) return;
-  const linked = linkChannels(inst);
+  const linked = linkChannels(fixture);
   const withFader = linked.filter(({ channel }) => consoleLink.fadersFor(channel).length).length;
-  const owned = inst.link.owned ? " Registered by the stage: deleting the light removes it from the console." : "";
-  status.textContent = inst.link.register
+  const owned = fixture.link.owned ? " Registered by the stage: deleting the light removes it from the console." : "";
+  status.textContent = fixture.link.register
     ? (consoleLink.live ? "Registering in the console…" : "Will register in the console when it opens.")
     : !linked.length
-    ? (inst.link.start ? "No channels assigned in the layout." : "Not linked: values are set here only.")
+    ? (fixture.link.start ? "No channels assigned in the layout." : "Not linked: values are set here only.")
     : !consoleLink.live
       ? "Console offline: changes stay here. Open the console to sync (its values take over)."
       : `${withFader} of ${linked.length} channels have a fader: those follow the console, and changes here move the fader.${owned}`;
@@ -328,25 +328,25 @@ export const othersRegistering = new Set();
 export function requestRegistrations() {
   if (!consoleLink.live) return;
   const requests = [];
-  for (const inst of state.fixtures) {
-    const t = inst.link.register;
-    if (!t || registering.has(inst.id) || othersRegistering.has(inst.id)) continue;
-    const layout = registerLayout(inst.link, t);
+  for (const fixture of state.fixtures) {
+    const t = fixture.link.register;
+    if (!t || registering.has(fixture.id) || othersRegistering.has(fixture.id)) continue;
+    const layout = registerLayout(fixture.link, t);
     requests.push({
-      stageId: inst.id,
-      name: inst.name,
+      stageId: fixture.id,
+      name: fixture.name,
       mount: t.mount,
       color: t.color,
       width: layout.length,
-      labels: registerLabels(inst.link, t),
+      labels: registerLabels(fixture.link, t),
       // What each channel does (so the console can e.g. show R/G/B faders as a color picker).
       roles: layout,
-      values: layout.map((a) => (a ? inst.dmx[a] : 0)),
-      group: rigOf(inst)?.name ?? null,
-      universe: inst.link.universe ?? null,
+      values: layout.map((a) => (a ? fixture.dmx[a] : 0)),
+      group: rigOf(fixture)?.name ?? null,
+      universe: fixture.link.universe ?? null,
     });
-    registering.set(inst.id, setTimeout(() => registering.delete(inst.id), 5000));
-    asked.add(inst.id);
+    registering.set(fixture.id, setTimeout(() => registering.delete(fixture.id), 5000));
+    asked.add(fixture.id);
   }
   if (requests.length) consoleLink.register(requests);
 }
@@ -358,21 +358,21 @@ function onRegistered(results) {
   if (!results.length) return;
   const failed = [];
   for (const r of results) {
-    const inst = byId(r.stageId);
+    const fixture = byId(r.stageId);
     clearTimeout(registering.get(r.stageId));
     registering.delete(r.stageId);
-    if (!inst || !inst.link.register) {
+    if (!fixture || !fixture.link.register) {
       // Deleted (or unlinked) while waiting: undo it in the console.
       if (r.ok) consoleLink.unregister([r.consoleId]);
       continue;
     }
-    const type = inst.link.register;
+    const type = fixture.link.register;
     if (!r.ok) {
-      inst.link.register = null;
-      failed.push(`${inst.name}: ${r.error}`);
+      fixture.link.register = null;
+      failed.push(`${fixture.name}: ${r.error}`);
       continue;
     }
-    inst.link = { consoleId: r.consoleId, start: r.start, layout: registerLayout(inst.link, type), owned: true, type, register: null, fixture: inst.link.fixture ?? null, universe: inst.link.universe ?? null };
+    fixture.link = { consoleId: r.consoleId, start: r.start, layout: registerLayout(fixture.link, type), owned: true, type, register: null, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null };
   }
   renderInspector();
   changed();

@@ -19,7 +19,7 @@ import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
 // fixture's own left/right and up/down. Forward is local −Z.
 // ---------------------------------------------------------------------
 
-export const STORAGE_KEY = "unnaturallight.stage.v1";
+export const STORAGE_KEY = "unnaturallight.stage";
 export const MAX_FIXTURES = 32;
 export const DEG = Math.PI / 180;
 export const FORWARD = new THREE.Vector3(0, 0, -1);
@@ -77,26 +77,26 @@ const beamFromZoom = (v, min, max) => min + (v / 255) * (max - min);
 export const zoomFromBeam = (deg, min, max) => (max > min ? clampByte(((deg - min) / (max - min)) * 255) : 0);
 
 /** Recompute the derived look / angles from the fixture's DMX values. */
-export function deriveFromDmx(inst) {
-  const d = inst.dmx;
-  inst.intensity = d.dimmer / 255;
-  inst.pan = round(angleFromDmx(d.pan, inst.panLimit));
-  inst.tilt = round(angleFromDmx(d.tilt, inst.tiltLimit));
-  inst.color = hexFromRgb(d.red, d.green, d.blue);
-  inst.beam = round(beamFromZoom(d.zoom, inst.zoomMin, inst.zoomMax), 1);
+export function deriveFromDmx(fixture) {
+  const d = fixture.dmx;
+  fixture.intensity = d.dimmer / 255;
+  fixture.pan = round(angleFromDmx(d.pan, fixture.panLimit));
+  fixture.tilt = round(angleFromDmx(d.tilt, fixture.tiltLimit));
+  fixture.color = hexFromRgb(d.red, d.green, d.blue);
+  fixture.beam = round(beamFromZoom(d.zoom, fixture.zoomMin, fixture.zoomMax), 1);
 }
 
 /** Set one DMX attribute (clamped to 0–255) and update the derived values. */
-export function setDmx(inst, attr, v) {
-  inst.dmx[attr] = clampByte(v);
-  deriveFromDmx(inst);
+export function setDmx(fixture, attr, v) {
+  fixture.dmx[attr] = clampByte(v);
+  deriveFromDmx(fixture);
 }
 
 /** Set the color as hex (the picker) by setting red / green / blue. */
-export function setColorHex(inst, hex) {
+export function setColorHex(fixture, hex) {
   const [r, g, b] = rgbFromHex(hex);
-  Object.assign(inst.dmx, { red: r, green: g, blue: b });
-  deriveFromDmx(inst);
+  Object.assign(fixture.dmx, { red: r, green: g, blue: b });
+  deriveFromDmx(fixture);
 }
 
 /**
@@ -134,8 +134,8 @@ export function layoutFor(mount, color, count) {
 }
 
 /** [{ channel, attr }] a fixture listens on / sends to (none if unlinked). */
-export function linkChannels(inst) {
-  const { start, layout } = inst.link;
+export function linkChannels(fixture) {
+  const { start, layout } = fixture.link;
   if (!start) return [];
   return layout.flatMap((attr, k) => (attr ? [{ channel: start + k, attr }] : []));
 }
@@ -144,18 +144,18 @@ export function linkChannels(inst) {
 export const round = (v, n = 2) => Math.round(v * 10 ** n) / 10 ** n;
 
 
-export function baseQuat(inst) {
-  const { yaw, pitch, roll } = inst.base;
+export function baseQuat(fixture) {
+  const { yaw, pitch, roll } = fixture.base;
   return new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch * DEG, yaw * DEG, roll * DEG, "YXZ"));
 }
 
-export function fullQuat(inst) {
-  const pt = new THREE.Quaternion().setFromEuler(new THREE.Euler(inst.tilt * DEG, inst.pan * DEG, 0, "YXZ"));
-  return baseQuat(inst).multiply(pt);
+export function fullQuat(fixture) {
+  const pt = new THREE.Quaternion().setFromEuler(new THREE.Euler(fixture.tilt * DEG, fixture.pan * DEG, 0, "YXZ"));
+  return baseQuat(fixture).multiply(pt);
 }
 
-export function beamDir(inst) {
-  return FORWARD.clone().applyQuaternion(fullQuat(inst));
+export function beamDir(fixture) {
+  return FORWARD.clone().applyQuaternion(fullQuat(fixture));
 }
 
 /** Yaw/pitch that make local forward point along v. */
@@ -165,28 +165,28 @@ function frameFacing(v) {
 }
 
 /** Where a new fixture's zero points: stage floor centre (box centre if it sits on the floor). */
-export function defaultTarget(inst, box) {
-  return inst.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
+export function defaultTarget(fixture, box) {
+  return fixture.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
 }
 
 /** Pan / tilt back to zero (DMX 128). */
-export function homeFixture(inst) {
-  inst.dmx.pan = DMX_CENTRE;
-  inst.dmx.tilt = DMX_CENTRE;
-  deriveFromDmx(inst);
+export function homeFixture(fixture) {
+  fixture.dmx.pan = DMX_CENTRE;
+  fixture.dmx.tilt = DMX_CENTRE;
+  deriveFromDmx(fixture);
 }
 
-export function aimZeroAt(inst, target) {
-  const v = target.clone().sub(new THREE.Vector3(inst.x, inst.y, inst.z));
+export function aimZeroAt(fixture, target) {
+  const v = target.clone().sub(new THREE.Vector3(fixture.x, fixture.y, fixture.z));
   if (v.lengthSq() < 1e-6) v.set(0, -1, 0);
-  inst.base = frameFacing(v);
-  homeFixture(inst);
+  fixture.base = frameFacing(v);
+  homeFixture(fixture);
 }
 
-export function setZeroHere(inst) {
-  const e = new THREE.Euler().setFromQuaternion(fullQuat(inst), "YXZ");
-  inst.base = { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) };
-  homeFixture(inst);
+export function setZeroHere(fixture) {
+  const e = new THREE.Euler().setFromQuaternion(fullQuat(fixture), "YXZ");
+  fixture.base = { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) };
+  homeFixture(fixture);
 }
 
 /**
@@ -196,29 +196,29 @@ export function setZeroHere(inst) {
  * limits; returns false if the target is out of reach. The result is
  * stored as DMX 0–255, so it lands on the nearest step.
  */
-export function aimAt(inst, target) {
-  const v = target.clone().sub(new THREE.Vector3(inst.x, inst.y, inst.z));
+export function aimAt(fixture, target) {
+  const v = target.clone().sub(new THREE.Vector3(fixture.x, fixture.y, fixture.z));
   if (v.lengthSq() < 1e-6) return false;
-  v.applyQuaternion(baseQuat(inst).invert());
+  v.applyQuaternion(baseQuat(fixture).invert());
   const want = frameFacing(v); // in the zero frame: yaw = pan, pitch = tilt
   let pan = null;
   for (const p of [want.yaw - 360, want.yaw, want.yaw + 360]) {
-    if (Math.abs(p) > inst.panLimit + 1e-6) continue;
-    if (pan === null || Math.abs(p - inst.pan) < Math.abs(pan - inst.pan)) pan = p;
+    if (Math.abs(p) > fixture.panLimit + 1e-6) continue;
+    if (pan === null || Math.abs(p - fixture.pan) < Math.abs(pan - fixture.pan)) pan = p;
   }
   let reached = pan !== null;
-  if (pan === null) pan = clamp(want.yaw, -inst.panLimit, inst.panLimit);
-  const tilt = clamp(want.pitch, -inst.tiltLimit, inst.tiltLimit);
+  if (pan === null) pan = clamp(want.yaw, -fixture.panLimit, fixture.panLimit);
+  const tilt = clamp(want.pitch, -fixture.tiltLimit, fixture.tiltLimit);
   if (tilt !== want.pitch) reached = false;
-  inst.dmx.pan = dmxFromAngle(pan, inst.panLimit);
-  inst.dmx.tilt = dmxFromAngle(tilt, inst.tiltLimit);
-  deriveFromDmx(inst);
+  fixture.dmx.pan = dmxFromAngle(pan, fixture.panLimit);
+  fixture.dmx.tilt = dmxFromAngle(tilt, fixture.tiltLimit);
+  deriveFromDmx(fixture);
   return reached;
 }
 
-export function isInside(inst, box) {
+export function isInside(fixture, box) {
   const { w, d, h } = box;
-  return Math.abs(inst.x) <= w / 2 && Math.abs(inst.z) <= d / 2 && inst.y >= 0 && inst.y <= h;
+  return Math.abs(fixture.x) <= w / 2 && Math.abs(fixture.z) <= d / 2 && fixture.y >= 0 && fixture.y <= h;
 }
 
 const FACE_NAMES = {
@@ -228,10 +228,10 @@ const FACE_NAMES = {
 };
 
 /** Ray/box slab test. Returns hits along the beam axis (entry/exit). */
-export function axisHits(inst, box) {
+export function axisHits(fixture, box) {
   const { w, d, h } = box;
-  const o = [inst.x, inst.y, inst.z];
-  const dir = beamDir(inst);
+  const o = [fixture.x, fixture.y, fixture.z];
+  const dir = beamDir(fixture);
   const dv = [dir.x, dir.y, dir.z];
   const lo = [-w / 2, 0, -d / 2];
   const hi = [w / 2, h, d / 2];
@@ -263,8 +263,8 @@ export function axisHits(inst, box) {
 export function createFixture(x, y, z, n, box) {
   const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
   /** @type {Fixture} */
-  const inst = {
-    id: newId("i"),
+  const fixture = {
+    id: newId("fixture"),
     name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
@@ -273,9 +273,9 @@ export function createFixture(x, y, z, n, box) {
     link: { consoleId: null, start: null, layout: [] },
     rigId: null, rigIndex: 0,
   };
-  deriveFromDmx(inst);
-  aimZeroAt(inst, defaultTarget(inst, box));
-  return inst;
+  deriveFromDmx(fixture);
+  aimZeroAt(fixture, defaultTarget(fixture, box));
+  return fixture;
 }
 
 function normalizeType(raw) {
@@ -310,16 +310,16 @@ export function registerLabels(link, type) {
 }
 
 /** Use a fixture's real pan / tilt / zoom ranges (and full dimmer if it has none). */
-export function applyFixture(inst, p) {
-  if (p.panLimit != null) inst.panLimit = clamp(p.panLimit, 0, 360);
-  if (p.tiltLimit != null) inst.tiltLimit = clamp(p.tiltLimit, 0, 180);
+export function applyFixture(fixture, p) {
+  if (p.panLimit != null) fixture.panLimit = clamp(p.panLimit, 0, 360);
+  if (p.tiltLimit != null) fixture.tiltLimit = clamp(p.tiltLimit, 0, 180);
   if (p.zoomMin != null && p.zoomMax != null) {
-    inst.zoomMin = clamp(Math.min(p.zoomMin, p.zoomMax), 1, 120);
-    inst.zoomMax = clamp(Math.max(p.zoomMin, p.zoomMax), inst.zoomMin, 120);
+    fixture.zoomMin = clamp(Math.min(p.zoomMin, p.zoomMax), 1, 120);
+    fixture.zoomMax = clamp(Math.max(p.zoomMin, p.zoomMax), fixture.zoomMin, 120);
   }
-  if (!p.channels.some((c) => c.attr === "dimmer")) inst.dmx.dimmer = 255;
-  inst.link.fixture = p;
-  deriveFromDmx(inst);
+  if (!p.channels.some((c) => c.attr === "dimmer")) fixture.dmx.dimmer = 255;
+  fixture.link.fixture = p;
+  deriveFromDmx(fixture);
 }
 
 export function normalizeFixture(raw, i) {
@@ -332,8 +332,8 @@ export function normalizeFixture(raw, i) {
   if (zoomMax < zoomMin) [zoomMin, zoomMax] = [zoomMax, zoomMin];
   const rawDmx = raw.dmx || {};
   const dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, clampByte(num(rawDmx[a], a === "pan" || a === "tilt" ? DMX_CENTRE : 0))]));
-  const inst = {
-    id: typeof raw.id === "string" ? raw.id : newId("i"),
+  const fixture = {
+    id: typeof raw.id === "string" ? raw.id : newId("fixture"),
     name: typeof raw.name === "string" ? raw.name : `Fixture ${i + 1}`,
     x: num(raw.x, 0), y: num(raw.y, 3), z: num(raw.z, 0),
     base: { yaw: num(b.yaw, 0), pitch: num(b.pitch, -45), roll: num(b.roll, 0) },
@@ -343,13 +343,13 @@ export function normalizeFixture(raw, i) {
     rigId: typeof raw.rigId === "string" ? raw.rigId : null,
     rigIndex: Number.isInteger(raw.rigIndex) ? raw.rigIndex : 0,
   };
-  deriveFromDmx(inst);
-  return inst;
+  deriveFromDmx(fixture);
+  return fixture;
 }
 
 /** What gets saved for a fixture (the derived look is left out). */
-function serializeFixture(inst) {
-  const { color, pan, tilt, intensity, beam, ...saved } = inst;
+function serializeFixture(fixture) {
+  const { color, pan, tilt, intensity, beam, ...saved } = fixture;
   return saved;
 }
 
@@ -454,10 +454,10 @@ function rigSlot(rig, i) {
 
 /** Put each member back in its slot (members' pan / tilt etc. are kept). */
 export function applyRig(rig, members) {
-  for (const inst of members) {
-    const slot = rigSlot(rig, inst.rigIndex);
-    inst.x = slot.x; inst.y = slot.y; inst.z = slot.z;
-    inst.base = slot.base;
+  for (const fixture of members) {
+    const slot = rigSlot(rig, fixture.rigIndex);
+    fixture.x = slot.x; fixture.y = slot.y; fixture.z = slot.z;
+    fixture.base = slot.base;
   }
 }
 
@@ -486,7 +486,7 @@ export function normalizeRig(raw, i) {
   const type = RIG_TYPES[raw?.type] ? raw.type : "circle";
   const d = RIG_TYPES[type].defaults;
   return {
-    id: typeof raw?.id === "string" ? raw.id : newId("i"),
+    id: typeof raw?.id === "string" ? raw.id : newId("rig"),
     name: typeof raw?.name === "string" ? raw.name : `${RIG_TYPES[type].prefix} ${i + 1}`,
     type,
     x: num(raw?.x, 0), y: num(raw?.y, 5), z: num(raw?.z, 0),
@@ -544,7 +544,7 @@ export function parseStage(data) {
   const rigs = (Array.isArray(data?.rigs) ? data.rigs : []).map(normalizeRig);
   // A member whose rig is gone becomes a free fixture; a rig keeps the
   // count of members it actually has, and they're re-laid-out to match.
-  for (const inst of fixtures) if (inst.rigId && !rigs.some((r) => r.id === inst.rigId)) inst.rigId = null;
+  for (const fixture of fixtures) if (fixture.rigId && !rigs.some((r) => r.id === fixture.rigId)) fixture.rigId = null;
   const kept = rigs.filter((rig) => {
     const members = fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
     if (members.length < 2) { members.forEach((m) => { m.rigId = null; }); return false; }
@@ -557,5 +557,5 @@ export function parseStage(data) {
 }
 
 export function serializeStage(box, fixtures, transparent, rigs) {
-  return { app: "UnnaturalLight.stage", version: 2, box, transparent, rigs, fixtures: fixtures.map(serializeFixture) };
+  return { box, transparent, rigs, fixtures: fixtures.map(serializeFixture) };
 }
