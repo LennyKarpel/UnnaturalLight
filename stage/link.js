@@ -1,5 +1,5 @@
 // Console link: stage fixtures ↔ console fixtures and DMX channels, and
-// registering lights in the console.
+// registering stage fixtures in the console.
 import {
   setDmx,
   layoutFor,
@@ -47,10 +47,6 @@ export const consoleLink = createConsoleLink({
   onStageHello: () => publishStage(),
   onRegistered: (results) => onRegistered(results),
 });
-const consoleStatusEl = document.getElementById("consoleStatus");
-// In the combined page (../index.html) the console is always beside the
-// stage, so the pill only matters when the stage is open on its own.
-consoleStatusEl.hidden = window.parent !== window;
 
 const sortedConsoleFixtures = () => [...consoleLink.fixtures()].sort((a, b) => a.channelStart - b.channelStart);
 export const consoleFixtureById = (id) => consoleLink.fixtures().find((c) => c.id === id) ?? null;
@@ -59,16 +55,6 @@ const addr = (ch) => formatAddress(ch, consoleLink.universes);
 /** "2/45" or "45" → channel number in any universe (null if invalid). */
 const parseAddr = (text) => parseAddress(text, MAX_UNIVERSES);
 const chRange = (c) => `Ch ${addr(c.channelStart)}${c.channelEnd > c.channelStart ? `–${addr(c.channelEnd)}` : ""}`;
-
-function updateConsoleStatus() {
-  const live = consoleLink.live;
-  consoleStatusEl.textContent = live ? "Console · live" : "Console · offline";
-  consoleStatusEl.classList.toggle("is-on", live);
-  consoleStatusEl.title = live
-    ? "Linked values follow the console's faders, and changes here move them"
-    : "Open the console (console/console.html) in another tab to link";
-}
-setInterval(updateConsoleStatus, 1000);
 
 /** Take the console's current values for linked, patched channels. */
 function applyConsoleLevels() {
@@ -82,7 +68,6 @@ function applyConsoleLevels() {
       if (v != null && v !== fixture.dmx[attr]) { setDmx(fixture, attr, v); moved = true; }
     }
   }
-  updateConsoleStatus();
   requestRegistrations();
   if (moved) { syncScene(); drawPlan(); renderList(); save({ share: false }); publishStage(); }
   syncInspector();
@@ -144,7 +129,7 @@ export function linkSectionHtml(fixture) {
       <label>Register</label>
       <div class="xyz">
         <select data-reg-type>${CONSOLE_TYPES.filter((t) => t.key !== "none").map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("")}</select>
-        <button type="button" data-link-act="register" title="Create a console fixture for this light, with free faders patched to it">Register</button>
+        <button type="button" data-link-act="register" title="Create a console fixture for this one, with free faders patched to it">Register</button>
       </div>` : ""}
       <div class="readout" id="linkStatus"></div>
     </div>`;
@@ -253,7 +238,7 @@ export function syncDmxRows(fixture) {
   if (!status) return;
   const linked = linkChannels(fixture);
   const withFader = linked.filter(({ channel }) => consoleLink.fadersFor(channel).length).length;
-  const owned = fixture.link.owned ? " Registered by the stage: deleting the light removes it from the console." : "";
+  const owned = fixture.link.owned ? " Registered by the stage: deleting it here removes it from the console." : "";
   status.textContent = fixture.link.register
     ? (consoleLink.live ? "Registering in the console…" : "Will register in the console when it opens.")
     : !linked.length
@@ -264,12 +249,12 @@ export function syncDmxRows(fixture) {
 }
 
 // ---------------------------------------------------------------------
-// Registering lights in the console
+// Registering stage fixtures in the console
 // ---------------------------------------------------------------------
-// A light placed with a console type (or a rig's members, or a copy of a
-// registered light) asks the console to create a fixture at the next
+// A fixture placed with a console type (or a rig's members, or a copy of a
+// registered fixture) asks the console to create a fixture at the next
 // free DMX block, patch one free fader per channel and name them. It starts
-// at the light's current values. Lights placed while the console is closed
+// at the fixture's current values. Fixtures placed while the console is closed
 // wait (link.register) and register when it opens.
 
 const CONSOLE_TYPE_KEY = "unnaturallight.stage.consoleType";
@@ -318,11 +303,11 @@ export function libraryPickerFor(select, container) {
   return { sync, profile: () => (select.value === LIBRARY ? picker?.profile ?? null : null) };
 }
 
-/** Lights asked for but not answered yet (stage id → give-up timer). */
+/** Fixtures asked for but not answered yet (stage id → give-up timer). */
 const registering = new Map();
-/** Every light this window has asked the console to register. */
+/** Every fixture this window has asked the console to register. */
 const asked = new Set();
-/** Lights another stage window placed and is registering (its job, not ours). */
+/** Fixtures another stage window placed and is registering (its job, not ours). */
 export const othersRegistering = new Set();
 
 export function requestRegistrations() {
@@ -352,7 +337,7 @@ export function requestRegistrations() {
 }
 
 function onRegistered(results) {
-  // Every stage tab hears every reply: one for a light this tab never
+  // Every stage tab hears every reply: one for a fixture this tab never
   // asked about belongs to another tab, so it isn't ours to undo (or save).
   results = results.filter((r) => asked.has(r.stageId));
   if (!results.length) return;

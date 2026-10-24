@@ -4,20 +4,19 @@
  * server's /ws, passes the access token, reconnects when the connection
  * drops and hands on each message as parsed JSON.
  *
- * Other machines open a page with ?token=… (printed by the server); the
- * token is kept for this tab, so the console and the stage share it.
+ * Other machines open the page with ?token=… (printed by the server);
+ * ../index.html keeps it for the tab, and the console and the stage read it.
  */
 
 const RECONNECT_MS = 1000;
 const TOKEN_KEY = "unnaturallight.token";
 
 function accessToken() {
-  let token = new URLSearchParams(location.search).get("token");
   try {
-    token ??= sessionStorage.getItem(TOKEN_KEY);
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  } catch { /* storage unavailable */ }
-  return token;
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null; // storage unavailable
+  }
 }
 
 /**

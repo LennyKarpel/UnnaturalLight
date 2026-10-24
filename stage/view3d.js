@@ -1,4 +1,4 @@
-// The 3D view: the box, the lights and their beams, and picking, placing,
+// The 3D view: the box, the fixtures and their beams, and picking, placing,
 // dragging and aiming with the mouse.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -588,7 +588,7 @@ view.addEventListener("pointerup", (e) => {
   if (d) {
     renderer.domElement.style.cursor = "grab";
     if (d.active) changed();
-    else if (e.altKey) showTrace({ kind: "light", id: d.id }, e);
+    else if (e.altKey) showTrace({ kind: "stageFixture", id: d.id }, e);
     else select(d.id, d.shift);
     return;
   }

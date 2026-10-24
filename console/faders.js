@@ -428,7 +428,7 @@ export function refreshLiveRow() {
 }
 
 // ---------------------------------------------------------------------
-// R/G/B color bars: three side-by-side faders driving one light's red,
+// R/G/B color bars: three side-by-side faders driving one fixture's red,
 // green and blue get a color bar under them. In a cue (and the
 // Channels-page strip) clicking it opens a color picker that sets all
 // three; on the Live strip it just shows the mix going out.
@@ -450,7 +450,7 @@ function faderColorRole(fader) {
   return { owner: owner?.id ?? name.slice(0, -m[1].length).trim(), role: c === "r" ? "red" : c === "g" ? "green" : "blue" };
 }
 
-/** First fader of each R, G, B trio (side by side, same light). */
+/** First fader of each R, G, B trio (side by side, same fixture). */
 function rgbTrios() {
   const out = [];
   for (let i = 0; i + 2 < FADER_COUNT; i++) {
@@ -486,7 +486,7 @@ function panTiltPairs() {
 
 // ---------------------------------------------------------------------
 // Fixture outlines: a line around each run of side-by-side faders that
-// control one fixture, labelled with its name.
+// control one fixture, labeled with its name.
 // ---------------------------------------------------------------------
 
 /** The fixture a fader controls (all its channels in one fixture), or null. */
@@ -511,7 +511,7 @@ function fixtureRuns() {
   return runs;
 }
 
-/** Outline colors, alternated so neighbouring fixtures look different. */
+/** Outline colors, alternated so neighboring fixtures look different. */
 const OUTLINE_COLORS = ["#e2a13a", "#5fb7d6", "#9cc76b", "#d68ab4", "#c9b458", "#8a9be0"];
 
 /**
@@ -577,7 +577,7 @@ export function revealFixtures(ids) {
     const left = a.offsetLeft - strip.offsetLeft;
     const right = b.offsetLeft - strip.offsetLeft + b.offsetWidth;
     const view = strip.clientWidth;
-    // Only scroll if the group isn't already fully in view; then centre it (or show its start).
+    // Only scroll if the group isn't already fully in view; then center it (or show its start).
     if (left < strip.scrollLeft || right > strip.scrollLeft + view) {
       const target = right - left <= view ? left - (view - (right - left)) / 2 : left - 8;
       // Instant: a smooth scroll gets interrupted by the rows' scroll syncing.

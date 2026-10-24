@@ -9,7 +9,7 @@ const CHANNEL_NAME = "unnaturallight.dmx";
 /** Message types on the bus. */
 export const MSG = {
   // console → stage
-  /** A console opened: stages send their lights again. */
+  /** A console opened: stages send their fixtures again. */
   STAGE_HELLO: "stage-hello",
   /** Output levels, patch, fixtures, mix (every output change + heartbeat). */
   LEVELS: "levels",
@@ -20,11 +20,11 @@ export const MSG = {
   HELLO: "hello",
   /** Set channels to values (moves the faders patched to them). */
   SET: "set",
-  /** Create console fixtures for lights placed on the stage. */
+  /** Create console fixtures for fixtures placed on the stage. */
   REGISTER: "register",
   /** Remove console fixtures the stage registered. */
   UNREGISTER: "unregister",
-  /** The stage's lights (for the console's ⌥-click traces). */
+  /** The stage's fixtures (for the console's ⌥-click traces). */
   STAGE: "stage",
   /** Console fixtures selected on the stage (the console highlights them). */
   STAGE_SELECT: "stage-select",

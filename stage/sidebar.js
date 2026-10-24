@@ -50,7 +50,7 @@ export function renderList() {
       <div class="bar"><div style="width:${Math.round(fixture.intensity * 100)}%"></div></div>
       <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
     row.children[1].textContent = fixture.name + (isInside(fixture, state.box) ? "" : "  ·  outside");
-    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "light", id: fixture.id }, e) : select(fixture.id, e.shiftKey)));
+    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "stageFixture", id: fixture.id }, e) : select(fixture.id, e.shiftKey)));
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);
   }
@@ -62,7 +62,7 @@ function rigSectionHtml(rig) {
     <div class="fields rig-fields">
       <div class="subhead">Rig · ${RIG_TYPES[rig.type].name}</div>
       <label>Rig name</label><input type="text" data-r="name" />
-      <label>Centre</label>
+      <label>Center</label>
       <div class="xyz">
         <input type="number" step="0.1" data-r="x" title="x (− SR · + SL)" />
         <input type="number" step="0.1" data-r="y" title="height" />
@@ -162,7 +162,7 @@ export function renderInspector() {
       <button data-act="home" title="Pan/tilt back to 0 (H)">Home</button>
       ${rig ? `<button data-act="selectRig" title="Select every fixture in this rig">Select whole rig</button>` : `
       <button data-act="zero" title="Make the current direction the new zero (Z)">Set zero here</button>
-      <button data-act="aim" title="Point zero at the stage centre">Aim zero at stage</button>`}
+      <button data-act="aim" title="Point zero at the stage center">Aim zero at stage</button>`}
       <button data-act="dup" title="${rig ? "Copy as a free fixture (not part of the rig)" : "Copy"}">Duplicate</button>
       <button data-act="del" class="danger" title="${rig ? "Delete the whole rig" : "Delete"} (⌫ or right-click) · ⌘Z to undo">${rig ? "Delete rig" : "Delete"}</button>
     </div>`;

@@ -584,9 +584,9 @@ markClean();
 // ---------------------------------------------------------------------
 // Fixtures registered from the Stage page (see stage-link.js)
 // ---------------------------------------------------------------------
-// Placing a light on the stage registers it here: a console fixture at
+// Placing a fixture on the stage registers it here: a console fixture at
 // the next free DMX block, one fader per channel (an unnamed fader already
-// patched to just that channel, else a free one) named after the light, and
+// patched to just that channel, else a free one) named after the stage fixture, and
 // the fader rows scrolled to them. Deleting it on the stage removes it and
 // frees the faders.
 
@@ -731,7 +731,7 @@ const consoleHeader = {
   setUniverses,
 };
 window.consoleHeader = consoleHeader;
-try { if (window.parent !== window) window.parent.onConsoleHeader?.(consoleHeader); } catch { /* not the same origin */ }
+window.parent.onConsoleHeader?.(consoleHeader);
 
 // Live link to the Stage page: send output levels, apply fader moves made there.
 startStageLink({

@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UnnaturalLight · Stage</title>
+    <title>Stage</title>
+    <script>
+      // Only shown inside the combined page (../index.html): opened directly, go there.
+      if (window.parent === window) location.replace("../index.html");
+    </script>
     <link rel="stylesheet" href="stage.css" />
     <script type="importmap">
       {
@@ -17,15 +21,14 @@
   <body>
     <div class="app">
       <header>
-        <h1 class="app-title">UnnaturalLight <span>· Stage</span></h1>
-        <div class="group" title="Performance area size in metres">
+        <h1 class="app-title"><span>Stage</span></h1>
+        <div class="group" title="Performance area size in meters">
           <label>Box W</label><input id="boxW" type="number" min="1" max="100" step="0.5" />
           <label>D</label><input id="boxD" type="number" min="1" max="100" step="0.5" />
           <label>H</label><input id="boxH" type="number" min="1" max="50" step="0.5" />
           <label>m</label>
         </div>
         <div class="spacer"></div>
-        <span id="consoleStatus" class="pill">Console · offline</span>
         <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place fixture</button>
         <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
         <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
@@ -90,7 +93,7 @@
           </div>
           <div class="lib" id="placeLib" hidden></div>
           <p class="hint warn" id="placeLibMsg"></p>
-          <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the light. "Stage only" doesn't touch the console.</p>
+          <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the stage fixture. "Stage only" doesn't touch the console.</p>
           <div class="buttons">
             <button class="primary" type="submit">Place…</button>
           </div>

@@ -32,7 +32,7 @@ function create() {
 
 /**
  * Confirm (no `initial`) or ask for a name (`initial` = the starting text).
- * Resolves true / the trimmed name, or null when cancelled.
+ * Resolves true / the trimmed name, or null when canceled.
  *
  * @param {{ title: string, message?: string, confirmLabel?: string, initial?: string | null }} opts
  * @returns {Promise<true | string | null>}

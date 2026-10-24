@@ -140,7 +140,7 @@ function makeRigMember(rig, k, like) {
   return fixture;
 }
 
-/** Create a rig centred at (x, y, z) from the Place rig dialog's settings. */
+/** Create a rig centered at (x, y, z) from the Place rig dialog's settings. */
 export function addRigAt(cfg, x, y, z) {
   const room = MAX_FIXTURES - state.fixtures.length;
   if (cfg.count > room) {

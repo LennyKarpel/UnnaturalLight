@@ -10,7 +10,6 @@ import { renderFixtures } from "./fixtures-page.js";
 
 export function syncSetNameUi() {
   state.setName = normalizeSetName(state.setName);
-  document.title = `${state.setName} · UnnaturalLight`;
   notifyHeader();
 }
 

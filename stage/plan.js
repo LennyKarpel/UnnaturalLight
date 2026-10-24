@@ -24,19 +24,19 @@ const PLAN_VIEWS = {
   front: {
     h: "x", v: "y", vSign: -1, caption: "front · from the audience",
     labels: { top: "CEILING", bottom: "FLOOR", left: "SR", right: "SL" }, audienceEdge: null,
-    placeDefault: () => ({ z: 0 }), placeHint: () => "on the centre line (z 0)",
+    placeDefault: () => ({ z: 0 }), placeHint: () => "on the center line (z 0)",
     aimDefault: (box) => ({ z: -box.d / 2 }), aimHint: "click a spot on the upstage wall to aim at",
   },
   sr: {
     h: "z", v: "y", vSign: -1, caption: "from stage right · audience →",
     labels: { top: "CEILING", bottom: "FLOOR", left: "UPSTAGE", right: "AUDIENCE" }, audienceEdge: "right",
-    placeDefault: () => ({ x: 0 }), placeHint: () => "on the centre line (x 0)",
+    placeDefault: () => ({ x: 0 }), placeHint: () => "on the center line (x 0)",
     aimDefault: (box) => ({ x: box.w / 2 }), aimHint: "click a spot on the stage-left wall to aim at",
   },
   sl: {
     h: "z", hSign: -1, v: "y", vSign: -1, caption: "from stage left · ← audience",
     labels: { top: "CEILING", bottom: "FLOOR", left: "AUDIENCE", right: "UPSTAGE" }, audienceEdge: "left",
-    placeDefault: () => ({ x: 0 }), placeHint: () => "on the centre line (x 0)",
+    placeDefault: () => ({ x: 0 }), placeHint: () => "on the center line (x 0)",
     aimDefault: (box) => ({ x: -box.w / 2 }), aimHint: "click a spot on the stage-right wall to aim at",
   },
 };
@@ -308,7 +308,7 @@ plan.addEventListener("pointerdown", (e) => {
     return;
   }
   const best = planFixtureAt(px, py);
-  if (e.altKey && best) { showTrace({ kind: "light", id: best.id }, e); return; }
+  if (e.altKey && best) { showTrace({ kind: "stageFixture", id: best.id }, e); return; }
   if (!best) { if (!e.shiftKey) select(null); return; }
   if (e.shiftKey) { select(best.id, true); return; }
   if (!state.selected.includes(best.id)) select(best.id);

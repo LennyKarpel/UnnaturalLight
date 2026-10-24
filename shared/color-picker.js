@@ -3,8 +3,8 @@
  * browser's own for every <input type="color"> on the page (console color
  * bars; stage keys bar and inspector). Clicking one opens a popover by it:
  *
- *   wheel     hue around the edge, saturation toward the centre, at full
- *             brightness (the dimmer sets how bright the light is)
+ *   wheel     hue around the edge, saturation toward the center, at full
+ *             brightness (the dimmer sets how bright the fixture is)
  *   swatches  common lighting colors, then colors in use (the app says which)
  *   R G B     the 0–255 values it sets, and the hex code
  *
@@ -50,7 +50,7 @@ function hsFromRgb(r, g, b) {
 
 /**
  * @param {{ usedLabel: string, usedColors: () => string[] }} api
- *   the second swatch row: its heading and colors (hex), e.g. the stage's lights
+ *   the second swatch row: its heading and colors (hex), e.g. the stage's fixtures
  */
 export function installColorPicker(api) {
   const dlg = document.createElement("dialog");

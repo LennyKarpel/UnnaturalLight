@@ -79,7 +79,7 @@ export function changed({ list = true, inspector = true, persist = true } = {}) 
   publishStage();
   // A new selection: have the console scroll to the selected fixtures' faders
   // and highlight them until the selection changes (none = clear it). Keyed on
-  // the console fixtures, so a light that links up while selected is sent too.
+  // the console fixtures, so a fixture that links up while selected is sent too.
   const ids = [...new Set(selectedFixtures().map((i) => i.link.consoleId).filter(Boolean))];
   const selectionKey = ids.join(",");
   if (selectionKey !== lastSelectionKey) {
@@ -106,7 +106,7 @@ export function select(id, additive = false) {
 
 const bannerEl = document.getElementById("banner");
 const PLACE_HINT = bannerEl.textContent;
-const RIG_PLACE_HINT = "Click where the rig's centre goes: a surface or the ground in 3D, or the plan · Esc cancels";
+const RIG_PLACE_HINT = "Click where the rig's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
 const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected fixtures at it · Esc cancels";
 let bannerTimer = 0;
 
@@ -144,7 +144,7 @@ export function setAiming(on) {
   drawPlan();
 }
 
-/** Point every selected fixture's beam at `p` (world, metres). */
+/** Point every selected fixture's beam at `p` (world, meters). */
 export function applyAim(p) {
   const sel = selectedFixtures();
   const missed = sel.filter((fixture) => !aimAt(fixture, p));
@@ -262,7 +262,7 @@ function duplicateSelected() {
  * Deleted fixtures (and rigs), newest last, so ⌘Z can put them back. Kept
  * with the saved stage, so ⌘Z in any stage window undoes the last delete
  * made in any of them (in memory only if storage is unavailable).
- * Each entry: { indexes, data } (data = the removed lights as a stage file).
+ * Each entry: { indexes, data } (data = the removed fixtures as a stage file).
  */
 const UNDO_KEY = `${STORAGE_KEY}.undo`;
 const MAX_UNDO = 50;
@@ -305,7 +305,7 @@ export function deleteSelected() {
   }]);
   state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
   state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
-  // Lights the stage registered leave the console too (their faders are freed).
+  // Fixtures the stage registered leave the console too (their faders are freed).
   consoleLink.unregister(removed.filter((r) => r.fixture.link.owned).map((r) => r.fixture.link.consoleId));
   select(null);
   const what = rigs.length === 1 && removed.every((r) => r.fixture.rigId === rigs[0].id)

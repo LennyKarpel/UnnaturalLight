@@ -4,7 +4,7 @@
 //   console → stage   output levels (0–255 per DMX channel), which fader(s)
 //                     drive each channel, and the console's fixtures
 //   stage → console   "set channel N to V" when a linked value is changed here,
-//                     and the stage's lights (for the console's ⌥-click trace)
+//                     and the stage's fixtures (for the console's ⌥-click trace)
 //
 // Only channels with a fader patched are synced. A channel is sent only after
 // the console's value for it has been heard, so opening the stage never moves
@@ -107,7 +107,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     traceInfo() {
       return this.live ? { levels, faders: faderInfo, mix, universes } : { levels: null, faders: null, mix: null, universes };
     },
-    /** Ask the console to create fixtures (+ patch / name free faders) for lights. */
+    /** Ask the console to create fixtures (+ patch / name free faders) for stage fixtures. */
     register(requests) {
       bus?.postMessage({ type: MSG.REGISTER, requests });
     },
@@ -115,7 +115,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     unregister(consoleIds) {
       if (consoleIds.length) bus?.postMessage({ type: MSG.UNREGISTER, consoleIds });
     },
-    /** Send the stage's lights to the console (for its traces). */
+    /** Send the stage's fixtures to the console (for its traces). */
     publishStage(list) {
       bus?.postMessage({ type: MSG.STAGE, fixtures: list });
     },

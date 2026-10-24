@@ -6,7 +6,7 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .app {
   height: 100dvh;
@@ -62,7 +62,7 @@ button.active { background: var(--select); color: #021414; border-color: var(--s
 .keys {
   position: absolute; left: 12px; bottom: 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   display: flex; flex-wrap: wrap; gap: 4px 14px;
   pointer-events: none;
 }
@@ -112,7 +112,7 @@ aside {
 section { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--track); }
 section h2 {
   margin: 0 0 0.5rem;
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -120,7 +120,7 @@ section h2 {
   display: flex; justify-content: space-between; align-items: center;
 }
 #plan { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: 4px; background: #0c0e11; touch-action: none; }
-.hint { color: var(--muted); font-size: 12px; margin: 0.4rem 0 0; }
+.hint { color: var(--muted); font-size: var(--text-sm); margin: 0.4rem 0 0; }
 
 .list { display: flex; flex-direction: column; gap: 2px; }
 .list .item {
@@ -137,10 +137,10 @@ dialog.dlg .dlg-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--track);
 }
-dialog.dlg .dlg-head h2 { margin: 0; font-size: 14px; }
+dialog.dlg .dlg-head h2 { margin: 0; font-size: var(--text-base); }
 dialog.dlg section { border-bottom: 0; }
 dialog.dlg h3 {
-  margin: 0 0 0.3rem; font-size: 11px; text-transform: uppercase;
+  margin: 0 0 0.3rem; font-size: var(--text-xs); text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
 }
 dialog.dlg .hint { margin: 0 0 0.6rem; }
@@ -148,30 +148,30 @@ dialog.dlg .checks { display: grid; gap: 6px; }
 dialog.dlg .check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 dialog.dlg .check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 /* Plan views: a small segmented switch (../shared/theme.css). */
-.seg button { padding: 2px 8px; font-size: 11px; }
+.seg button { padding: 2px 8px; font-size: var(--text-xs); }
 dialog.dlg .fields { grid-template-columns: 110px 1fr; }
 dialog.dlg .fields input[type="number"] { width: 100%; }
 .fields.rig-fields { margin-top: 10px; }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
 .dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
 .dmx-row input[type="number"] { width: 100%; }
-.dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
 .chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
 .chan.on { border-color: var(--ok); color: var(--ok); }
 .fields.link-fields { margin-top: 10px; }
 .layout { display: flex; flex-wrap: wrap; gap: 4px; }
-.lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.lay select { font-size: 11px; padding: 1px 2px; }
+.lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
+.lay select { font-size: var(--text-xs); padding: 1px 2px; }
 .lay-btns { display: flex; gap: 4px; width: 100%; }
-.lay-btns button { padding: 1px 6px; font-size: 11px; }
+.lay-btns button { padding: 1px 6px; font-size: var(--text-xs); }
 .lib { margin-top: 8px; }
 .lib select[size] { width: 100%; }
-.lib-info { margin-top: 6px; font-size: 12px; color: var(--muted); max-height: 180px; overflow: auto; }
+.lib-info { margin-top: 6px; font-size: var(--text-sm); color: var(--muted); max-height: 180px; overflow: auto; }
 .lib-info[data-tone="warn"], .hint.warn { color: var(--accent); }
-.lib-chans { margin: 4px 0; padding-left: 0; list-style: none; columns: 2; font-family: var(--mono); font-size: 11px; }
+.lib-chans { margin: 4px 0; padding-left: 0; list-style: none; columns: 2; font-family: var(--mono); font-size: var(--text-xs); }
 .lib-chans span { color: var(--muted); display: inline-block; min-width: 18px; }
 .lib-chans b { color: var(--ok); font-weight: 500; }
-.lib-note { font-size: 11px; }
+.lib-note { font-size: var(--text-xs); }
 dialog.dlg { max-height: 90vh; overflow: auto; }
 /* Right-click menu: a .menu (../shared/theme.css). */
 .ctx-menu { position: fixed; z-index: 20; min-width: 160px; }
@@ -188,9 +188,9 @@ button.flash:active { background: #fff; color: #111; border-color: #fff; }
 .xyz { display: flex; gap: 4px; }
 .xyz input { flex: 1; width: 0; }
 .slider { display: grid; grid-template-columns: 1fr 64px; gap: 6px; align-items: center; }
-.subhead { grid-column: 1 / -1; margin-top: 6px; color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.subhead { grid-column: 1 / -1; margin-top: 6px; color: var(--accent); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
 .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.readout { grid-column: 1 / -1; font-family: var(--mono); color: var(--muted); font-size: 12px; line-height: 1.5; }
+.readout { grid-column: 1 / -1; font-family: var(--mono); color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
 .readout b { color: var(--ink); font-weight: 500; }
 
 @media (max-width: 820px) {

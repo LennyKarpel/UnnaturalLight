@@ -157,7 +157,7 @@ export function renderSongs() {
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "fixture-remove";
-    removeBtn.textContent = "×";
+    removeBtn.textContent = "✕";
     removeBtn.title = `Remove ${song.name}`;
     removeBtn.setAttribute("aria-label", `Remove ${song.name}`);
     removeBtn.disabled = state.songs.length <= 1;

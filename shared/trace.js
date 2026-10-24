@@ -1,5 +1,5 @@
 // Signal trace, shared by the console and the stage: ⌥-click a fader, a
-// DMX channel, a console fixture or a stage light to see what controls
+// DMX channel, a console fixture or a stage fixture to see what controls
 // it, what it controls, and the current values, in a small card next to
 // the pointer.
 //
@@ -26,7 +26,7 @@ import { escapeHtml as esc } from "./html.js";
  *   consoleFixtures: ConsoleFixture[],
  *   stageFixtures: StageFixture[] | null,
  * }} Snapshot
- * @typedef {{ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "fixture", id: string } | { kind: "light", id: string }} TraceTarget
+ * @typedef {{ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "fixture", id: string } | { kind: "stageFixture", id: string }} TraceTarget
  * @typedef {{ label: string, value?: string | number, note?: string, depth?: number, tone?: "on" | "muted" | "warn" }} Row
  * @typedef {{ title: string, subtitle: string, sections: { heading: string, rows: Row[] }[] }} Trace
  */
@@ -44,7 +44,7 @@ function fadersOn(s, ch) {
     .sort((a, b) => b.out - a.out);
 }
 
-/** What a DMX channel drives: console fixtures and linked stage lights. */
+/** What a DMX channel drives: console fixtures and linked stage fixtures. */
 function channelUses(s, ch, depth) {
   /** @type {Row[]} */
   const rows = [];
@@ -60,7 +60,7 @@ function channelUses(s, ch, depth) {
     else if (channelName) rows.push({ label: `Stage · ${si.name} · ${channelName}`, note: "not drawn on the stage", depth, tone: "muted" });
   }
   if (!rows.length) rows.push({ label: "Not used by any fixture", depth, tone: "muted" });
-  if (!s.stageFixtures) rows.push({ label: "Stage not open: its lights aren't shown", depth, tone: "muted" });
+  if (!s.stageFixtures) rows.push({ label: "Stage not open: its fixtures aren't shown", depth, tone: "muted" });
   return rows;
 }
 
@@ -130,9 +130,9 @@ function traceChannel(s, ch) {
 }
 
 /** @param {Snapshot} s @param {string} id */
-function traceLight(s, id) {
+function traceStageFixture(s, id) {
   const si = (s.stageFixtures ?? []).find((i) => i.id === id);
-  if (!si) return { title: "Light", subtitle: "Stage light", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
+  if (!si) return { title: "Fixture", subtitle: "Stage fixture", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
   /** @type {Row[]} */
   const rows = [];
   const chOf = (attr) => (si.start ? si.layout.indexOf(attr) : -1);
@@ -169,12 +169,12 @@ function traceLight(s, id) {
   }
   return {
     title: si.name,
-    subtitle: "Stage light",
+    subtitle: "Stage fixture",
     sections: [{ heading: "Linked to", rows: link }, { heading: "Values ← controlled by", rows }],
   };
 }
 
-/** Stage lights' attributes on a channel, e.g. "Inst 1 · Dimmer". */
+/** Stage fixtures' attributes on a channel, e.g. "Inst 1 · Dimmer". */
 function stageUsesOf(s, ch) {
   return (s.stageFixtures ?? []).flatMap((si) => {
     const attr = si.start && ch >= si.start ? si.layout[ch - si.start] : null;
@@ -200,10 +200,10 @@ function traceFixture(s, id) {
 
   /** @type {Row[]} */
   const lights = [];
-  if (!s.stageFixtures) lights.push({ label: "Stage not open: its lights aren't shown", tone: "muted" });
+  if (!s.stageFixtures) lights.push({ label: "Stage not open: its fixtures aren't shown", tone: "muted" });
   else {
     const linked = s.stageFixtures.filter((si) => si.consoleId === id);
-    if (!linked.length) lights.push({ label: "No stage light linked to it", tone: "muted" });
+    if (!linked.length) lights.push({ label: "No stage fixture linked to it", tone: "muted" });
     for (const si of linked) lights.push({ label: si.name, note: `Ch ${addr(s, si.start)}–${addr(s, si.start + si.layout.length - 1)}`, tone: "on" });
   }
 
@@ -233,7 +233,7 @@ function traceFixture(s, id) {
   return {
     title: ci.name,
     subtitle: `Console fixture · Ch ${addr(s, ci.channelStart)}${count > 1 ? `–${addr(s, ci.channelEnd)}` : ""}${kind ? ` · ${kind}` : ""}`,
-    sections: [{ heading: "Stage lights", rows: lights }, { heading: "Channels ← controlled by", rows }],
+    sections: [{ heading: "Stage fixtures", rows: lights }, { heading: "Channels ← controlled by", rows }],
   };
 }
 
@@ -242,7 +242,7 @@ function buildTrace(s, target) {
   if (target.kind === "fader") return traceFader(s, target.fader);
   if (target.kind === "channel") return traceChannel(s, target.channel);
   if (target.kind === "fixture") return traceFixture(s, target.id);
-  return traceLight(s, target.id);
+  return traceStageFixture(s, target.id);
 }
 
 // ---------------------------------------------------------------------

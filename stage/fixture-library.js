@@ -1,9 +1,9 @@
 // Real fixtures from the Open Fixture Library (open-fixture-library.org):
 // browse manufacturers → fixtures → modes, and turn a mode into a channel
-// profile for a stage light and its console fixture.
+// profile for a stage fixture and its console fixture.
 //
-// Needs internet while browsing. A picked profile is saved with the light,
-// so placed lights keep working offline.
+// Needs internet while browsing. A picked profile is saved with the fixture,
+// so placed fixtures keep working offline.
 
 import { DMX_LABELS as LABEL } from "../shared/attributes.js";
 import { escapeHtml as esc } from "../shared/html.js";
@@ -184,7 +184,7 @@ function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, mode
   };
 }
 
-/** Light validation of a saved profile; null if it doesn't look right. */
+/** A quick check of a saved profile; null if it doesn't look right. */
 export function normalizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.channels) || !raw.channels.length) return null;
   const ATTRS = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];

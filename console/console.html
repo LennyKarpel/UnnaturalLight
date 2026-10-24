@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UnnaturalLight</title>
+    <title>Console</title>
+    <script>
+      // Only shown inside the combined page (../index.html): opened directly, go there.
+      if (window.parent === window) location.replace("../index.html");
+    </script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,7 +15,7 @@
       <!-- The set name, set buttons, DMX outputs and status are in the header of
            the page around the console (../index.html). -->
       <header class="header">
-        <h1 class="app-title">UnnaturalLight <span>· Console</span></h1>
+        <h1 class="app-title"><span>Console</span></h1>
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
@@ -98,7 +102,7 @@
                 </label>
                 <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Live cue submaster" />
                 <button id="fromSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-                  <span aria-hidden="true">×</span>
+                  <span aria-hidden="true">✕</span>
                 </button>
               </div>
               <div class="submaster submaster-to">
@@ -108,7 +112,7 @@
                 </label>
                 <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Up next cue submaster" />
                 <button id="toSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-                  <span aria-hidden="true">×</span>
+                  <span aria-hidden="true">✕</span>
                 </button>
               </div>
             </div>
@@ -121,7 +125,7 @@
             </label>
             <input id="master" type="range" min="0" max="100" value="100" />
             <button id="blackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-              <span aria-hidden="true">×</span>
+              <span aria-hidden="true">✕</span>
             </button>
           </aside>
         </div>

@@ -26,7 +26,7 @@ export const MAX_FIXTURE_QTY = 16;
  *   roles?: (ChannelRole | null)[],
  * }} Fixture
  * @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} ChannelRole
- * roles: what each channel of the block does, when known (lights registered
+ * roles: what each channel of the block does, when known (fixtures registered
  * from the stage); used e.g. to show R/G/B faders as a color picker.
  */
 

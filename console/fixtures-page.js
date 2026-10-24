@@ -682,7 +682,7 @@ function renderFixtureRow(fixture) {
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "fixture-remove";
-  remove.textContent = "×";
+  remove.textContent = "✕";
   remove.title = `Remove ${fixture.name}`;
   remove.setAttribute("aria-label", `Remove ${fixture.name}`);
   remove.addEventListener("click", async () => {
@@ -743,7 +743,7 @@ function renderFixtureGroupHeader({ title, count, groupId = null, onRemove }) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "fixture-remove";
-    remove.textContent = "×";
+    remove.textContent = "✕";
     remove.title = `Remove group ${title}`;
     remove.setAttribute("aria-label", `Remove group ${title}`);
     remove.addEventListener("click", () => onRemove());

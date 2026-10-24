@@ -754,7 +754,7 @@ export function renderPatchTable() {
         removeBtn.type = "button";
         removeBtn.className = "patch-remove";
         removeBtn.setAttribute("aria-label", `Remove channel ${target.channel} from ${faderName(i)}`);
-        removeBtn.textContent = "×";
+        removeBtn.textContent = "✕";
         removeBtn.addEventListener("click", () => {
           state.patch[i] = state.patch[i].filter((_, idx) => idx !== targetIndex);
           persistAndRefresh();

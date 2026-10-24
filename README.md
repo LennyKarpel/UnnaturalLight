@@ -3,14 +3,14 @@
 UnnaturalLight is a lighting console and a 3D stage visualizer that run in your web browser and work together:
 
 - The **Console** is your lighting desk: 256 faders, cues grouped into songs, a patch, and DMX output to up to 8 universes through Enttec DMX USB Pro interfaces.
-- The **Stage** is a 3D model of your performance space. Place lights (generic ones, real fixtures from a library, or whole rigs), and see each beam and where it lands on the floor, walls and ceiling.
+- The **Stage** is a 3D model of your performance space. Place fixtures (generic ones, real models from a library, or whole rigs), and see each beam and where it lands on the floor, walls and ceiling.
 
-The two stay **in sync**: when you place a light on the stage it's set up in the console with its own faders; moving those faders moves the light on the stage; and adjusting the light on the stage moves its faders.
+The two stay **in sync**: when you place a fixture on the stage it's set up in the console with its own faders; moving those faders moves the fixture on the stage; and adjusting the fixture on the stage moves its faders.
 
 **Contents**
 
 1. [Getting started](#1-getting-started)
-2. [Quick start: your first light and cue](#2-quick-start-your-first-light-and-cue)
+2. [Quick start: your first fixture and cue](#2-quick-start-your-first-fixture-and-cue)
 3. [The screen](#3-the-screen)
 4. [The Stage](#4-the-stage)
 5. [The Console](#5-the-console)
@@ -43,7 +43,7 @@ In a terminal, from the UnnaturalLight folder:
 
 The first time, it installs what it needs (`npm install`). Then your browser opens **http://localhost:8080** with the Console and the Stage side by side. Keep the terminal running while you work; press **Ctrl+C** in it to stop (the show is saved first).
 
-The terminal runs the **show server**: it holds the show, runs the fades and sends DMX to the interfaces. The browser pages are views of it, so closing, reloading or hiding a tab never affects the lights. The **Server · live** pill in the page header (top bar) turns green while the console is connected to it (**Server · offline** while it reconnects). The stage reaches the server through the console; when the stage is open on its own, its **Console · live** pill shows that link.
+The terminal runs the **show server**: it holds the show, runs the fades and sends DMX to the interfaces. The browser pages are views of it, so closing, reloading or hiding a tab never affects the lights. The **Server · live** pill in the page header (top bar) turns green while the console is connected to it (**Server · offline** while it reconnects).
 
 | Command | Does |
 |---|---|
@@ -57,16 +57,16 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 
 ---
 
-## 2. Quick start: your first light and cue
+## 2. Quick start: your first fixture and cue
 
-1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height in metres) to your space.
-2. **Place a light.** Click **+ Place fixture** (or press `A`).
+1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height in meters) to your space.
+2. **Place a fixture.** Click **+ Place fixture** (or press `A`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
-3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the light's current values.
-4. **Move a fader** in the console's **Cue 1**: the light on the stage changes with it (brightness, direction, color, beam width).
-5. **Or adjust the light on the stage:** select it and use `+` / `−` (dimmer), the arrow keys (pan / tilt), `[` / `]` (zoom), or the sliders in the inspector. Its faders in the console follow.
-6. **Point it somewhere:** press `T` and click a spot on the floor; the light swings to aim at it.
+3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the fixture's current values.
+4. **Move a fader** in the console's **Cue 1**: the fixture on the stage changes with it (brightness, direction, color, beam width).
+5. **Or adjust the fixture on the stage:** select it and use `+` / `−` (dimmer), the arrow keys (pan / tilt), `[` / `]` (zoom), or the sliders in the inspector. Its faders in the console follow.
+6. **Point it somewhere:** press `T` and click a spot on the floor; the fixture swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
 9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the page header (top bar).
@@ -89,9 +89,9 @@ The page shows the Stage on the left and the Console on the right. The switch at
 - The page remembers your choice, the split and the sides.
 - Cues keep fading and DMX keeps flowing in every view: both run on the show server.
 - Keyboard shortcuts go to whichever side you last clicked in.
-- **The page header** (top bar) holds the console's set controls, in every view: the set's name (click it, or **⋮ → Rename**, to rename it), **New set**, **Save set**, **Load set**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **UnnaturalLight · Stage** and **UnnaturalLight · Console**.
+- **The page header** (top bar) holds the console's set controls, in every view: the set's name (click it, or **⋮ → Rename**, to rename it), **New set**, **Save set**, **Load set**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
 
-You can also open each on its own: `localhost:8080/console/console.html` and `localhost:8080/stage/stage.html`. If you do, open both in the same browser so they can talk to each other. The console on its own has no set or DMX controls (they're in the combined page's header), so use the combined page to manage sets or connect DMX.
+The console and the stage only open inside this page (going to `console/console.html` or `stage/stage.html` directly brings you here).
 
 ### Running from another computer
 
@@ -103,9 +103,9 @@ Start the server with `./server.sh --lan`. The terminal prints a **remote** addr
 
 ### The stage area
 
-- **Box W / D / H** in the header set the size of the performance area in metres.
+- **Box W / D / H** in the header set the size of the performance area in meters.
 - The **amber line** marks the audience edge. *Stage left / right* are from the performer's point of view, facing the audience.
-- **⚙ View** opens view settings: tick which sides of the box are **transparent** (see-through, so you can see lights placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
+- **⚙ View** opens view settings: tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
 
 ### Looking around
 
@@ -123,12 +123,12 @@ The **plan** (top of the right-hand sidebar) is a 2D view of the stage from one 
 | **Front** | the audience | heights, side to side |
 | **SR** / **SL** | stage right / stage left | heights, up / downstage |
 
-Each view shows every light's beam direction, the dot where its beam lands, and rig outlines.
+Each view shows every fixture's beam direction, the dot where its beam lands, and rig outlines.
 
-### Placing lights
+### Placing fixtures
 
 1. Click **+ Place fixture** or press `A`.
-2. Pick a **console type**. This decides what the light can do and how many console channels and faders it gets:
+2. Pick a **console type**. This decides what the fixture can do and how many console channels and faders it gets:
 
    | Console type | Channels / faders | Controls |
    |---|---|---|
@@ -137,12 +137,12 @@ Each view shows every light's beam direction, the dot where its beam lands, and 
    | Fixed · Multi-color | 4 | Dimmer, Red, Green, Blue |
    | Fixed · Single color | 1 | Dimmer |
    | **From fixture library…** | the fixture mode's own | a real fixture |
-   | Stage only | none | the light exists only on the stage |
+   | Stage only | none | the fixture exists only on the stage |
 
    With several DMX universes you also choose the **Universe**.
 3. Click **Place…**, then click where it goes:
 
-   | Click | The light goes |
+   | Click | The fixture goes |
    |---|---|
    | a floor, wall or ceiling in 3D | on that surface, inside the box |
    | ⌥ + click a wall in 3D | on the outside of that wall |
@@ -151,7 +151,7 @@ Each view shows every light's beam direction, the dot where its beam lands, and 
 
    A marker follows the pointer in 3D: **cyan** = inside the box, **amber** = outside. `Esc` cancels.
 
-A new light starts pointing at the centre of the stage floor. You can have up to 32 lights.
+A new fixture starts pointing at the center of the stage floor. You can have up to 32 fixtures.
 
 ### Real fixtures from the fixture library
 
@@ -161,28 +161,28 @@ Choose **From fixture library…** as the console type to use a real, named fixt
 2. The preview lists the mode's channels in order. Channels marked **→** are drawn on the stage (dimmer, pan, tilt, red / green / blue, zoom).
 3. Click **Place…** and place it as usual.
 
-The light is named after the model (e.g. *MAC Aura 1*) and uses the fixture's real pan / tilt range and beam angles. In the console it gets **every channel of the mode, in order, each with its own fader** named after the channel (e.g. *MAC Aura 1 Shutter*, *MAC Aura 1 Pan fine*), so you can control everything, including channels the stage can't show (strobe, gobos, color wheels, white, "fine" channels…).
+The fixture is named after the model (e.g. *MAC Aura 1*) and uses the fixture's real pan / tilt range and beam angles. In the console it gets **every channel of the mode, in order, each with its own fader** named after the channel (e.g. *MAC Aura 1 Shutter*, *MAC Aura 1 Pan fine*), so you can control everything, including channels the stage can't show (strobe, gobos, color wheels, white, "fine" channels…).
 
 - Browsing needs internet; a placed fixture keeps working offline.
 - Modes with more than 64 channels, and pixel-mapping modes, can't be picked.
 - The picker remembers your last manufacturer, fixture and mode.
 
-### Selecting lights
+### Selecting fixtures
 
-- **Click** a light in the 3D view, the plan or the fixture list to select it. **⇧-click** adds or removes lights from the selection.
-- `Tab` / `⇧Tab` steps through the lights. `Esc` clears the selection.
-- Keys and most actions apply to **every selected light**.
+- **Click** a fixture in the 3D view, the plan or the fixture list to select it. **⇧-click** adds or removes fixtures from the selection.
+- `Tab` / `⇧Tab` steps through the fixtures. `Esc` clears the selection.
+- Keys and most actions apply to **every selected fixture**.
 
-### Moving lights
+### Moving fixtures
 
-- **Drag** a light in the 3D view to slide it around at its height; **⇧-drag** to raise or lower it.
+- **Drag** a fixture in the 3D view to slide it around at its height; **⇧-drag** to raise or lower it.
 - **Drag** it in the plan; in the Front / SR / SL views dragging also changes its height.
 - Hold `⌥` while dragging for fine steps (1 cm instead of 10 cm).
-- Or type exact numbers in the inspector's **Position** (x / height / z, in metres).
+- Or type exact numbers in the inspector's **Position** (x / height / z, in meters).
 
-### Controlling a light: the 0–255 values
+### Controlling a fixture: the 0–255 values
 
-Every light is controlled by values from **0 to 255**, just like a dimmer channel or fader:
+Every fixture is controlled by values from **0 to 255**, just like a dimmer channel or fader:
 
 | Value | 0 … 255 means |
 |---|---|
@@ -203,75 +203,75 @@ Change them with the keys, or the sliders and numbers in the inspector:
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's **Color** picker (and **color** in the key strip) sets red, green and blue together (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the lights on the stage). **Ranges** set what the ends mean for that light: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
+The inspector's **Color** picker (and **color** in the key strip) sets red, green and blue together (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
 
 #### The color picker
 
 The console's color bars and the stage's color pickers all open the same picker (`shared/color-picker.js`) instead of the browser's own:
 
-- **Wheel:** hue around the edge, saturation toward the centre. Click or drag. It picks at full brightness; the dimmer sets how bright the light is.
+- **Wheel:** hue around the edge, saturation toward the center. Click or drag. It picks at full brightness; the dimmer sets how bright the fixture is.
 - **Swatches:** common lighting colors (warm white, white, cool white, amber, orange, red, pink, magenta, UV, blue, cyan, green), then a row of colors already in use (**In use** in the console, **On stage** on the stage).
 - **R / G / B and hex:** the 0–255 values it sets; type in them to set a color exactly.
 
 Every change applies straight away. Click anywhere outside the picker, or press `Esc` or `Enter`, to close it. That click only closes the picker, so nothing under it is clicked (the fixture stays selected). While it's open, keys go to the picker, not the stage or console.
 
-**The keys bar** along the bottom of the 3D view works with the mouse too: click any key in it to do what that key does (**hold** an arrow, `+`/`−` or `[`/`]` to repeat; **⇧-click** for steps of 10). A key goes dim, and a held key stops, once the selected lights reach 0 or 255 in that direction (or when nothing is selected); the keyboard keys stop there too. It also has a **color** picker that sets the color of the selected lights.
+**The keys bar** along the bottom of the 3D view works with the mouse too: click any key in it to do what that key does (**hold** an arrow, `+`/`−` or `[`/`]` to repeat; **⇧-click** for steps of 10). A key goes dim, and a held key stops, once the selected fixtures reach 0 or 255 in that direction (or when nothing is selected); the keyboard keys stop there too. It also has a **color** picker that sets the color of the selected fixtures.
 
 ### Aiming
 
-- **Aim at spot** (`T`): select one or more lights, press `T`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected light points at it. Great for focusing several lights on one spot.
-- **Each light has its own "zero"**: the direction it points at pan / tilt 128, and which way is "up" for it. It's shown as a dashed cyan line on the selected light.
+- **Aim at spot** (`T`): select one or more fixtures, press `T`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected fixture points at it. Great for focusing several fixtures on one spot.
+- **Each fixture has its own "zero"**: the direction it points at pan / tilt 128, and which way is "up" for it. It's shown as a dashed cyan line on the selected fixture.
   - **Set zero here** (`Z`): make the current direction the new zero.
-  - **Aim zero at stage**: point the zero at the centre of the stage.
-  - Fine-tune it as yaw / pitch / roll in the inspector's **Zero frame** (roll matters for lights hung upside down).
-- The inspector's readout tells you which wall the beam's centre hits, where, and how far away.
+  - **Aim zero at stage**: point the zero at the center of the stage.
+  - Fine-tune it as yaw / pitch / roll in the inspector's **Zero frame** (roll matters for fixtures hung upside down).
+- The inspector's readout tells you which wall the beam's center hits, where, and how far away.
 
-### Rigs: circles, squares and lines of lights
+### Rigs: circles, squares and lines of fixtures
 
-A **rig** is a group of lights in a fixed arrangement that you place and move as one:
+A **rig** is a group of fixtures in a fixed arrangement that you place and move as one:
 
-| Rig | Lights are | They point |
+| Rig | Fixtures are | They point |
 |---|---|---|
-| **Circle** | evenly around a ring | at its centre |
-| **Square** | evenly around its edges | at its centre |
+| **Circle** | evenly around a ring | at its center |
+| **Square** | evenly around its edges | at its center |
 | **Line** | evenly along a bar | all the same way (down, when flat) |
 
 1. Click **+ Place rig**. Choose the type, its **size** (diameter, side or length), how many **fixtures**, **tilt** (0 = flat / hanging, 90 = upright facing the audience; for a line, −90 points it at the audience), **yaw** (rotation), and the **console type** (generic or from the fixture library) and universe.
-2. Click **Place…**, then click where the rig's centre goes.
+2. Click **Place…**, then click where the rig's center goes.
 
 Working with a rig:
 
-- All its lights are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every light down evenly).
-- Click one light to adjust just it; **Select whole rig** (inspector or right-click) selects them all again.
-- Dragging any of its lights moves the whole rig.
-- The inspector's **Rig** section changes the rig's position, size, number of lights, tilt and yaw; the lights rearrange live.
-- In the console, a rig's lights are grouped under the rig's name.
+- All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
+- Click one fixture to adjust just it; **Select whole rig** (inspector or right-click) selects them all again.
+- Dragging any of its fixtures moves the whole rig.
+- The inspector's **Rig** section changes the rig's position, size, number of fixtures, tilt and yaw; the fixtures rearrange live.
+- In the console, a rig's fixtures are grouped under the rig's name.
 
 ### Flash
 
-Hold `F` (or the **Flash** button) to show the selected lights — or all lights if none is selected — at **white, full**, for as long as you hold it. It's a preview only; it doesn't change anything in the console.
+Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixtures if none is selected — at **white, full**, for as long as you hold it. It's a preview only; it doesn't change anything in the console.
 
 ### Copy, delete, undo
 
-- **Duplicate** (right-click or inspector) copies the selected lights. If the original was set up in the console, the copy gets its own console fixture and faders too.
-- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected lights. Deleting a light in a rig removes the whole rig. Lights the stage set up in the console are removed there too, and their faders freed.
+- **Duplicate** (right-click or inspector) copies the selected fixtures. If the original was set up in the console, the copy gets its own console fixture and faders too.
+- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a rig removes the whole rig. Fixtures the stage set up in the console are removed there too, and their faders freed.
 - **⌘Z** brings back what you deleted (up to 50 times, in any stage window, even after a reload).
 
 ### The right-click menu
 
-Right-click a light (3D view, plan or list) for: **Aim at spot…**, **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item.
+Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item.
 
 ### The inspector
 
-The panel at the bottom right shows the selected light:
+The panel at the bottom right shows the selected fixture:
 
 - **Name**, **Position**.
-- **DMX values** (Dimmer … Zoom) with what each means (%, degrees). If the light is linked to the console, each also shows its **channel and fader** (e.g. `12 F12`).
+- **DMX values** (Dimmer … Zoom) with what each means (%, degrees). If the fixture is linked to the console, each also shows its **channel and fader** (e.g. `12 F12`).
 - **Color**, **Ranges**, **Zero frame**, and the beam hit readout.
 - **Console link**: which console fixture it's connected to (see [Console and Stage together](#6-console-and-stage-together)).
-- **Rig** settings for rig lights.
+- **Rig** settings for rig fixtures.
 
-The small overlay in the 3D view's top-left corner (the **HUD**) shows the selected light's main values at a glance.
+The small overlay in the 3D view's top-left corner (the **HUD**) shows the selected fixture's main values at a glance.
 
 ---
 
@@ -302,28 +302,28 @@ Switch with the tabs along the top (drag them to reorder):
 
 - There are **256 faders**, F1–F256. Each row of faders scrolls sideways (trackpad, ⇧ + mouse wheel, or the scrollbar); scrolling one row scrolls the others too, so everything stays lined up. The console uses the full width of its window (or its side of the divider), so a wider window shows more faders at once, and more channel meters per row on the Channels page.
 - The **Live** row shows what each fader is actually putting out after the submasters, the blend and the Master.
-- A fader only does something once it's **patched** to a channel; unpatched faders are greyed out.
-- **Rename** a fader by right-clicking it (or on the Patch page). Lights placed on the stage name their faders automatically.
-- **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any white channel — go to full too; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognised automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
-- **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labelled with the fixture's name (neighbouring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-page strip, and update when you change the patch.
-- **Color bars:** when three faders side by side control the **red, green and blue** of the same light, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for lights placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
-- **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Lights placed from the stage are recognised automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
+- A fader only does something once it's **patched** to a channel; unpatched faders are grayed out.
+- **Rename** a fader by right-clicking it (or on the Patch page). Fixtures placed on the stage name their faders automatically.
+- **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any white channel — go to full too; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognized automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
+- **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labeled with the fixture's name (neighboring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-page strip, and update when you change the patch.
+- **Color bars:** when three faders side by side control the **red, green and blue** of the same fixture, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
+- **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Fixtures placed from the stage are recognized automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
 
 ### Master, submasters, blackout
 
 - **Master** scales everything that goes out.
 - The two **submasters** scale the LIVE and UP NEXT cues before they're blended.
-- The **×** buttons are blackouts: they drop that master to 0; click again to restore.
+- The **✕** buttons are blackouts: they drop that master to 0; click again to restore.
 
 ### Fixtures
 
-The Fixtures page lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Lights placed on the stage add themselves here; you can also add your own.
+The Fixtures page lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Fixtures placed on the stage add themselves here; you can also add your own.
 
 ### Patch
 
 The Patch page connects **faders to DMX channels**. A fader can drive several channels, each with a **max** (the level the channel gets when the fader is full). **1:1** patches fader 1 to channel 1, fader 2 to channel 2, and so on. When two faders drive the same channel, the higher one wins ("HTP").
 
-### Connecting to your lights
+### Connecting to your fixtures
 
 Plug your Enttec DMX USB Pro into the computer running the show server and click **Connect DMX Pro** in the page header; the server finds it. The status message in the header shows when it's connected. The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **Disconnect** makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
 
@@ -331,20 +331,20 @@ Plug your Enttec DMX USB Pro into the computer running the show server and click
 
 ## 6. Console and Stage together
 
-The combined page always has both open, so its stage pane shows no link pill. On its own, the stage's header shows **Console · live** in green when a console is open in the same browser; otherwise it says **Console · offline**, and the stage simply works on its own.
+The page always has both open side by side, so they're always linked.
 
-### Lights set themselves up in the console
+### Fixtures set themselves up in the console
 
-When you place a light with a console type, the console automatically:
+When you place a fixture with a console type, the console automatically:
 
 1. adds a **fixture** for it at the next free DMX channels (in the universe you chose),
-2. gives it **one fader per channel**, **named after the light**: a fader already patched to just that channel and still unnamed (e.g. after *Patch 1:1*) is reused, otherwise a free fader is patched to it,
-3. sets those faders to the light's current values, so nothing jumps, and
-4. scrolls the fader rows to them and highlights them while the light is selected on the stage.
+2. gives it **one fader per channel**, **named after the fixture**: a fader already patched to just that channel and still unnamed (e.g. after *Patch 1:1*) is reused, otherwise a free fader is patched to it,
+3. sets those faders to the fixture's current values, so nothing jumps, and
+4. scrolls the fader rows to them and highlights them while the fixture is selected on the stage.
 
-If there aren't enough faders or channels, the light stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console. If the console isn't open yet, the light waits and sets itself up as soon as the console opens.
+If there aren't enough faders or channels, the fixture stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console. If the console isn't open yet, the fixture waits and sets itself up as soon as the console opens.
 
-To set up a light that's already on the stage, use **Register** in its inspector's *Console link* section.
+To set up a fixture that's already on the stage, use **Register** in its inspector's *Console link* section.
 
 ### Finding a fixture's faders
 
@@ -353,14 +353,14 @@ Select a fixture on the stage (click it, or `Tab` to it) and the console's fader
 ### Staying in sync
 
 - **Console → Stage:** faders, cues fading, the blend, submasters and Master all show on the stage as they happen.
-- **Stage → Console:** changing a linked light on the stage (keys, sliders, Home, Aim at spot…) moves its faders in the console, allowing for Master and the submasters (with Master at 50%, setting the dimmer to 100 on the stage puts its fader at 200).
-- When a light is first linked, or the console opens, the **console's values win**.
+- **Stage → Console:** changing a linked fixture on the stage (keys, sliders, Home, Aim at spot…) moves its faders in the console, allowing for Master and the submasters (with Master at 50%, setting the dimmer to 100 on the stage puts its fader at 200).
+- When a fixture is first linked, or the console opens, the **console's values win**.
 - Only channels that have a fader patched are synced. A channel without a fader stays under the stage's control.
-- If one fader drives several lights, changing one of them on the stage changes the others too.
+- If one fader drives several fixtures, changing one of them on the stage changes the others too.
 
-### Linking a light by hand
+### Linking a fixture by hand
 
-In the stage inspector's **Console link** section you can instead link a light to an **existing console fixture**, type a **manual address** (e.g. `45`, or `2/45` for universe 2), or choose **— not linked —**. The **Layout** shows what each of its channels drives on the stage, and can be changed. For a rig, **Link rig** links all its lights to consecutive console fixtures at once.
+In the stage inspector's **Console link** section you can instead link a fixture to an **existing console fixture**, type a **manual address** (e.g. `45`, or `2/45` for universe 2), or choose **— not linked —**. The **Layout** shows what each of its channels drives on the stage, and can be changed. For a rig, **Link rig** links all its fixtures to consecutive console fixtures at once.
 
 ### Tracing a signal (⌥-click)
 
@@ -368,10 +368,10 @@ In the stage inspector's **Console link** section you can instead link a light t
 
 | ⌥-click | Shows |
 |---|---|
-| a **fader** (console) | its cue values, Master → its live level → the channels it feeds → the fixtures and stage lights on them |
+| a **fader** (console) | its cue values, Master → its live level → the channels it feeds → the console and stage fixtures on them |
 | a **channel** (console Channels-page meter, or a channel badge in the stage inspector) | the faders feeding it (and which one wins) → what it drives |
 | a **fixture** (console Fixtures page) | each of its channels, its value, what it does on the stage, and the fader driving it |
-| a **light** (stage) | each of its values ← its channel ← its fader |
+| a **fixture** (stage) | each of its values ← its channel ← its fader |
 
 The card updates live. ⌥-click something else to trace that; `Esc` or ✕ closes it. ⌥-click never changes anything.
 
@@ -386,7 +386,7 @@ A DMX **universe** is 512 channels sent down one cable by one interface. For big
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
 
-- When placing a light (or rig) on the stage, choose which **Universe** it goes in, or *First with room*.
+- When placing a fixture (or rig) on the stage, choose which **Universe** it goes in, or *First with room*.
 - A fixture always fits inside one universe.
 - On the Channels page, a switch picks which universe the meters show.
 - You can't reduce the number of universes while something is using the ones that would go; move or remove it first.
@@ -396,12 +396,12 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's set and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a light…) shows in the others within a moment, so no window's later save undoes another's work. A light being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
+**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's set and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
 - **Console** (buttons in the page header): **Save set** downloads the set (songs, cues, patch, fixtures, fader names, universes) as a file; **Load set** opens one; **New set** starts fresh (it asks first if you have unsaved changes). Click the set's name beside the title (or **⋮ → Rename**) to rename it.
-- The set file also holds the **stage** (box size, lights, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; one saved without it (the show server was offline) leaves the stage as it is. **New set** keeps the stage.
+- The set file also holds the **stage** (box size, fixtures, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; one saved without it (the show server was offline) leaves the stage as it is. **New set** keeps the stage.
 
 ---
 
@@ -420,23 +420,23 @@ To keep copies, share them or move to another computer:
 | `Z` | Set zero here |
 | `F` (hold) | Flash |
 | `A` | Place fixture |
-| `Tab` / `⇧Tab` | next / previous light |
+| `Tab` / `⇧Tab` | next / previous fixture |
 | `⌫` / `Delete` | delete selected |
 | `⌘Z` | undo delete |
 | `Esc` | close menu / cancel / clear selection |
 
-Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave it) or while a dialog is open. The keys shown in the bar under the 3D view can also be clicked (hold to repeat, ⇧-click for ×10), and the bar has a color picker for the selected lights.
+Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave it) or while a dialog is open. The keys shown in the bar under the 3D view can also be clicked (hold to repeat, ⇧-click for ×10), and the bar has a color picker for the selected fixtures.
 
 ### Stage mouse
 
 | Where | Action |
 |---|---|
 | 3D: drag empty space · scroll · right-drag | orbit · zoom · pan the camera |
-| 3D: click / ⇧-click a light | select / add to selection |
-| 3D: drag a light · ⇧-drag | move it · change its height |
-| Plan: drag a light | move it (`⌥` for fine steps) |
-| Right-click a light | light menu |
-| ⌥-click a light | trace |
+| 3D: click / ⇧-click a fixture | select / add to selection |
+| 3D: drag a fixture · ⇧-drag | move it · change its height |
+| Plan: drag a fixture | move it (`⌥` for fine steps) |
+| Right-click a fixture | fixture menu |
+| ⌥-click a fixture | trace |
 
 ### Console mouse
 
@@ -456,14 +456,13 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 | Problem | Try |
 |---|---|
-| The stage says **Console · offline** | Open the combined page (`localhost:8080`), or open the console in the same browser. |
 | The console says **Connecting to the show server…** | Start `./server.sh` (or check it's still running in its terminal). The console reconnects by itself. |
-| **Connect DMX Pro** is greyed out | The console isn't connected to the show server (see above). |
+| **Connect DMX Pro** is grayed out | The console isn't connected to the show server (see above). |
 | **No DMX USB Pro found** | Plug it into the computer running the server, check the USB cable, close other software using it, unplug and replug. |
 | Another computer can't open the console | Start the server with `--lan` and use the full address it prints, including `?token=…`. The token changes each time the server starts. |
 | The fixture library won't load | Check your internet connection. Generic console types still work. |
-| A light wasn't added to the console | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the light's inspector. |
-| Moving a light on the stage also moved another | They share a fader in the console's patch. |
+| A fixture wasn't added to the console | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the fixture's inspector. |
+| Moving a fixture on the stage also moved another | They share a fader in the console's patch. |
 | The page looks out of date after an update | Press **⌘⇧R**. |
 | Can't reduce the number of universes | Something still uses the higher universes; the message names it. |
 
@@ -484,10 +483,10 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Song** | a list of cues |
 | **LIVE / UP NEXT** | the cue on stage now / the cue GO will transition to |
 | **Master / submaster** | faders that scale everything / one cue |
-| **Fixture / fixture / light** | a lighting unit; on the console it owns a block of channels |
+| **Fixture** | a lighting unit; on the console it owns a block of channels |
 | **Mode** | one of a real fixture's channel layouts (e.g. 5-channel or 14-channel) |
-| **Rig** | a group of lights arranged in a circle, square or line |
-| **Zero** | the direction a light points at pan / tilt 128 |
+| **Rig** | a group of fixtures arranged in a circle, square or line |
+| **Zero** | the direction a fixture points at pan / tilt 128 |
 
 ---
 
@@ -526,21 +525,21 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/sidebar.js` | Fixture list, inspector and key strip |
 | `stage/actions.js`, `keys.js` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
 | `stage/dialogs.js` | Box size, View settings, Place rig and Place fixture dialogs |
-| `stage/link.js` | Linking stage lights to console fixtures and channels, and registering them in the console |
-| `stage/stage-model.js` | Light and rig data, DMX values ↔ angles / color / beam, aiming maths, save format |
+| `stage/link.js` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
+| `stage/stage-model.js` | Fixture and rig data, DMX values ↔ angles / color / beam, aiming math, save format |
 | `stage/console-link.js` | Stage side of the live link |
 | `stage/show-link.js` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B), used by both pages in place of the browser's |
-| `shared/theme.css` | The look of the whole app: colors, fonts, title bars, and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
+| `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
 | `shared/ask.js` | The confirm / name dialog (new set, new song, remove …), used by the console and the page header |
 | `shared/server-socket.js` | The WebSocket to the show server (token, reconnecting), used by the console and the stage |
 | `shared/stage-bus.js` | The console ↔ stage live link's channel and message names |
 | `shared/live-fields.js` | Which set fields change while playing, used by the server and the console |
 | `shared/address.js` | Universes and channel addresses (`2/45` ↔ 557) |
-| `shared/attributes.js` | Light attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
+| `shared/attributes.js` | Fixture attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
 | `shared/color.js`, `numbers.js`, `html.js`, `ids.js` | Small helpers: hex ↔ R/G/B, clamping to 0–255 and ranges, escaping text for HTML, new ids |
 
 ### How it all talks
@@ -582,7 +581,7 @@ There are four links. The **show server** is the one that counts: it holds the s
 
 #### 2. Stage ↔ show server (WebSocket `/ws?role=stage`)
 
-`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, lights) with the show, so it's in the set file and the same on every computer.
+`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, fixtures) with the show, so it's in the set file and the same on every computer.
 
 - **Connecting.** `hello` carries the server's stage. The page sends its own stage instead if the server has none yet, or if the page was edited while it couldn't reach the server.
 - **Edits.** After an edit made on the stage page, it sends the whole stage (`stage`), and the server passes it on to the other stage pages. Values that only followed the console aren't sent; the console already has them.
@@ -599,19 +598,19 @@ There are four links. The **show server** is the one that counts: it holds the s
   | Message | What |
   |---|---|
   | `set` | set channel N to V |
-  | `register` / `unregister` | for lights it places or deletes |
-  | `stage` | its light list, for traces |
+  | `register` / `unregister` | for fixtures it places or deletes |
+  | `stage` | its fixture list, for traces |
   | `stage-select` | which fixtures are selected, so the console highlights them |
 
-- **Hello.** A stage that opens sends `hello`, and consoles answer at once. A console that opens sends `stage-hello`, and stages send their lights again.
+- **Hello.** A stage that opens sends `hello`, and consoles answer at once. A console that opens sends `stage-hello`, and stages send their fixtures again.
 - **Several consoles in one browser.** They all send their output, each stamped with the newest server `seq` it reflects. The stage drops anything older than what it already has, so a console the browser runs slowly (a background tab) can't pull it back to an earlier moment, such as a flash that was already let go.
 - **The console you're working in wins.** A change made in a console is marked `local`, and for 0.6 s afterwards the stage ignores other consoles' copies, which may not include it yet.
-- **Nothing applied twice.** Only the console holding the `unnaturallight.stage-link` Web Lock carries out the stage's `set` / `register` / `unregister` requests. The reply to a register request (`registered`) reaches every stage tab, and each tab acts only on replies for lights it asked about.
+- **Nothing applied twice.** Only the console holding the `unnaturallight.stage-link` Web Lock carries out the stage's `set` / `register` / `unregister` requests. The reply to a register request (`registered`) reaches every stage tab, and each tab acts only on replies for fixtures it asked about.
 - **Smooth drawing.** A value just sent from the stage wins over the console's broadcasts for 0.6 s, so dragging doesn't jitter. The stage takes the console's latest values once per frame and redraws only when something changed, because in the combined page it shares one browser thread with the console.
 
 #### 4. Stage ↔ stage (browser storage)
 
-Stage pages in the same browser also share the stage through `localStorage` (`unnaturallight.stage`): each save there fires a `storage` event in the other stage tabs, which take it in. A page keeps its own values for linked channels (those follow the console).
+Copies of the page open in the same browser also share the stage through `localStorage` (`unnaturallight.stage`): each save there fires a `storage` event in the other tabs' stages, which take it in. A page keeps its own values for linked channels (those follow the console).
 
 #### DMX output
 
@@ -619,7 +618,7 @@ Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the conso
 
 #### Other computers
 
-By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the combined page with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before its frames load, and the console and stage frames read it from there. A console or stage page opened on its own takes `?token=…` the same way.
+By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the combined page with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before its frames load, and the console and stage frames read it from there.
 
 ### Other details
 
@@ -629,4 +628,4 @@ By default the server listens only on this computer (`127.0.0.1`). With `--lan` 
 
 **Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. Combined-page layout: `unnaturallight.shell`.
 
-**Stage (`stage` in the set file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).
+**Stage (`stage` in the set file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

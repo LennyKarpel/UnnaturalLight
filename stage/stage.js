@@ -54,13 +54,13 @@ window.addEventListener("storage", (e) => {
 });
 
 // ---------------------------------------------------------------------
-// Trace: ⌥-click a light (3D, plan, list) or a channel badge in the
+// Trace: ⌥-click a fixture (3D, plan, list) or a channel badge in the
 // inspector for a card showing what controls it and the current values.
 // ---------------------------------------------------------------------
 
 export const trace = createTracePopover();
 
-/** A light as the trace card (here and in the console) sees it. */
+/** A stage fixture as the trace card (here and in the console) sees it. */
 function traceLights() {
   return state.fixtures.map((i) => ({
     id: i.id,
@@ -86,7 +86,7 @@ export function showTrace(target, e) {
   trace.show(target, e.clientX, e.clientY, traceSnapshot);
 }
 
-// Tell the console about the stage's lights (coalesced; plus a slow heartbeat).
+// Tell the console about the stage's fixtures (coalesced; plus a slow heartbeat).
 let publishTimer = 0;
 export function publishStage() {
   clearTimeout(publishTimer);

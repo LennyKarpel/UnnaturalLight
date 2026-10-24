@@ -1,4 +1,4 @@
-// Stage model: fixtures, their zero frames, pan/tilt maths, and the save
+// Stage model: fixtures, their zero frames, pan/tilt math, and the save
 // format. No DOM or rendering here; stage.js owns the view and UI state.
 
 import * as THREE from "three";
@@ -9,7 +9,7 @@ import { newId } from "../shared/ids.js";
 import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
 
 // ---------------------------------------------------------------------
-// Coordinates (metres): origin at floor centre of the box.
+// Coordinates (meters): origin at floor center of the box.
 //   x: stage right (−) → stage left (+)   (actor facing the audience)
 //   y: floor (0) → up
 //   z: upstage (−) → downstage / audience (+)
@@ -34,9 +34,9 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
  *   owned?: boolean, type?: ConsoleType | null, register?: ConsoleType | null,
  *   fixture?: import("./fixture-library.js").FixtureProfile | null,
  * }} Link
- * fixture: a real fixture mode (Open Fixture Library) this light is; its
+ * fixture: a real fixture mode (Open Fixture Library) this fixture is; its
  * channels set the console fixture's channels and fader names.
- * owned: the stage registered this console fixture (deleting the light
+ * owned: the stage registered this console fixture (deleting the stage fixture
  * removes it there too); type: its console type; register: waiting to be
  * registered in the console (e.g. placed while the console was closed).
  */
@@ -60,17 +60,17 @@ export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "
 // ---------------------------------------------------------------------
 
 /** Pan / tilt value that means "at zero" (Home). */
-const DMX_CENTRE = 128;
+const DMX_CENTER = 128;
 
 /** DMX 0–255 → angle −limit…+limit, with 128 exactly 0. */
 function angleFromDmx(v, limit) {
-  return v >= DMX_CENTRE ? ((v - DMX_CENTRE) / 127) * limit : ((v - DMX_CENTRE) / 128) * limit;
+  return v >= DMX_CENTER ? ((v - DMX_CENTER) / 127) * limit : ((v - DMX_CENTER) / 128) * limit;
 }
 
 /** Angle → nearest DMX 0–255 (inverse of angleFromDmx). */
 function dmxFromAngle(deg, limit) {
-  if (!limit) return DMX_CENTRE;
-  return clampByte(deg >= 0 ? DMX_CENTRE + (deg / limit) * 127 : DMX_CENTRE + (deg / limit) * 128);
+  if (!limit) return DMX_CENTER;
+  return clampByte(deg >= 0 ? DMX_CENTER + (deg / limit) * 127 : DMX_CENTER + (deg / limit) * 128);
 }
 
 const beamFromZoom = (v, min, max) => min + (v / 255) * (max - min);
@@ -164,15 +164,15 @@ function frameFacing(v) {
   return { yaw: round(Math.atan2(-v.x, -v.z) / DEG), pitch: round(Math.atan2(v.y, h) / DEG), roll: 0 };
 }
 
-/** Where a new fixture's zero points: stage floor centre (box centre if it sits on the floor). */
+/** Where a new fixture's zero points: stage floor center (box center if it sits on the floor). */
 export function defaultTarget(fixture, box) {
   return fixture.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
 }
 
 /** Pan / tilt back to zero (DMX 128). */
 export function homeFixture(fixture) {
-  fixture.dmx.pan = DMX_CENTRE;
-  fixture.dmx.tilt = DMX_CENTRE;
+  fixture.dmx.pan = DMX_CENTER;
+  fixture.dmx.tilt = DMX_CENTER;
   deriveFromDmx(fixture);
 }
 
@@ -190,7 +190,7 @@ export function setZeroHere(fixture) {
 }
 
 /**
- * Set pan/tilt (inside the fixture's zero frame) so the beam's centre
+ * Set pan/tilt (inside the fixture's zero frame) so the beam's center
  * points at `target`. The zero frame is left alone. Pan picks whichever
  * equivalent angle (±360°) is closest to the current pan. Clamped to the
  * limits; returns false if the target is out of reach. The result is
@@ -268,7 +268,7 @@ export function createFixture(x, y, z, n, box) {
     name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
-    dmx: { dimmer: 191, pan: DMX_CENTRE, tilt: DMX_CENTRE, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    dmx: { dimmer: 191, pan: DMX_CENTER, tilt: DMX_CENTER, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
     link: { consoleId: null, start: null, layout: [] },
     rigId: null, rigIndex: 0,
@@ -331,7 +331,7 @@ export function normalizeFixture(raw, i) {
   let zoomMax = clamp(num(raw.zoomMax, 60), 1, 120);
   if (zoomMax < zoomMin) [zoomMin, zoomMax] = [zoomMax, zoomMin];
   const rawDmx = raw.dmx || {};
-  const dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, clampByte(num(rawDmx[a], a === "pan" || a === "tilt" ? DMX_CENTRE : 0))]));
+  const dmx = Object.fromEntries(DMX_ATTRS.map((a) => [a, clampByte(num(rawDmx[a], a === "pan" || a === "tilt" ? DMX_CENTER : 0))]));
   const fixture = {
     id: typeof raw.id === "string" ? raw.id : newId("fixture"),
     name: typeof raw.name === "string" ? raw.name : `Fixture ${i + 1}`,
@@ -369,19 +369,19 @@ function serializeFixture(fixture) {
 
 /**
  * Rig types. `size` is the circle's diameter, the square's side or the
- * line's length. `aim` says where members' zeros point: "centre" (circle,
+ * line's length. `aim` says where members' zeros point: "center" (circle,
  * square) or "parallel" (line: all the same way, straight down when flat).
  */
 export const RIG_TYPES = {
   circle: {
-    name: "Circle", prefix: "Ring", sizeLabel: "Diameter", aim: "centre",
+    name: "Circle", prefix: "Ring", sizeLabel: "Diameter", aim: "center",
     defaults: { size: 4, count: 8, tilt: 0, yaw: 0 },
-    help: "Fixtures evenly spaced around the ring, each one's zero pointing at the centre of the rig. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
+    help: "Fixtures evenly spaced around the ring, each one's zero pointing at the center of the rig. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
   },
   square: {
-    name: "Square", prefix: "Square", sizeLabel: "Side", aim: "centre",
+    name: "Square", prefix: "Square", sizeLabel: "Side", aim: "center",
     defaults: { size: 4, count: 8, tilt: 0, yaw: 0 },
-    help: "Fixtures evenly spaced around the square's edges (4 = one mid-side each, 8 = two per side), each one's zero pointing at the centre. Tilt 0 = flat; 90 = upright, facing the audience. Yaw turns it about the vertical.",
+    help: "Fixtures evenly spaced around the square's edges (4 = one mid-side each, 8 = two per side), each one's zero pointing at the center. Tilt 0 = flat; 90 = upright, facing the audience. Yaw turns it about the vertical.",
   },
   line: {
     name: "Line", prefix: "Line", sizeLabel: "Length", aim: "parallel",
@@ -426,7 +426,7 @@ function localSlot(rig, i) {
 
 /**
  * Position and zero frame of member `i`.
- *   circle / square: zero points at the centre; "up" is the rig's axis
+ *   circle / square: zero points at the center; "up" is the rig's axis
  *     (so tilt moves the beam out of the rig's plane).
  *   line: zero points along −axis (straight down when flat); "up" is local
  *     +z (towards the audience when flat), so pan swings along the line.
@@ -441,7 +441,7 @@ function rigSlot(rig, i) {
     back = axis;
     up = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
   } else {
-    back = pos.clone().sub(c).normalize(); // away from the centre
+    back = pos.clone().sub(c).normalize(); // away from the center
     up = axis.sub(back.clone().multiplyScalar(axis.dot(back))).normalize();
   }
   const right = new THREE.Vector3().crossVectors(up, back);

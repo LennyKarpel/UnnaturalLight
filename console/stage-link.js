@@ -12,8 +12,8 @@
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
  * are moved (in the cue(s) currently on the output) so the output
  * becomes V, allowing for the patch max, master, submasters and crossfade.
- * The stage also sends its lights, so ⌥-click traces here can show them, and
- * asks to register / unregister lights placed / deleted there (app.js creates
+ * The stage also sends its fixtures, so ⌥-click traces here can show them, and
+ * asks to register / unregister fixtures placed / deleted there (app.js creates
  * the console fixture, patches free faders and names them).
  *
  * Trace: ⌥-click a fader (rows, Live meters, Patch cards), a channel meter or
@@ -52,14 +52,14 @@ let bus = null;
 /** @type {StageLinkApi | null} */
 let api = null;
 let queued = false;
-/** The stage's lights, as last sent by the stage (null = stage not open). */
+/** The stage's fixtures, as last sent by the stage (null = stage not open). */
 let stageFixtures = null;
 /** @type {ReturnType<typeof createTracePopover> | null} */
 let trace = null;
 /**
  * Several console tabs in this browser all mirror the show server, so only
  * one of them (whichever holds the lock) carries out the stage's edits
- * (otherwise each tab would register the same light again).
+ * (otherwise each tab would register the same fixture again).
  */
 let leader = false;
 /** This console, so the stage can tell consoles apart. */
@@ -170,7 +170,7 @@ export function startStageLink(linkApi) {
     if (msg?.type === MSG.SET && Array.isArray(msg.values)) applySet(msg.values);
     if (msg?.type === MSG.REGISTER && Array.isArray(msg.requests)) {
       const results = api.register(msg.requests);
-      // Start each new light at its stage values (moves the new faders).
+      // Start each new fixture at its stage values (moves the new faders).
       applySet(msg.requests.flatMap((req) => {
         const r = results.find((x) => x.stageId === req.stageId && x.ok);
         return r ? req.values.map((value, k) => ({ channel: r.start + k, value })) : [];
