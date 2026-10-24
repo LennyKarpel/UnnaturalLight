@@ -18,6 +18,12 @@ const CONSOLE_SESSION_KEY = "unnaturallight.setlist.session.v1";
 const LIVE_MS = 2500;
 /** How long a value sent from the stage wins over the console's broadcasts. */
 const PENDING_MS = 600;
+/**
+ * How long the console someone is working in (it marks its messages
+ * `local`) wins over other consoles, whose copies of the same change arrive
+ * a moment later and would pull the stage back.
+ */
+const ACTIVE_MS = 600;
 
 /**
  * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleFixture
@@ -54,6 +60,9 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
   const synced = new Map();
   /** channel → { value, until }: just sent from the stage */
   const pending = new Map();
+  /** The console last worked in, and until when its messages win. */
+  let activeSource = null;
+  let activeUntil = 0;
 
   bus?.addEventListener("message", (e) => {
     const msg = e.data;
@@ -61,6 +70,12 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     if (msg?.type === "registered" && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
     if (msg?.type !== "levels" || !Array.isArray(msg.levels)) return;
     lastHeard = Date.now();
+    if (msg.local) {
+      activeSource = msg.source;
+      activeUntil = lastHeard + ACTIVE_MS;
+    } else if (msg.source !== activeSource && lastHeard < activeUntil) {
+      return;
+    }
     levels = msg.levels;
     faders = new Map(Array.isArray(msg.faders) ? msg.faders : []);
     if (Array.isArray(msg.fixtures)) fixtures = msg.fixtures;

@@ -1,0 +1,16 @@
+{
+  "name": "unnaturallight",
+  "private": true,
+  "type": "module",
+  "description": "UnnaturalLight show server: serves the console and stage, owns the show state and drives the DMX USB Pro(s)",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "serialport": "^13.0.0",
+    "ws": "^8.22.0"
+  }
+}

@@ -861,6 +861,52 @@ button.connected {
   color: var(--warn);
 }
 
+/* Show server connection, always visible in the header (green = connected). */
+.server-pill {
+  padding: 2px 8px;
+  border: 1px solid var(--track);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.server-pill.is-on {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #0b1a0e;
+}
+
+/* Covers the console while the show server is unreachable (edits would be lost). */
+.server-offline {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgb(18 20 24 / 0.82);
+}
+
+.server-offline.is-connected {
+  display: none;
+}
+
+.server-offline > div {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 26rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--track);
+  border-radius: 8px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.server-offline span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .faders-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

@@ -224,6 +224,11 @@ function setRigField(rig, k, raw) {
 // ---------------------------------------------------------------------
 
 const view = document.getElementById("view");
+/** The 3D view needs drawing (see the animation loop below). */
+let needsRender = true;
+function requestRender() {
+  needsRender = true;
+}
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0x0b0d10);
@@ -497,6 +502,7 @@ function makeVisual(inst) {
 }
 
 function syncScene() {
+  requestRender();
   const ids = new Set(state.fixtures.map((i) => i.id));
   for (const [id, v] of visuals) {
     if (!ids.has(id)) {
@@ -580,8 +586,21 @@ function resize() {
 }
 new ResizeObserver(resize).observe(view);
 
+// Draw only when something changed: the scene (syncScene), the camera
+// (orbit, incl. its damping glide), the size, or anything the mouse /
+// keyboard did here (ghosts, aim lines, surfaces…), plus a slow safety
+// redraw. Drawing every frame kept the GPU and the page busy, and in the
+// split view the console shares this page's thread, so its faders lagged.
+for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "keyup", "input", "change"]) {
+  window.addEventListener(type, requestRender, { capture: true, passive: true });
+}
+new ResizeObserver(requestRender).observe(view);
+setInterval(requestRender, 500);
+
 renderer.setAnimationLoop(() => {
-  controls.update();
+  const moved = controls.update();
+  if (!moved && !needsRender) return;
+  needsRender = false;
   renderer.render(scene, camera);
 });
 
@@ -1944,8 +1963,20 @@ syncRigDialogType();
 // console fader patched: the console's output sets the stage, and changing
 // a value here moves that fader (see console-link.js for the rules).
 
+// The console sends a message per fader move (often 120 a second while
+// dragging): take its latest values once per frame.
+let consoleLevelsQueued = false;
+function applyConsoleLevelsSoon() {
+  if (consoleLevelsQueued) return;
+  consoleLevelsQueued = true;
+  requestAnimationFrame(() => {
+    consoleLevelsQueued = false;
+    applyConsoleLevels();
+  });
+}
+
 const consoleLink = createConsoleLink({
-  onLevels: () => applyConsoleLevels(),
+  onLevels: applyConsoleLevelsSoon,
   onStageHello: () => publishStage(),
   onRegistered: (results) => onRegistered(results),
 });
@@ -2252,11 +2283,15 @@ function requestRegistrations() {
 }
 
 function onRegistered(results) {
+  // Every stage tab hears every reply: one for a light this tab never
+  // asked about belongs to another tab, so it isn't ours to undo (or save).
+  results = results.filter((r) => byId(r.stageId) || registering.has(r.stageId));
+  if (!results.length) return;
   const failed = [];
   for (const r of results) {
+    const inst = byId(r.stageId);
     clearTimeout(registering.get(r.stageId));
     registering.delete(r.stageId);
-    const inst = byId(r.stageId);
     if (!inst || !inst.link.register) {
       // Deleted (or unlinked) while waiting: undo it in the console.
       if (r.ok) consoleLink.unregister([r.consoleId]);
@@ -2272,7 +2307,7 @@ function onRegistered(results) {
   }
   renderInspector();
   changed();
-  if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 7000);
+  if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 15000);
 }
 
 // Place fixture: pick its console type first.

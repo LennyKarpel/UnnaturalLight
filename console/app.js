@@ -1,5 +1,6 @@
-import { EnttecDmxPro } from "./dmx.js";
 import { notifyStage, startStageLink } from "./stage-link.js";
+import { createServerLink, LIVE_FIELDS } from "./server-link.js";
+import { computeChannelLevels as channelLevelsFor, liveLevel as mixLevel } from "../shared/engine.js";
 import {
   FADER_COUNT,
   CHANNEL_METER_COUNT,
@@ -10,7 +11,6 @@ import {
   formatChannelLabel,
   formatChannelTooltip,
   makeTarget,
-  scaledLevel,
   UNIVERSE_SIZE,
   MAX_UNIVERSES,
   setUniverseCount,
@@ -69,8 +69,24 @@ import {
   normalizeUniverses,
 } from "./set.js";
 
-/** One DMX USB Pro per universe (index 0 = universe 1). */
-const outputs = Array.from({ length: MAX_UNIVERSES }, () => new EnttecDmxPro());
+/** Link to the show server (created once the page is set up; see the end of this file). */
+/** @type {ReturnType<typeof createServerLink> | null} */
+let serverLink = null;
+/** DMX output per universe as the show server reports it (index 0 = universe 1). */
+let outputStatus = [];
+/** One DMX USB Pro per universe, plugged into the show server's machine (index 0 = universe 1). */
+const outputs = Array.from({ length: MAX_UNIVERSES }, (_, i) => ({
+  get connected() {
+    return outputStatus[i]?.connected ?? false;
+  },
+  async connect() {
+    const reply = await serverLink.request({ type: "dmx-connect", universe: i + 1 });
+    if (!reply.ok) throw new Error(reply.error ?? "Connection failed");
+  },
+  async disconnect() {
+    await serverLink.request({ type: "dmx-disconnect", universe: i + 1 });
+  },
+}));
 /** Universe 1's output (status messages ask whether it's connected). */
 const dmx = outputs[0];
 
@@ -186,9 +202,8 @@ function syncPlaybackPair() {
 bindActiveTune();
 /** @type {number} */
 let selectedFader = 0;
-/** @type {number | null} */
-let fadeRaf = null;
-/** @type {null | { start: number, target: number, durationMs: number, startedAt: number, pausedAt: number | null, mode?: "go" }} */
+/** The show server's timed fade (it runs there): null = none. */
+/** @type {null | { paused: boolean }} */
 let fadeState = null;
 /** @type {number | null} */
 let masterBlackoutSnapshot = null;
@@ -223,6 +238,7 @@ const patchConflictsEl = requireEl("patchConflicts", HTMLElement);
 const connectBtn = requireEl("connectBtn", HTMLButtonElement);
 const blackoutBtn = requireEl("blackoutBtn", HTMLButtonElement);
 const statusEl = requireEl("status", HTMLElement);
+const serverPill = requireEl("serverPill", HTMLElement);
 const masterInput = requireEl("master", HTMLInputElement);
 const masterValue = requireEl("masterValue", HTMLOutputElement);
 const fromSubInput = requireEl("fromSub", HTMLInputElement);
@@ -701,63 +717,76 @@ function isUnpatched(targets) {
 }
 
 /** @param {HTMLElement} wrap @param {HTMLInputElement} slider @param {import("./patch.js").FaderPatch} targets */
+// The refresh functions run on every change (dozens of times a second
+// while another console drags or fades), so they only touch the DOM where
+// something actually changed: rewriting ~3,000 unchanged sliders and labels
+// each time kept a second console window too busy to keep up.
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+function setValue(input, value) {
+  if (input.value !== value) input.value = value;
+}
+function setTitle(el, title) {
+  if (el.title !== title) el.title = title;
+}
+/** Fill height last written per element (style.height reads back normalized). */
+const fillHeights = new WeakMap();
+function setFill(el, level) {
+  const height = `${(level / 255) * 100}%`;
+  if (fillHeights.get(el) === height) return;
+  fillHeights.set(el, height);
+  el.style.height = height;
+}
+
 function applyFaderPatchState(wrap, slider, targets) {
   const unpatched = isUnpatched(targets);
   wrap.classList.toggle("is-unpatched-fader", unpatched);
-  slider.disabled = unpatched;
+  if (slider.disabled !== unpatched) slider.disabled = unpatched;
   if (unpatched) {
-    slider.title = "No channels patched";
-  } else {
+    setTitle(slider, "No channels patched");
+  } else if (slider.hasAttribute("title")) {
     slider.removeAttribute("title");
   }
 }
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
 function liveLevel(faderIndex) {
-  const a = (rows[fromRow][faderIndex] * fromSub) / 100;
-  const b = (rows[toRow][faderIndex] * toSub) / 100;
-  const t = cross / 100;
-  const mixed = a * (1 - t) + b * t;
-  return Math.round((mixed * master) / 100);
+  return mixLevel({ master, cross, fromSub, toSub, fromRow, toRow }, rows, faderIndex);
 }
 
 function refreshLiveRow() {
   for (let i = 0; i < FADER_COUNT; i++) {
     const level = outputLevel(i);
-    liveUi.valueEls[i].textContent = String(level);
-    liveUi.fillEls[i].style.height = `${(level / 255) * 100}%`;
-    liveUi.patchLabelEls[i].textContent = formatChannelLabel(patch[i]);
+    setText(liveUi.valueEls[i], String(level));
+    setFill(liveUi.fillEls[i], level);
+    setText(liveUi.patchLabelEls[i], formatChannelLabel(patch[i]));
     liveUi.patchLabelEls[i].classList.toggle("is-unpatched", isUnpatched(patch[i]));
-    liveUi.patchLabelEls[i].title = formatChannelTooltip(patch[i]);
+    setTitle(liveUi.patchLabelEls[i], formatChannelTooltip(patch[i]));
   }
 }
 
 /** @returns {Map<number, number>} DMX channel → output level */
 // Dimmer-fader overrides (output only, not saved), both momentary: while
 // held, blackout puts a fader's output at 0 and flash puts it at full.
+// These are the ones held on this console…
 const blackedOutFaders = new Set();
 const flashingFaders = new Set();
+// …and on every console, as the show server last reported.
+let serverBlackedOut = new Set();
+let serverFlashing = new Set();
+const isFlashing = (i) => flashingFaders.has(i) || serverFlashing.has(i);
+const isBlackedOut = (i) => blackedOutFaders.has(i) || serverBlackedOut.has(i);
 
 /** What a fader actually sends: its live level, unless flashed (full) or blacked out (0). */
 function outputLevel(i) {
-  if (flashingFaders.has(i)) return 255;
-  if (blackedOutFaders.has(i)) return 0;
+  if (isFlashing(i)) return 255;
+  if (isBlackedOut(i)) return 0;
   return liveLevel(i);
 }
 
 function computeChannelLevels() {
-  const byChannel = new Map();
-  for (let i = 0; i < FADER_COUNT; i++) {
-    const targets = patch[i];
-    if (isUnpatched(targets)) continue;
-    const level = outputLevel(i);
-    for (const target of targets) {
-      const out = scaledLevel(level, target.max);
-      const prev = byChannel.get(target.channel) ?? 0;
-      if (out > prev) byChannel.set(target.channel, out);
-    }
-  }
-  return byChannel;
+  return channelLevelsFor(patch, outputLevel);
 }
 
 function patchedChannelSet() {
@@ -791,8 +820,8 @@ function refreshChannelRow() {
     const valueEl = channelUi.valueEls.get(channel);
     const fillEl = channelUi.fillEls.get(channel);
     const wrap = channelUi.wrapEls.get(channel);
-    if (valueEl) valueEl.textContent = String(level);
-    if (fillEl) fillEl.style.height = `${(level / 255) * 100}%`;
+    if (valueEl) setText(valueEl, String(level));
+    if (fillEl) setFill(fillEl, level);
     if (wrap) wrap.classList.toggle("is-unpatched-channel", !patched.has(channel));
   }
 }
@@ -851,25 +880,40 @@ function ensureChannelRow() {
 function persistSession() {
   saveSession(currentSetState());
   savePatch(patch);
+  serverLink?.sync();
 }
 
-function pushToDmx({ persist = true } = {}) {
-  for (const output of outputs) output.blackout();
+/**
+ * Show the new output here and send the change to the show server (which
+ * drives the DMX). `redraw: false` (changes from the server): redraw at the
+ * next frame instead, so a burst of messages costs one redraw, and a hidden
+ * window doesn't redraw until it's shown.
+ */
+function pushToDmx({ persist = true, redraw = true } = {}) {
+  serverLink?.sync();
+  if (redraw) refreshOutput();
+  else refreshOutputSoon();
+  notifyStage({ local: redraw });
+  if (persist) persistSession();
+}
 
-  const byChannel = computeChannelLevels();
-  for (const [channel, level] of byChannel) {
-    // Each universe has its own output; channels beyond the set's universes aren't sent.
-    const u = universeOf(channel);
-    if (u <= universes) outputs[u - 1].setChannel(addressOf(channel), level);
-  }
-
+function refreshOutput() {
   refreshLiveRow();
   refreshChannelRow();
   refreshSelectedGroup();
   refreshColorBars();
   refreshDimmerButtons();
-  notifyStage();
-  if (persist) persistSession();
+}
+
+let refreshQueued = false;
+function refreshOutputSoon() {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  requestAnimationFrame(() => {
+    refreshQueued = false;
+    syncSlidersFromState();
+    refreshOutput();
+  });
 }
 
 function renderLiveRow() {
@@ -943,8 +987,14 @@ function refreshRowSelects() {
   syncTuneUi();
 }
 
+/** Cue the scenes button last showed (it's refreshed on every change; redrawing it each time would also close a rename in progress). */
+let scenesButtonKey = "";
+
 function updateScenesButton() {
   if (!currentSceneTitle) return;
+  const key = `${selectedRow}|${transitionName(selectedRow)}`;
+  if (key === scenesButtonKey) return;
+  scenesButtonKey = key;
   fillCueTitle(currentSceneTitle, selectedRow, true);
   currentSceneTitle.title = "Click to rename";
   channelsSceneMenuBtn.setAttribute(
@@ -1132,10 +1182,10 @@ function refreshSelectedGroup() {
   if (!row) return;
   updateScenesButton();
   for (let i = 0; i < FADER_COUNT; i++) {
-    selectedGroupUi.sliders[i].value = String(row[i]);
-    selectedGroupUi.valueEls[i].textContent = String(row[i]);
-    selectedGroupUi.patchLabelEls[i].textContent = formatChannelLabel(patch[i]);
-    selectedGroupUi.patchLabelEls[i].title = formatChannelTooltip(patch[i]);
+    setValue(selectedGroupUi.sliders[i], String(row[i]));
+    setText(selectedGroupUi.valueEls[i], String(row[i]));
+    setText(selectedGroupUi.patchLabelEls[i], formatChannelLabel(patch[i]));
+    setTitle(selectedGroupUi.patchLabelEls[i], formatChannelTooltip(patch[i]));
     selectedGroupUi.patchLabelEls[i].classList.toggle("is-unpatched", isUnpatched(patch[i]));
     const wrap = selectedGroupUi.sliders[i].closest(".fader");
     if (wrap instanceof HTMLElement) {
@@ -2127,7 +2177,7 @@ function addDimmerButtons(grid, fader, col) {
 function refreshDimmerButtons() {
   for (const btn of document.querySelectorAll(".dim-btn")) {
     const fader = Number(btn.dataset.fader);
-    btn.classList.toggle("on", btn.classList.contains("dim-blackout") ? blackedOutFaders.has(fader) : flashingFaders.has(fader));
+    btn.classList.toggle("on", btn.classList.contains("dim-blackout") ? isBlackedOut(fader) : isFlashing(fader));
   }
 }
 
@@ -2234,7 +2284,7 @@ function refreshColorBars() {
     const color = `#${hex2(levels[0] ?? 0)}${hex2(levels[1] ?? 0)}${hex2(levels[2] ?? 0)}`;
     bar.style.setProperty("--rgb", color);
     const input = bar.querySelector("input");
-    if (input && document.activeElement !== input) input.value = color;
+    if (input && document.activeElement !== input) setValue(input, color);
   }
 }
 
@@ -2269,8 +2319,8 @@ function refreshFaderPatchLabels() {
 function syncSlidersFromState() {
   for (let r = 0; r < rows.length; r++) {
     for (let i = 0; i < FADER_COUNT; i++) {
-      rowUi[r].sliders[i].value = String(rows[r][i]);
-      rowUi[r].valueEls[i].textContent = String(rows[r][i]);
+      setValue(rowUi[r].sliders[i], String(rows[r][i]));
+      setText(rowUi[r].valueEls[i], String(rows[r][i]));
     }
   }
   refreshSelectedGroup();
@@ -3123,7 +3173,7 @@ function setCross(value, { fromUser = false, persist = true } = {}) {
 
 function updateFadePauseButton() {
   const running = fadeState != null;
-  const paused = running && fadeState.pausedAt != null;
+  const paused = running && fadeState.paused;
   fadePauseBtn.disabled = !running;
   fadePauseBtn.textContent = paused ? "Resume" : "Pause";
   fadePauseBtn.classList.toggle("is-paused", paused);
@@ -3131,11 +3181,12 @@ function updateFadePauseButton() {
   goBtn.disabled = rows.length < 2;
 }
 
+// Timed fades run on the show server (server/show.js), so a hidden or closed
+// tab can't stall them; the console asks for GO / pause / stop and follows
+// the crossfade, Current / Next and the cue it arrives on.
+
 function stopTimedFade() {
-  if (fadeRaf != null) {
-    cancelAnimationFrame(fadeRaf);
-    fadeRaf = null;
-  }
+  if (fadeState) serverLink?.command("stop");
   fadeState = null;
   updateFadePauseButton();
 }
@@ -3146,97 +3197,21 @@ function stopTimedFade() {
  */
 function goNextTransition() {
   if (rows.length < 2) return;
-
-  // Current = the selected transition (the levels you’re on); Next = following.
-  stopTimedFade();
-  fromRow = Math.min(Math.max(0, selectedRow), rows.length - 1);
-  syncPlaybackPair();
-  refreshRowSelects();
-
-  const seconds = normalizeTransitionFadeTime(
-    getActiveTune().transitions[toRow]?.fadeTime,
-  );
-  fadeTime = seconds;
-
-  // Park on Current, then timed-fade into Next.
-  setCross(0, { persist: false });
-
-  if (fadeRaf != null) cancelAnimationFrame(fadeRaf);
-
-  fadeState = {
-    start: 0,
-    target: 100,
-    durationMs: seconds * 1000,
-    startedAt: performance.now(),
-    pausedAt: null,
-    mode: "go",
-  };
-  updateFadePauseButton();
-  fadeRaf = requestAnimationFrame(tickTimedFade);
-  persistSession();
+  serverLink?.command("go");
 }
 
-function completeGoAdvance() {
-  // Capture destination before advancing Current/Next.
-  const arrivedAt = toRow;
-  stopTimedFade();
-  fromRow = arrivedAt;
-  selectedRow = arrivedAt;
-  syncPlaybackPair();
-  setCross(0, { persist: false });
+/** A GO finished on the server: show the cue it arrived on. */
+function showArrivedCue() {
   refreshRowSelects();
   renderRows();
   renderSelectedGroup();
-  pushToDmx();
-  persistSession();
-
-  const bank = rowsEl.querySelector(`.fader-row[data-row="${arrivedAt}"]`);
+  const bank = rowsEl.querySelector(`.fader-row[data-row="${selectedRow}"]`);
   bank?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-function tickTimedFade(now) {
-  if (!fadeState || fadeState.pausedAt != null) {
-    fadeRaf = null;
-    return;
-  }
-  const t = Math.min(1, (now - fadeState.startedAt) / fadeState.durationMs);
-  const eased = t * t * (3 - 2 * t);
-  setCross(fadeState.start + (fadeState.target - fadeState.start) * eased, {
-    persist: false,
-  });
-  if (t < 1) {
-    fadeRaf = requestAnimationFrame(tickTimedFade);
-  } else {
-    const wasGo = fadeState.mode === "go";
-    fadeRaf = null;
-    fadeState = null;
-    updateFadePauseButton();
-    if (wasGo) {
-      completeGoAdvance();
-    } else {
-      setCross(100);
-    }
-  }
 }
 
 function toggleFadePause() {
   if (!fadeState) return;
-
-  if (fadeState.pausedAt == null) {
-    fadeState.pausedAt = performance.now();
-    if (fadeRaf != null) {
-      cancelAnimationFrame(fadeRaf);
-      fadeRaf = null;
-    }
-    updateFadePauseButton();
-    return;
-  }
-
-  const pausedFor = performance.now() - fadeState.pausedAt;
-  fadeState.startedAt += pausedFor;
-  fadeState.pausedAt = null;
-  updateFadePauseButton();
-  fadeRaf = requestAnimationFrame(tickTimedFade);
+  serverLink?.command("pause");
 }
 
 function syncSetNameUi() {
@@ -5058,6 +5033,8 @@ function renderOutputs() {
   connectBtn.hidden = universes > 1;
   connectBtn.textContent = dmx.connected ? "Disconnect" : "Connect DMX Pro";
   connectBtn.classList.toggle("connected", dmx.connected);
+  connectBtn.disabled = !serverLink?.connected;
+  connectBtn.title = "The DMX USB Pro plugs into the machine running the show server";
   if (universes > 1) {
     for (let u = 1; u <= universes; u++) {
       const out = outputs[u - 1];
@@ -5067,7 +5044,7 @@ function renderOutputs() {
       btn.classList.toggle("connected", out.connected);
       btn.textContent = `U${u}`;
       btn.title = out.connected ? `Universe ${u}: connected (click to disconnect)` : `Universe ${u}: connect its DMX USB Pro`;
-      btn.disabled = !("serial" in navigator);
+      btn.disabled = !serverLink?.connected;
       btn.addEventListener("click", () => void toggleOutput(u));
       universeControls.append(btn);
     }
@@ -5085,9 +5062,8 @@ async function toggleOutput(u) {
     return;
   }
   try {
-    setStatus(universes > 1 ? `Select the DMX USB Pro for universe ${u}…` : "Select the DMX USB Pro…", "idle");
+    setStatus(universes > 1 ? `Looking for the DMX USB Pro for universe ${u}…` : "Looking for the DMX USB Pro…", "idle");
     await out.connect();
-    pushToDmx();
     renderOutputs();
     setStatus(`${label} connected`, "connected");
   } catch (err) {
@@ -5327,11 +5303,17 @@ clearPatchBtn.addEventListener("click", async () => {
   renderPatchTable();
 });
 
-function applySet(state) {
-  stopTimedFade();
-  clearBlackoutSnapshots();
-  blackedOutFaders.clear();
-  flashingFaders.clear();
+/**
+ * Replace the whole set. `fromServer`: another console (or the server) changed
+ * it, so leave the fade, blackouts and held buttons alone.
+ */
+function applySet(state, { fromServer = false } = {}) {
+  if (!fromServer) {
+    stopTimedFade();
+    clearBlackoutSnapshots();
+    blackedOutFaders.clear();
+    flashingFaders.clear();
+  }
   setName = normalizeSetName(state.setName);
   navOrder = normalizeNavOrder(state.navOrder);
   master = state.master;
@@ -5581,8 +5563,10 @@ markClean();
 // Fixtures registered from the Stage page (see stage-link.js)
 // ---------------------------------------------------------------------
 // Placing a light on the stage registers it here: a console fixture at
-// the next free DMX block, one free fader patched 1:1 per channel and named
-// after the light. Deleting it on the stage removes it and frees the faders.
+// the next free DMX block, one fader per channel (an unnamed fader already
+// patched to just that channel, else a free one) named after the light, and
+// the fader rows scrolled to them. Deleting it on the stage removes it and
+// frees the faders.
 
 /**
  * @param {{ stageId: string, name: string, mount: string, color: string, labels: string[], width: number, group: string | null }[]} requests
@@ -5597,9 +5581,20 @@ function registerFromStage(requests) {
     const universe = Number.isInteger(req.universe) && req.universe >= 1 && req.universe <= universes ? req.universe : null;
     const range = nextAvailableRange(fixtures, width, universe);
     if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left${universe ? ` in universe ${universe}` : ""}`); continue; }
-    const free = [];
-    for (let i = 0; i < FADER_COUNT && free.length < width; i++) if (isUnpatched(patch[i])) free.push(i);
-    if (free.length < width) { fail(`needs ${width} free fader${width > 1 ? "s" : ""}, only ${free.length} left`); continue; }
+    // Per channel: a fader already patched to just that channel and still
+    // default-named (e.g. a 1:1 patch) is taken over; otherwise a free one.
+    const claimed = new Set();
+    const spare = (i) => !claimed.has(i) && patch[i].length === 1 && faderName(i) === defaultFaderName(i);
+    const faders = [];
+    for (let k = 0; k < width; k++) {
+      const channel = range.channelStart + k;
+      let fader = patch.findIndex((targets, i) => spare(i) && targets[0].channel === channel);
+      if (fader < 0) fader = patch.findIndex((targets, i) => !claimed.has(i) && isUnpatched(targets));
+      if (fader < 0) break;
+      claimed.add(fader);
+      faders.push(fader);
+    }
+    if (faders.length < width) { fail(`needs ${width} free fader${width > 1 ? "s" : ""}, only ${faders.length} left`); continue; }
 
     let groupId = null;
     if (req.group) {
@@ -5620,13 +5615,16 @@ function registerFromStage(requests) {
       roles: req.roles,
     });
     fixtures.push(fixture);
-    free.forEach((fader, k) => {
+    faders.forEach((fader, k) => {
       patch[fader] = [makeTarget(range.channelStart + k, 255)];
       faderNames[fader] = `${req.name} ${req.labels[k] ?? k + 1}`.slice(0, 40);
     });
-    results.push({ stageId: req.stageId, ok: true, consoleId: fixture.id, start: range.channelStart, faders: free.map((f) => f + 1) });
+    results.push({ stageId: req.stageId, ok: true, consoleId: fixture.id, start: range.channelStart, faders: faders.map((f) => f + 1) });
   }
-  if (results.some((r) => r.ok)) afterStageFixturesChanged();
+  if (results.some((r) => r.ok)) {
+    afterStageFixturesChanged();
+    revealFixtures(results.filter((r) => r.ok).map((r) => r.consoleId));
+  }
   return results;
 }
 
@@ -5729,7 +5727,98 @@ startStageLink({
   reveal: revealFixtures,
 });
 
-if (!("serial" in navigator)) {
-  connectBtn.disabled = true;
-  setStatus("Web Serial unavailable — use Chrome/Edge on localhost", "error");
+// ---------------------------------------------------------------------
+// Show server (see server-link.js): it holds the show, runs fades and
+// drives the DMX; this console mirrors it and sends its edits there.
+// ---------------------------------------------------------------------
+
+const offlineCover = document.createElement("div");
+offlineCover.className = "server-offline";
+offlineCover.innerHTML = "<div><strong>Connecting to the show server…</strong><span>Start it with <code>./server.sh</code> on the machine the DMX USB Pro is plugged into.</span></div>";
+document.body.append(offlineCover);
+
+/** Set fields the server sent that are live values (it sends these separately). */
+function withLive(set, live) {
+  const state = parseSet(set);
+  const current = currentSetState();
+  // A live value missing here was just changed on this console: keep ours.
+  for (const f of LIVE_FIELDS) state[f] = f in live ? live[f] : current[f];
+  return state;
 }
+
+/** Live mix from the server (fade steps, other consoles' moves, GO arriving). */
+function applyServerLive(live) {
+  const before = { fromRow, selectedRow };
+  if ("master" in live) master = live.master;
+  if ("cross" in live) cross = live.cross;
+  if ("fromSub" in live) fromSub = live.fromSub;
+  if ("toSub" in live) toSub = live.toSub;
+  if ("fadeTime" in live) fadeTime = live.fadeTime;
+  if ("fromRow" in live) fromRow = live.fromRow;
+  if ("selectedRow" in live) selectedRow = live.selectedRow;
+  syncPlaybackPair();
+  if ("masterBlackoutSnapshot" in live) masterBlackoutSnapshot = live.masterBlackoutSnapshot;
+  if ("fromSubBlackoutSnapshot" in live) fromSubBlackoutSnapshot = live.fromSubBlackoutSnapshot;
+  if ("toSubBlackoutSnapshot" in live) toSubBlackoutSnapshot = live.toSubBlackoutSnapshot;
+  fadeState = live.fade ?? null;
+  serverFlashing = new Set(live.flashing ?? []);
+  serverBlackedOut = new Set(live.blackedOut ?? []);
+
+  syncMasterUi();
+  syncSubmasterUi();
+  syncCrossUi();
+  updateFadePauseButton();
+  if (fromRow !== before.fromRow || selectedRow !== before.selectedRow) showArrivedCue();
+  pushToDmx({ persist: false, redraw: false });
+}
+
+serverLink = createServerLink({
+  view: () => ({
+    set: currentSetState(),
+    snapshots: { masterBlackoutSnapshot, fromSubBlackoutSnapshot, toSubBlackoutSnapshot },
+    flashing: flashingFaders,
+    blackedOut: blackedOutFaders,
+  }),
+  onHello: ({ set, live, outputs: list }) => {
+    outputStatus = list ?? [];
+    if (set) {
+      applySet(withLive(set, live ?? {}), { fromServer: true });
+      applyServerLive(live ?? {});
+      markClean();
+    }
+    renderOutputs();
+  },
+  onSet: (set, live) => {
+    applySet(withLive(set, live), { fromServer: true });
+    applyServerLive(live);
+  },
+  onLive: applyServerLive,
+  onLevels: (cells) => {
+    if (!cells.length) return;
+    const byId = new Map();
+    for (const tune of tunes) for (const t of tune.transitions) byId.set(t.id, t);
+    for (const [id, fader, value] of cells) {
+      const t = byId.get(id);
+      if (t) t.levels[fader] = value;
+    }
+    pushToDmx({ redraw: false });
+  },
+  onOutputs: (list) => {
+    outputStatus = list;
+    renderOutputs();
+  },
+  onConnection: (connected) => {
+    offlineCover.classList.toggle("is-connected", connected);
+    serverPill.textContent = connected ? "Server · live" : "Server · offline";
+    serverPill.classList.toggle("is-on", connected);
+    serverPill.title = connected
+      ? `Connected to the show server (${location.host}): edits are saved there and it drives the DMX`
+      : "Not connected to the show server: reconnecting…";
+    renderOutputs();
+    if (connected) {
+      setStatus(dmx.connected ? "Connected · DMX Pro connected" : "Connected to the show server", dmx.connected ? "connected" : "idle");
+    } else {
+      setStatus("Show server offline — reconnecting…", "error");
+    }
+  },
+});

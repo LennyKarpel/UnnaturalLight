@@ -28,7 +28,8 @@ The two stay **in sync**: when you place a light on the stage it's set up in the
 
 ### What you need
 
-- **Chrome or Edge** on a computer. (Talking to USB DMX interfaces uses the browser's Web Serial feature, which only these browsers have.)
+- **Node.js 20 or newer** on the computer the DMX interfaces plug into ([nodejs.org](https://nodejs.org)). It runs the show server.
+- A current web browser (Chrome, Edge, Safari or Firefox) for the Console and Stage.
 - **Internet access** the first time you open the Stage (it downloads its 3D library), and whenever you browse the fixture library.
 - To drive real lights: one **Enttec DMX USB Pro** per DMX universe. You can use everything else without one.
 
@@ -40,7 +41,17 @@ In a terminal, from the UnnaturalLight folder:
 ./server.sh
 ```
 
-Your browser opens **http://localhost:8080** with the Console and the Stage side by side. Keep the terminal running while you work; press **Ctrl+C** in it to stop.
+The first time, it installs what it needs (`npm install`). Then your browser opens **http://localhost:8080** with the Console and the Stage side by side. Keep the terminal running while you work; press **Ctrl+C** in it to stop (the show is saved first).
+
+The terminal runs the **show server**: it holds the show, runs the fades and sends DMX to the interfaces. The browser pages are views of it, so closing, reloading or hiding a tab never affects the lights. The **Server · live** pill in the console's header turns green while the console is connected to it (**Server · offline** while it reconnects). The stage reaches the server through the console: its **Console · live** pill shows that link.
+
+| Command | Does |
+|---|---|
+| `./server.sh` | this computer only, port 8080 |
+| `./server.sh 9000` | another port |
+| `./server.sh --lan` | also let other computers on the network open the console (see [Running from another computer](#running-from-another-computer)) |
+| `./server.sh --fake-dmx` | pretend a DMX USB Pro is connected (the terminal prints what would be sent) |
+| `./server.sh --no-open` | don't open a browser |
 
 If a page ever looks out of date after an update, press **⌘⇧R** (hard reload).
 
@@ -52,14 +63,14 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 2. **Place a light.** Click **+ Place fixture** (or press `A`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
-3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and free faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan*. They start at the light's current values.
+3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the light's current values.
 4. **Move a fader** in the console's **Cue 1**: the light on the stage changes with it (brightness, direction, color, beam width).
 5. **Or adjust the light on the stage:** select it and use the arrow keys (pan / tilt), `+` / `−` (dimmer), `[` / `]` (beam width), or the sliders in the inspector. Its faders in the console follow.
 6. **Point it somewhere:** press `T` and click a spot on the floor; the light swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
-9. **Connect your DMX interface** (optional): click **Connect DMX Pro** in the console header and choose the USB device.
-10. **Save:** everything autosaves in the browser. To keep a file, use **Save set** in the console and **Export** on the stage.
+9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the console header.
+10. **Save:** everything autosaves on the show server. To keep a file, use **Save set** in the console and **Export** on the stage.
 
 ---
 
@@ -76,10 +87,14 @@ The page shows the Stage on the left and the Console on the right. The switch at
 - **⇄** (left of the switch) swaps which side each is on, in *Both*.
 - **The divider** between them (the small grip in its middle marks it) drags to resize; double-click it for 50 / 50.
 - The page remembers your choice, the split and the sides.
-- The console keeps running in every view. In *Stage* view it's just hidden behind the stage, so cues keep fading and DMX keeps flowing.
+- Cues keep fading and DMX keeps flowing in every view: both run on the show server.
 - Keyboard shortcuts go to whichever side you last clicked in.
 
-You can also open each on its own: `localhost:8080/console/console.html` and `localhost:8080/stage/stage.html`. If you do, open both in the same browser so they can talk to each other, and keep the console's tab visible while running cues (browsers pause fades in hidden tabs).
+You can also open each on its own: `localhost:8080/console/console.html` and `localhost:8080/stage/stage.html`. If you do, open both in the same browser so they can talk to each other.
+
+### Running from another computer
+
+Start the server with `./server.sh --lan`. The terminal prints a **remote** address with a `token=` on the end; open that address on the other computer (same network). Any number of consoles can be open at once, here or elsewhere: they all show and edit the same show, and a move on one appears on the others. The DMX interfaces stay plugged into the server's computer. Other computers can't connect without the token, which changes each time the server starts.
 
 ---
 
@@ -299,7 +314,7 @@ The Patch page connects **faders to DMX channels**. A fader can drive several ch
 
 ### Connecting to your lights
 
-Plug in your Enttec DMX USB Pro, click **Connect DMX Pro** in the header, and choose it in the browser's list. The status next to it shows when it's connected. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
+Plug your Enttec DMX USB Pro into the computer running the show server and click **Connect DMX Pro** in the header; the server finds it. The status next to it shows when it's connected. The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **Disconnect** makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
 
 ---
 
@@ -312,10 +327,11 @@ When both are open (the combined page does this for you), the stage's header sho
 When you place a light with a console type, the console automatically:
 
 1. adds a **fixture** for it at the next free DMX channels (in the universe you chose),
-2. **patches free faders** to its channels, one each, **named after the light**, and
-3. sets those faders to the light's current values, so nothing jumps.
+2. gives it **one fader per channel**, **named after the light**: a fader already patched to just that channel and still unnamed (e.g. after *Patch 1:1*) is reused, otherwise a free fader is patched to it,
+3. sets those faders to the light's current values, so nothing jumps, and
+4. scrolls the fader rows to them and briefly highlights them.
 
-If there aren't enough free faders or channels, the light stays on the stage only and a message tells you why. If the console isn't open yet, the light waits and sets itself up as soon as the console opens.
+If there aren't enough faders or channels, the light stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console. If the console isn't open yet, the light waits and sets itself up as soon as the console opens.
 
 To set up a light that's already on the stage, use **Register** in its inspector's *Console link* section.
 
@@ -355,7 +371,7 @@ The card updates live. ⌥-click something else to trace that; `Esc` or ✕ clos
 A DMX **universe** is 512 channels sent down one cable by one interface. For bigger rigs:
 
 1. In the console header, change **1 universe** to the number you need (up to 8). It's saved with the set.
-2. Each universe gets its own button, **U1, U2, …**. Plug in one Enttec DMX USB Pro per universe and click its button to connect it; it turns green when connected.
+2. Each universe gets its own button, **U1, U2, …**. Plug in one Enttec DMX USB Pro per universe and click its button to connect it; it turns green when connected. Connect them one at a time: each button takes a device not already on another universe, and remembers it (by serial number) from then on.
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
 
@@ -369,7 +385,7 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 ## 8. Saving your work
 
-**Everything autosaves** in the browser as you work, so closing and reopening the page brings it all back.
+**Everything autosaves** as you work: the console's set on the show server (`server/data/session.json`), the stage in the browser. Closing and reopening the page, or restarting the server, brings it all back.
 
 To keep copies, share them or move to another computer:
 
@@ -432,11 +448,12 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | Problem | Try |
 |---|---|
 | The stage says **Console · offline** | Open the combined page (`localhost:8080`), or open the console in the same browser. |
-| **Connect DMX Pro** is greyed out | Use Chrome or Edge, opened at `localhost:8080`. |
-| The DMX Pro doesn't appear in the list | Check the USB cable, close other software using it, unplug and replug. |
+| The console says **Connecting to the show server…** | Start `./server.sh` (or check it's still running in its terminal). The console reconnects by itself. |
+| **Connect DMX Pro** is greyed out | The console isn't connected to the show server (see above). |
+| **No DMX USB Pro found** | Plug it into the computer running the server, check the USB cable, close other software using it, unplug and replug. |
+| Another computer can't open the console | Start the server with `--lan` and use the full address it prints, including `?token=…`. |
 | The fixture library won't load | Check your internet connection. Generic console types still work. |
-| A light wasn't added to the console | Read the message: there may be no free faders, no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the light's inspector. |
-| A fade stops when I switch tabs | Use the combined page, or keep the console's tab visible. |
+| A light wasn't added to the console | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the light's inspector. |
 | Moving a light on the stage also moved another | They share a fader in the console's patch. |
 | The page looks out of date after an update | Press **⌘⇧R**. |
 | Can't reduce the number of universes | Something still uses the higher universes; the message names it. |
@@ -467,14 +484,18 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 ## 12. For developers
 
-Plain HTML / JavaScript, no build step. `./server.sh` serves the folder on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
+Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the pages on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
 
 | Path | What's in it |
 |---|---|
 | `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider |
-| `server.sh` | Local no-cache web server on port 8080 |
+| `server.sh` | Starts the show server (installs dependencies first if needed) |
+| `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
+| `server/show.js` | The show as the server holds it: set, live mix, timed fades, held flash / blackout |
+| `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
+| `server/data/` | `session.json` (the set) and `dmx.json` (which device is on which universe); not in git |
 | `console/console.html`, `app.js`, `styles.css` | Console page, logic and styles |
-| `console/dmx.js` | Enttec DMX USB Pro output over Web Serial (one universe per device) |
+| `console/server-link.js` | Console side of the show-server link |
 | `console/patch.js` | Fader patch; universe and channel-address helpers |
 | `console/fixtures.js`, `set.js`, `tunes.js` | Fixtures, set save / load, songs and cues (called tunes and transitions in the code) |
 | `console/stage-link.js` | Console side of the live link with the stage |
@@ -482,14 +503,17 @@ Plain HTML / JavaScript, no build step. `./server.sh` serves the folder on port 
 | `stage/stage-model.js` | Light and rig data, DMX values ↔ angles / color / beam, aiming maths, save format |
 | `stage/console-link.js` | Stage side of the live link |
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
+| `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
 
-**Live link.** The console and stage talk over a `BroadcastChannel` named `unnaturallight.dmx` (same origin, any tabs or frames). The console sends its output levels for every universe, which faders feed each channel, its fixtures, fader names and levels, and the master / submaster / crossfade state, on every change and once a second. The stage sends "set channel N to V" requests, register / unregister requests for lights it places or deletes, and its light list (for traces).
+**Show server link.** Consoles connect to `/ws` (other machines add `?token=`). On connect the server sends `hello` (set, live mix, DMX status); an empty server takes the first console's set (`seed`). Consoles send only what changed: the whole `set` for structural edits, single-cell `levels` while dragging, `live` fields (master, subs, crossfade, Current / Next, fade time, blackout snapshots), `hold` (flash / blackout buttons held, released if the console disconnects), `go` / `pause` / `stop`, and `dmx-connect` / `dmx-disconnect` (answered with a `reply`). The server rebroadcasts edits to the other consoles and sends `live` on every fade step and `dmx` when output status changes. A value just changed on a console wins over the server's broadcasts for 0.6 s so dragging doesn't jitter.
+
+**Live link.** The console and stage talk over a `BroadcastChannel` named `unnaturallight.dmx` (same origin, any tabs or frames). The console sends its output levels for every universe, which faders feed each channel, its fixtures, fader names and levels, and the master / submaster / crossfade state, on every change and once a second. The stage sends "set channel N to V" requests, register / unregister requests for lights it places or deletes, and its light list (for traces). With several consoles open in one browser, only the one holding the `unnaturallight.stage-link` Web Lock carries out the stage's set / register / unregister requests (so nothing is applied twice) and passes on changes that came from the server. A change made in a console is sent by that console straight away, marked as local, so it never waits on the leader (which may be in a background window the browser runs slowly); for a moment after, the stage ignores other consoles' slightly older copies of it. The console's reply to a register request reaches every stage tab; each tab acts only on replies for lights it asked about, so a second stage window never undoes another's new lights. The stage takes the console's latest values once per frame (however fast messages arrive) and draws its 3D view only when something changed, since in the split view it shares one browser thread with the console.
 
 **Channel numbering.** Channels run on across universes (universe 2 channel 1 = 513, up to 8 × 512); the UI shows `universe/channel` when there's more than one universe.
 
 **Fixture library.** The Open Fixture Library API only accepts requests from its own site and `http://localhost:8080`; from other addresses the stage reads the library's files on GitHub instead (same data; list names from file names; GitHub limits that to about 60 manufacturer lookups an hour, cached).
 
-**Browser storage.** Console set: `unnaturallight.setlist.session.v1`. Stage: `unnaturallight.stage.v1`. Combined-page layout: `unnaturallight.shell`.
+**Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.setlist.session.v1`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage.v1`. Combined-page layout: `unnaturallight.shell`.
 
 **Stage file (`stage.json`, version 2).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, centre, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges). Version 1 files (angles, 0–1 intensity, hex color, beam degrees) still load.

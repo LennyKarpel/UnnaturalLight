@@ -51,11 +51,28 @@ let queued = false;
 let stageFixtures = null;
 /** @type {ReturnType<typeof createTracePopover> | null} */
 let trace = null;
+/**
+ * Several console tabs in this browser all mirror the show server, so only
+ * one of them (whichever holds the lock) carries out the stage's edits
+ * (otherwise each tab would register the same light again) and passes on
+ * changes that came from the server. A change made in a console is sent by
+ * that console straight away (marked `local`), so it never waits on the
+ * leader, which may be in a background window the browser runs slowly.
+ */
+let leader = false;
+/** This console, so the stage can tell consoles apart. */
+const SOURCE_ID = Math.random().toString(36).slice(2);
+/** The output changed here (not just from the server) since the last send. */
+let localChange = false;
 
 const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
 
-/** Tell the stage the output changed (coalesced to one message per tick). */
-export function notifyStage() {
+/**
+ * Tell the stage the output changed (coalesced to one message per tick).
+ * `local: false` = the change came from the server (only the leader sends it).
+ */
+export function notifyStage({ local = true } = {}) {
+  if (local) localChange = true;
   if (!bus || queued) return;
   queued = true;
   queueMicrotask(() => {
@@ -87,6 +104,9 @@ function traceSnapshot() {
 function send() {
   if (!bus || !api) return;
   trace?.refresh();
+  const local = localChange;
+  localChange = false;
+  if (!leader && !local) return;
   const levels = outputLevels();
   /** channel → 1-based fader numbers patched to it */
   const faders = new Map();
@@ -95,6 +115,8 @@ function send() {
   });
   bus.postMessage({
     type: "levels",
+    source: SOURCE_ID,
+    local,
     levels,
     faders: [...faders.entries()],
     fixtures: api.fixtures().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
@@ -135,9 +157,16 @@ export function startStageLink(linkApi) {
   if (typeof BroadcastChannel === "undefined") return;
   api = linkApi;
   bus = new BroadcastChannel(CHANNEL_NAME);
+  leader = !navigator.locks;
+  navigator.locks?.request("unnaturallight.stage-link", () => {
+    leader = true;
+    send();
+    return new Promise(() => {});
+  });
   bus.addEventListener("message", (e) => {
     const msg = e.data;
     if (msg?.type === "hello") send();
+    if (!leader && ["set", "register", "unregister"].includes(msg?.type)) return;
     if (msg?.type === "set" && Array.isArray(msg.values)) applySet(msg.values);
     if (msg?.type === "register" && Array.isArray(msg.requests)) {
       const results = api.register(msg.requests);
