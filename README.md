@@ -295,7 +295,7 @@ Switch with the tabs along the top (drag them to reorder):
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
 - One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
 - Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
-- Click a cue's row to make it LIVE. Use its **⋮** menu to name or remove it, **⋮⋮** to drag it, and **+** to add a new cue at the end.
+- Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+** to add a new cue at the end.
 - You can have up to 32 songs.
 
 ### Faders

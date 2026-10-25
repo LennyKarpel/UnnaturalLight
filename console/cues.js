@@ -1,6 +1,6 @@
 // Cue rows on the Songs page: drawing, reordering, renaming, cue menus.
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
-import { MIN_CUES, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.js";
+import { MAX_CUES, MIN_CUES, createCue, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.js";
 import {
   cuesScroll,
   cuesEl,
@@ -171,49 +171,77 @@ function wireCueRowDrag(bank, handle, index) {
     stopCueDragSession?.();
     dragCueId = null;
   });
-
-  bank.addEventListener("dragover", (event) => {
-    if (!dragCueId || dragCueId === cueId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    cueDragClientY = event.clientY;
-    clearCueDropMarks();
-    const rect = bank.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    bank.classList.add(after ? "is-drop-after" : "is-drop-before");
-  });
-
-  bank.addEventListener("drop", (event) => {
-    if (!dragCueId || dragCueId === cueId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const fromId = dragCueId;
-    const rect = bank.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    const song = getActiveSong();
-    const selectedId = song.cues[state.selectedCue]?.id;
-    const fromSelId = song.cues[state.fromCue]?.id;
-    const toSelId = song.cues[state.toCue]?.id;
-    clearCueDropMarks();
-    stopCueDragSession?.();
-    dragCueId = null;
-    if (!moveCue(song, fromId, cueId, after)) return;
-    const indexOf = (id) =>
-      id ? song.cues.findIndex((t) => t.id === id) : -1;
-    state.selectedCue = Math.max(0, indexOf(selectedId));
-    state.fromCue = Math.max(0, indexOf(fromSelId));
-    state.toCue = Math.max(0, indexOf(toSelId));
-    bindActiveSong();
-    if (state.fromCue === state.toCue && state.cueLevels.length > 1) {
-      state.toCue = (state.fromCue + 1) % state.cueLevels.length;
-    }
-    renderCues();
-    renderSelectedGroup();
-    pushToDmx();
-    persistSession();
-  });
 }
+
+/**
+ * Where a dragged cue would land: the slot (0 = before the first cue,
+ * n = after the last) nearest the pointer, or null when it would stay put.
+ * @param {number} clientY
+ */
+function cueDropSlot(clientY) {
+  const rows = [...cuesEl.querySelectorAll(":scope > .fader-row")];
+  const from = rows.findIndex((row) => row.dataset.dragCueId === dragCueId);
+  let slot = rows.length;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) {
+      slot = i;
+      break;
+    }
+  }
+  if (from < 0 || slot === from || slot === from + 1) return null;
+  return { rows, slot };
+}
+
+// One line in the gap between the two cues the dragged cue will land between.
+cuesEl.addEventListener("dragover", (event) => {
+  if (!dragCueId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  cueDragClientY = event.clientY;
+  clearCueDropMarks();
+  const drop = cueDropSlot(event.clientY);
+  if (!drop) return;
+  const { rows, slot } = drop;
+  if (slot < rows.length) rows[slot].classList.add("is-drop-before");
+  else rows[rows.length - 1].classList.add("is-drop-after");
+});
+
+cuesEl.addEventListener("dragleave", (event) => {
+  if (!(event.relatedTarget instanceof Node) || !cuesEl.contains(event.relatedTarget)) clearCueDropMarks();
+});
+
+cuesEl.addEventListener("drop", (event) => {
+  if (!dragCueId) return;
+  event.preventDefault();
+  const fromId = dragCueId;
+  const drop = cueDropSlot(event.clientY);
+  clearCueDropMarks();
+  stopCueDragSession?.();
+  dragCueId = null;
+  if (!drop) return;
+  const { rows, slot } = drop;
+  const after = slot === rows.length;
+  const targetId = getActiveSong().cues[after ? rows.length - 1 : slot]?.id;
+  const song = getActiveSong();
+  const selectedId = song.cues[state.selectedCue]?.id;
+  const fromSelId = song.cues[state.fromCue]?.id;
+  const toSelId = song.cues[state.toCue]?.id;
+  if (!targetId || !moveCue(song, fromId, targetId, after)) return;
+  const indexOf = (id) =>
+    id ? song.cues.findIndex((t) => t.id === id) : -1;
+  state.selectedCue = Math.max(0, indexOf(selectedId));
+  state.fromCue = Math.max(0, indexOf(fromSelId));
+  state.toCue = Math.max(0, indexOf(toSelId));
+  bindActiveSong();
+  if (state.fromCue === state.toCue && state.cueLevels.length > 1) {
+    state.toCue = (state.fromCue + 1) % state.cueLevels.length;
+  }
+  renderCues();
+  renderSelectedGroup();
+  pushToDmx();
+  persistSession();
+});
 
 function clearCueDropMarks() {
   for (const el of cuesEl.querySelectorAll(".is-drop-before, .is-drop-after")) {
@@ -607,13 +635,31 @@ export async function removeCueAt(index) {
   return true;
 }
 
+/** Insert a copy of a cue (levels, name, In time) right after it and make the copy LIVE. */
+export function duplicateCueAt(index) {
+  const song = getActiveSong();
+  if (song.cues.length >= MAX_CUES) return false;
+  const cue = song.cues[index];
+  if (!cue) return false;
+  song.cues.splice(index + 1, 0, createCue({ name: state.cueNames[index], levels: cue.levels, fadeTime: cue.fadeTime }));
+  bindActiveSong();
+  state.selectedCue = index + 1;
+  state.fromCue = state.selectedCue;
+  syncPlaybackPair();
+  renderCues();
+  renderSelectedGroup();
+  pushToDmx();
+  persistSession();
+  return true;
+}
+
 /** @type {null | (() => void)} */
 export let closeCueMenu = null;
 
 /**
  * @param {HTMLElement} anchor
  * @param {number} index
- * @returns {Promise<"rename" | "remove" | null>}
+ * @returns {Promise<"rename" | "duplicate" | "remove" | null>}
  */
 function openCueMenu(anchor, index) {
   closeCueMenu?.();
@@ -673,6 +719,7 @@ function openCueMenu(anchor, index) {
 
     cueMenuList.replaceChildren();
     addItem("Rename", "rename");
+    addItem("Duplicate", "duplicate");
     addItem("Remove", "remove", {
       danger: true,
       disabled: state.cueLevels.length <= MIN_CUES,
@@ -683,7 +730,7 @@ function openCueMenu(anchor, index) {
 
     const anchorRect = anchor.getBoundingClientRect();
     const menuWidth = 140;
-    const menuHeight = 96;
+    const menuHeight = 128;
     let left = anchorRect.left;
     let top = anchorRect.bottom + 6;
     if (left + menuWidth > window.innerWidth - 8) {
@@ -699,6 +746,7 @@ function openCueMenu(anchor, index) {
     document.addEventListener("keydown", onDocKeydown, true);
   }).then(async (action) => {
     if (action === "rename") beginInlineRename(index);
+    if (action === "duplicate") duplicateCueAt(index);
     if (action === "remove") await removeCueAt(index);
     return action;
   });
