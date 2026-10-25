@@ -263,7 +263,9 @@ Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Home**,
 
 ### The inspector
 
-The panel at the bottom right shows the selected fixture:
+The stage's right-hand panel has three parts: **Plan**, **Fixtures** and **Inspector**. Click the arrow beside a heading to collapse or expand that part. Drag the divider under **Plan** to make the plan smaller or larger, and the one under **Fixtures** to make the list shorter or taller; the inspector gets the rest. Double-click a divider to reset it. The browser remembers which parts are collapsed and the sizes you dragged. The fixture list and the inspector scroll on their own, with their headings pinned.
+
+The inspector, at the bottom, shows the selected fixture:
 
 - **Name**, **Position**.
 - **DMX values** (Dimmer … Zoom) with what each means (%, degrees). If the fixture is linked to the console, each also shows its **channel and fader** (e.g. `12 F12`).

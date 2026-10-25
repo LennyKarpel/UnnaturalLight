@@ -106,9 +106,13 @@ aside {
   grid-area: side;
   background: var(--panel);
   border-left: 1px solid var(--track);
-  overflow-y: auto;
   min-height: 0;
+  /* Plan and fixture list keep their size; the inspector takes the rest and scrolls. */
+  display: flex;
+  flex-direction: column;
 }
+aside > section { flex: none; }
+aside > #inspector { flex: 1 1 0; min-height: 0; border-bottom: 0; }
 section { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--track); }
 section h2 {
   margin: 0 0 0.5rem;
@@ -119,10 +123,68 @@ section h2 {
   font-weight: 600;
   display: flex; justify-content: space-between; align-items: center;
 }
-#plan { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: 4px; background: #0c0e11; touch-action: none; }
+#plan { width: min(100%, var(--plan-size, 100%)); margin: 0 auto; aspect-ratio: 1 / 1; display: block; border-radius: 4px; background: #0c0e11; touch-action: none; }
+/* Side-panel headings (Plan, Fixtures, Inspector): a tinted band across the
+   panel with an accent mark, so each part stands out. */
+aside > section { padding-top: 0; }
+aside > section > h2 {
+  margin: 0 -0.9rem 0.6rem;
+  padding: 0.45rem 0.9rem;
+  min-height: 2rem;
+  box-sizing: border-box;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+aside > section > h2 > :not(.h2-title):not(.seg) { color: var(--muted); font-weight: 600; letter-spacing: 0.08em; }
+.h2-title { display: inline-flex; align-items: center; gap: 4px; }
+.collapse-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 3px;
+  background: none; color: var(--muted); cursor: pointer;
+}
+.collapse-btn:hover { color: var(--ink); background: var(--line-strong); }
+.collapse-btn svg { transition: transform 0.15s; }
+section.is-collapsed .collapse-btn svg { transform: rotate(-90deg); }
+/* A collapsed section shows only its heading (ids so this beats #plan's display). */
+:is(#planSection, #fixtures, #inspector).is-collapsed > :not(h2) { display: none; }
+:is(#planSection, #fixtures, #inspector).is-collapsed { padding-bottom: 0; }
+:is(#planSection, #fixtures, #inspector).is-collapsed > h2 { margin-bottom: 0; }
+aside > #inspector.is-collapsed { flex: none; }
+
+/* Dividers between Plan, Fixtures and Inspector: drag to resize the part above
+   (the plan's size / the fixture list's height); double-click resets. They
+   draw the line between the parts, in the look of the page's Stage | Console divider. */
+#planSection, #fixtures { border-bottom: 0; }
+.vdivider { flex: none; position: relative; height: 7px; margin: -3px 0; z-index: 3; cursor: row-resize; touch-action: none; }
+.vdivider::after { content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: var(--track); }
+.vdivider:hover::after, .vdivider.is-dragging::after { background: var(--accent); height: 2px; top: 2px; }
+.vdivider .grip {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 44px; height: 8px; border-radius: 4px;
+  background: var(--panel); border: 1px solid var(--track);
+  z-index: 1; pointer-events: none;
+}
+.vdivider:hover .grip, .vdivider.is-dragging .grip { border-color: var(--accent); }
+body.resizing-panel { cursor: row-resize; user-select: none; }
+/* Nothing to resize while the part above is collapsed. */
+#planSection.is-collapsed + .vdivider, #fixtures.is-collapsed + .vdivider { cursor: default; pointer-events: none; }
+#planSection.is-collapsed + .vdivider .grip, #fixtures.is-collapsed + .vdivider .grip { display: none; }
 .hint { color: var(--muted); font-size: var(--text-sm); margin: 0.4rem 0 0; }
 
 .list { display: flex; flex-direction: column; gap: 2px; }
+aside > #fixtures { max-height: var(--fixtures-height, 300px); }
+/* Fixtures and inspector: the heading stays put and the part under it
+   scrolls, edge to edge (its scrollbar starts below the heading). */
+aside > #fixtures, aside > #inspector { display: flex; flex-direction: column; padding-top: 0; padding-bottom: 0; }
+#fixtures > h2, #inspector > h2 { flex: none; margin-bottom: 0; }
+#fixtures > .list, #inspector > .inspector-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0 -0.9rem; padding: 0.6rem 0.9rem 0.75rem;
+}
 .list .item {
   display: grid; grid-template-columns: 12px 1fr 70px 34px; align-items: center; gap: 8px;
   padding: 4px 6px; border-radius: 4px; cursor: pointer; border: 1px solid transparent;
@@ -201,6 +263,11 @@ button.flash:active { background: #fff; color: #111; border-color: #fff; }
     height: auto;
   }
   aside { border-left: 0; overflow: visible; }
+  aside > #fixtures { max-height: none; }
+  #fixtures > .list, #inspector > .inspector-body { overflow: visible; }
+  #plan { width: 100%; }
+  .vdivider { pointer-events: none; }
+  .vdivider .grip { display: none; }
   .keys { display: none; }
 }
 
