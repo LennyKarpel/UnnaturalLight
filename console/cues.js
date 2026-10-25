@@ -593,7 +593,7 @@ function adjustIndexAfterRemove(index, removed, lengthAfter) {
   return index;
 }
 
-export async function removeCueAt(index) {
+async function removeCueAt(index) {
   const song = getActiveSong();
   if (song.cues.length <= MIN_CUES) return false;
   if (index < 0 || index >= song.cues.length) return false;
@@ -611,7 +611,7 @@ export async function removeCueAt(index) {
 }
 
 /** Insert a copy of a cue (levels, name, In time) right after it and make the copy LIVE. */
-export function duplicateCueAt(index) {
+function duplicateCueAt(index) {
   const song = getActiveSong();
   if (song.cues.length >= MAX_CUES) return false;
   const cue = song.cues[index];

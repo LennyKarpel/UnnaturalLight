@@ -19,13 +19,12 @@ import { escapeHtml as esc } from "./html.js";
  * @typedef {{ id: string, name: string, mount?: string, color?: string, channelStart: number, channelEnd: number }} ConsoleFixture
  * @typedef {{ id: string, name: string, start: number | null, layout: (string | null)[], dmx: Record<string, number>, notes: Record<string, string>, consoleId: string | null, consoleName: string | null, channelNames?: string[] | null, fixture?: string | null }} StageFixture
  * @typedef {{
- *   live: boolean,
- *   levels: number[] | null,
- *   faders: FaderInfo[] | null,
+ *   levels: number[],
+ *   faders: FaderInfo[],
  *   mix: MixInfo | null,
  *   universes?: number,
  *   consoleFixtures: ConsoleFixture[],
- *   stageFixtures: StageFixture[] | null,
+ *   stageFixtures: StageFixture[],
  * }} Snapshot
  * @typedef {{ kind: "fader", fader: number } | { kind: "channel", channel: number } | { kind: "fixture", id: string } | { kind: "stageFixture", id: string }} TraceTarget
  * @typedef {{ label: string, value?: string | number, note?: string, depth?: number, tone?: "on" | "muted" | "warn" }} Row
@@ -40,7 +39,7 @@ const faderLabel = (f) => (f.name && f.name !== `F${f.num}` ? `F${f.num} · ${f.
 
 /** Faders patched to a channel, with what each sends to it (highest first). */
 function fadersOn(s, ch) {
-  return (s.faders ?? [])
+  return s.faders
     .flatMap((f) => f.patch.filter((t) => t.channel === ch).map((t) => ({ f, max: t.max, out: scaled(f.live, t.max) })))
     .sort((a, b) => b.out - a.out);
 }
@@ -53,7 +52,7 @@ function channelUses(s, ch, depth) {
     if (ch < ci.channelStart || ch > ci.channelEnd) continue;
     rows.push({ label: `Console · ${ci.name}`, note: `channel ${ch - ci.channelStart + 1} of ${ci.channelEnd - ci.channelStart + 1}`, depth });
   }
-  for (const si of s.stageFixtures ?? []) {
+  for (const si of s.stageFixtures) {
     if (!si.start || ch < si.start) continue;
     const attr = si.layout[ch - si.start];
     const channelName = si.channelNames?.[ch - si.start];
@@ -61,18 +60,13 @@ function channelUses(s, ch, depth) {
     else if (channelName) rows.push({ label: `Stage · ${si.name} · ${channelName}`, note: "not drawn on the stage", depth, tone: "muted" });
   }
   if (!rows.length) rows.push({ label: "Not used by any fixture", depth, tone: "muted" });
-  if (!s.stageFixtures) rows.push({ label: "Stage not open: its fixtures aren't shown", depth, tone: "muted" });
   return rows;
-}
-
-function consoleMissing() {
-  return { heading: "Console", rows: [{ label: "Console not open: fader values unknown", tone: "muted" }] };
 }
 
 /** @param {Snapshot} s @param {number} n */
 function traceFader(s, n) {
-  const f = s.faders?.[n - 1];
-  if (!f) return { title: `F${n}`, subtitle: "Fader", sections: [consoleMissing()] };
+  const f = s.faders[n - 1];
+  if (!f) return { title: `F${n}`, subtitle: "Fader", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
   const m = s.mix;
   /** @type {Row[]} */
   const up = [];
@@ -89,7 +83,7 @@ function traceFader(s, n) {
   if (!f.patch.length) down.push({ label: "Not patched to any channel", tone: "muted" });
   for (const t of f.patch) {
     const out = scaled(f.live, t.max);
-    const level = s.levels?.[t.channel - 1] ?? out;
+    const level = s.levels[t.channel - 1] ?? out;
     const winner = fadersOn(s, t.channel)[0];
     const held = winner && winner.f.num !== n && winner.out > out;
     down.push({
@@ -109,20 +103,17 @@ function traceFader(s, n) {
 
 /** @param {Snapshot} s @param {number} ch */
 function traceChannel(s, ch) {
-  const level = s.levels?.[ch - 1];
+  const level = s.levels[ch - 1];
   /** @type {Row[]} */
   const up = [];
-  if (!s.faders) up.push({ label: "Console not open: fader values unknown", tone: "muted" });
-  else {
-    const on = fadersOn(s, ch);
-    if (!on.length) up.push({ label: "No fader patched", tone: "muted" });
-    on.forEach(({ f, max, out }, k) => up.push({
-      label: faderLabel(f),
-      value: out,
-      note: `live ${f.live}${max !== 255 ? ` × max ${max}` : ""}${on.length > 1 ? (k === 0 ? " · highest wins" : "") : ""}`,
-      tone: k === 0 ? "on" : "muted",
-    }));
-  }
+  const on = fadersOn(s, ch);
+  if (!on.length) up.push({ label: "No fader patched", tone: "muted" });
+  on.forEach(({ f, max, out }, k) => up.push({
+    label: faderLabel(f),
+    value: out,
+    note: `live ${f.live}${max !== 255 ? ` × max ${max}` : ""}${on.length > 1 ? (k === 0 ? " · highest wins" : "") : ""}`,
+    tone: k === 0 ? "on" : "muted",
+  }));
   return {
     title: `Ch ${addr(s, ch)}`,
     subtitle: `DMX channel${level != null ? ` · output ${level}` : ""}`,
@@ -132,7 +123,7 @@ function traceChannel(s, ch) {
 
 /** @param {Snapshot} s @param {string} id */
 function traceStageFixture(s, id) {
-  const si = (s.stageFixtures ?? []).find((i) => i.id === id);
+  const si = s.stageFixtures.find((i) => i.id === id);
   if (!si) return { title: "Fixture", subtitle: "Stage fixture", sections: [{ heading: "", rows: [{ label: "Not found", tone: "muted" }] }] };
   /** @type {Row[]} */
   const rows = [];
@@ -142,16 +133,12 @@ function traceStageFixture(s, id) {
     const k = chOf(attr);
     if (k < 0) continue;
     const ch = si.start + k;
-    if (!s.faders) {
-      rows.push({ label: `← Ch ${addr(s, ch)}`, note: "console not open", depth: 1, tone: "muted" });
-      continue;
-    }
     const on = fadersOn(s, ch);
     if (!on.length) {
       rows.push({ label: `← Ch ${addr(s, ch)}`, note: "no fader patched: set on the stage", depth: 1, tone: "muted" });
       continue;
     }
-    rows.push({ label: `← Ch ${addr(s, ch)}`, value: s.levels?.[ch - 1] ?? "", depth: 1, tone: "on" });
+    rows.push({ label: `← Ch ${addr(s, ch)}`, value: s.levels[ch - 1] ?? "", depth: 1, tone: "on" });
     on.forEach(({ f, max }, j) => rows.push({
       label: `← ${faderLabel(f)}`,
       value: f.live,
@@ -177,7 +164,7 @@ function traceStageFixture(s, id) {
 
 /** Stage fixtures' attributes on a channel, e.g. "Inst 1 · Dimmer". */
 function stageUsesOf(s, ch) {
-  return (s.stageFixtures ?? []).flatMap((si) => {
+  return s.stageFixtures.flatMap((si) => {
     const attr = si.start && ch >= si.start ? si.layout[ch - si.start] : null;
     return attr ? [{ si, attr }] : [];
   });
@@ -185,7 +172,7 @@ function stageUsesOf(s, ch) {
 
 /** A library fixture's own name for a channel (e.g. "Gobo Wheel"), if any. */
 function channelNameOf(s, ch) {
-  for (const si of s.stageFixtures ?? []) {
+  for (const si of s.stageFixtures) {
     const name = si.start && ch >= si.start ? si.channelNames?.[ch - si.start] : null;
     if (name) return name;
   }
@@ -201,12 +188,9 @@ function traceFixture(s, id) {
 
   /** @type {Row[]} */
   const lights = [];
-  if (!s.stageFixtures) lights.push({ label: "Stage not open: its fixtures aren't shown", tone: "muted" });
-  else {
-    const linked = s.stageFixtures.filter((si) => si.consoleId === id);
-    if (!linked.length) lights.push({ label: "No stage fixture linked to it", tone: "muted" });
-    for (const si of linked) lights.push({ label: si.name, note: `Ch ${addr(s, si.start)}–${addr(s, si.start + si.layout.length - 1)}`, tone: "on" });
-  }
+  const linked = s.stageFixtures.filter((si) => si.consoleId === id);
+  if (!linked.length) lights.push({ label: "No stage fixture linked to it", tone: "muted" });
+  for (const si of linked) lights.push({ label: si.name, note: `Ch ${addr(s, si.start)}–${addr(s, si.start + si.layout.length - 1)}`, tone: "on" });
 
   /** @type {Row[]} */
   const rows = [];
@@ -215,10 +199,9 @@ function traceFixture(s, id) {
     const fixtureName = channelNameOf(s, ch);
     rows.push({
       label: `Ch ${addr(s, ch)} · ${ch - ci.channelStart + 1} of ${count}${fixtureName ? ` · ${fixtureName}` : ""}`,
-      value: s.levels?.[ch - 1] ?? "",
-      note: uses.length ? uses.map(({ si, attr }) => `${si.name} · ${LABEL[attr]}${si.notes[attr] ? ` = ${si.notes[attr]}` : ""}`).join(", ") : (s.stageFixtures ? "not used on the stage" : ""),
+      value: s.levels[ch - 1] ?? "",
+      note: uses.length ? uses.map(({ si, attr }) => `${si.name} · ${LABEL[attr]}${si.notes[attr] ? ` = ${si.notes[attr]}` : ""}`).join(", ") : "not used on the stage",
     });
-    if (!s.faders) continue;
     const on = fadersOn(s, ch);
     if (!on.length) rows.push({ label: "← no fader patched", depth: 1, tone: "muted" });
     on.forEach(({ f, max, out }, j) => rows.push({
@@ -229,7 +212,6 @@ function traceFixture(s, id) {
       tone: j === 0 ? "on" : "muted",
     }));
   }
-  if (!s.faders) rows.push({ label: "Console not open: fader values unknown", tone: "muted" });
 
   return {
     title: ci.name,
@@ -260,8 +242,8 @@ function rowHtml(r) {
 }
 
 /**
- * What each side knows, for the card.
- * @type {{ console: null | (() => Omit<Snapshot, "live" | "stageFixtures">), stage: null | (() => StageFixture[]) }}
+ * What each side knows, for the card (both register as they start).
+ * @type {{ console: null | (() => Omit<Snapshot, "stageFixtures">), stage: null | (() => StageFixture[]) }}
  */
 const sources = { console: null, stage: null };
 
@@ -271,18 +253,7 @@ export function provideTrace(source) {
 }
 
 /** @returns {Snapshot} */
-function snapshot() {
-  const c = sources.console?.();
-  return {
-    live: !!c,
-    levels: c?.levels ?? null,
-    faders: c?.faders ?? null,
-    mix: c?.mix ?? null,
-    universes: c?.universes ?? 1,
-    consoleFixtures: c?.consoleFixtures ?? [],
-    stageFixtures: sources.stage?.() ?? null,
-  };
-}
+const snapshot = () => ({ ...sources.console(), stageFixtures: sources.stage() });
 
 /** The app's one card (the console and the stage share it). */
 let popover = null;

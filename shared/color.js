@@ -21,7 +21,7 @@ export function rgbFromHex(hex) {
  * The color each emitter gives at full, as [r, g, b] 0–1. General values:
  * real LEDs differ a little by manufacturer.
  */
-export const EMITTERS = {
+const EMITTERS = {
   red: [1, 0, 0],
   green: [0, 1, 0],
   blue: [0, 0, 1],

@@ -106,7 +106,7 @@ export function resolveActiveEntry(set, activeEntryId, activeSongId) {
  * @param {string | null | undefined} entryId
  * @returns {SetEntry | null}
  */
-export function nextEntry(set, entryId) {
+function nextEntry(set, entryId) {
   const index = set.entries.findIndex((item) => item.id === entryId);
   return index < 0 ? null : (set.entries[index + 1] ?? null);
 }

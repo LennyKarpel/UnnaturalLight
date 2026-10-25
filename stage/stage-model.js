@@ -128,7 +128,7 @@ export function consoleTypeFromKey(key) {
   return LAYOUT_PRESETS[key] ? { mount, color } : null;
 }
 
-export const consoleTypeKey = (t) => (t ? `${t.mount}/${t.color}` : "none");
+const consoleTypeKey = (t) => (t ? `${t.mount}/${t.color}` : "none");
 
 /** Preset layout for a console fixture, fitted to its channel count. */
 export function layoutFor(mount, color, count) {

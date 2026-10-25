@@ -369,7 +369,7 @@ When you place a fixture with a console type, the console automatically:
 3. sets those faders to the fixture's current values, so nothing jumps, and
 4. scrolls the fader rows to them and highlights them while the fixture is selected on the stage.
 
-If there aren't enough faders or channels, the fixture stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console. If the console isn't open yet, the fixture waits and sets itself up as soon as the console opens.
+If there aren't enough faders or channels, the fixture stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console.
 
 To set up a fixture that's already on the stage, use **Register** in its inspector's *Console link* section.
 
@@ -635,17 +635,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 `console/server-link.js`, over `shared/server-socket.js`.
 
 - **Connecting.** The server answers with `hello`: the show, the stage, the live mix (master, submasters, crossfade, LIVE and the selected cue, whether a transition is running, held flash / blackout faders) and the DMX status. An empty server (first run) takes the first console's show (`seed`).
-- **Console → server: only what changed.**
-
-  | Message | When |
-  |---|---|
-  | `show` | the show's structure changed (the whole show) |
-  | `levels` | single fader cells, while dragging |
-  | `live` | live fields (`shared/live-fields.js`) |
-  | `hold` | flash / blackout buttons held |
-  | `go` / `pause` / `stop` | transport |
-  | `stage` (`file`) | a show file with a stage was loaded |
-  | `dmx-connect` / `dmx-disconnect` / `get-stage` | requests, answered with a `reply` |
+- **Console → server: only what changed.** The whole show when its structure changes, single fader cells while dragging, live fields (`shared/live-fields.js`), held flash / blackout buttons, GO / pause / stop, a loaded show file's stage, and requests (DMX, the stage for **Save show**) answered with a `reply`. Every message is in the [message reference](#message-reference-websocket-ws).
 
 - **Server → consoles.** Each edit is passed on to the other consoles. `live` is sent on every fade step (and `show`, to every console, when GO arrives on the next set song), and `dmx` whenever the output status changes.
 - **No jitter while dragging.** A value just changed on a console wins over the server's broadcasts for 0.6 s.
@@ -683,7 +673,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 
 Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F1); cue and song ids are the ones in the show; channels are numbered across universes (513 = universe 2 channel 1).
 
-**Show server → app window** (the console's messages, then the stage's)
+**Show server → app window** (the console's messages; the stage's are below)
 
 | `type` | Fields | Sent |
 |---|---|---|
