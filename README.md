@@ -298,9 +298,9 @@ Switch with the tabs along the top. **Drag a tab** left or right to reorder them
 
 - A **song** holds as many **cues** as you like (at least 2). Each cue is one look: a value for every fader.
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
-- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next (after a song's last cue, that's the next song in the set: see [Sets](#sets)). **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
+- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next (after a song's last cue, that's the next song in the set: see [Sets](#sets)). **Pause / Resume** a transition, or use the blend fader to crossfade by hand. The **◀ / ▶** buttons either side of GO make the previous / next cue LIVE at once, with no fade (the same as clicking that cue). They carry on across songs in the set's order: ▶ on a song's last cue goes to the next set song's first cue, ◀ on its first cue to the previous set song's last cue. They stop at the ends of the set.
 - Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
-- Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+ Add cue** (at the right of the song bar, above the set's running order) to add a new cue at the end.
+- Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+ Add cue** (at the right of the song bar) to add a new cue at the end.
 - You can have up to 32 songs.
 
 ### Sets
@@ -310,13 +310,13 @@ The **show** holds every song. A **set** is the running order for one event (*Br
 - **Build a set on the Set page.** Pick the set at the top (**⋮** for **New set**, **Rename**, **Duplicate** or **Delete**). The show's songs are on the left (type in **Find a song** to narrow them). Drag one into the running order on the right (a line shows where it will land), or press its **+** to add it at the end. Drag songs in the running order to reorder them; press **✕**, or drag one back onto the show's songs, to take it out. A song can be in a set more than once (a reprise); the show's list says *in this set ×2*.
 - A set lists the show's songs, not copies: change a song's cues and it changes in every set. Deleting a song from the show takes it out of every set (it asks first).
 - **Run a set.** **Run this set** makes it the **active set**: the Run page runs it from its first song. Clicking a song in the running order runs the set from that song.
-- **On the Run page**, the bar at the top shows the song playing and *song 3 of 12*, with **◀ / ▶** for the previous and next song in the set, and the running order below it (the song playing is highlighted, the next one dashed; click one to play it; a long set scrolls sideways, with a scrollbar under the songs while the pointer is over them).
+- **On the Run page**, the bar at the top shows the song playing and *song 3 of 12*, with **◀ / ▶** for the previous and next song in the set, and the running order as a list to the left of GO (the song playing is highlighted, the next one dashed; click one to play it; a long set scrolls, with a scrollbar while the pointer is over the list).
 - **GO runs on into the next song.** On a song's last cue, UP NEXT is the next set song's first cue (*Ballad · Cue 1*); GO transitions to it and the Run page moves to that song. On the set's last song's last cue, UP NEXT says **End of set** and GO does nothing.
 - **Songs not in the set.** Clicking a song on the Show page plays it even if it isn't in the active set (it shows *Playing · not in set*, and the Run page *Not in Set 1*). Its last cue goes back to its first, as a song on its own does.
 
 ### Faders
 
-- There are **256 faders**, F1–F256. Each row of faders scrolls sideways (trackpad, ⇧ + mouse wheel, or the scrollbar); scrolling one row scrolls the others too, so everything stays lined up. The console uses the full width of its window (or its side of the divider), so a wider window shows more faders at once, and more channel meters per row on the Channels page.
+- There are **256 faders**, F1–F256. Each row of faders scrolls sideways (trackpad or ⇧ + mouse wheel over any row, or the one scrollbar along the bottom of the cue area, shown while the pointer is over the cues); the Live strip and every cue row scroll together, so everything stays lined up. The console uses the full width of its window (or its side of the divider), so a wider window shows more faders at once, and more channel meters per row on the Channels page.
 - The **Live** row shows what each fader is actually putting out after the submasters, the blend and the Master.
 - A fader only does something once it's **patched** to a channel; unpatched faders are grayed out.
 - **Rename** a fader by right-clicking it (or on the Patch page). Fixtures placed on the stage name their faders automatically.
@@ -325,11 +325,10 @@ The **show** holds every song. A **set** is the running order for one event (*Br
 - **Color bars:** when three faders side by side control the **red, green and blue** of the same fixture, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
 - **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Fixtures placed from the stage are recognized automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
 
-### Master, submasters, blackout
+### Master and submasters
 
 - **Master** scales everything that goes out.
 - The two **submasters** scale the LIVE and UP NEXT cues before they're blended.
-- The **✕** buttons are blackouts: they drop that master to 0; click again to restore.
 
 ### Fixtures
 
@@ -592,7 +591,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B), used by both pages in place of the browser's |
-| `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
+| `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, thin scrollbars (`.thin-scroll`), and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
 | `shared/ask.js` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |
 | `shared/server-socket.js` | The WebSocket to the show server (token, reconnecting), used by the console and the stage |
 | `shared/stage-bus.js` | The console ↔ stage live link's channel and message names |
@@ -621,7 +620,7 @@ There are four links. The **show server** is the one that counts: it holds the s
 
 `console/server-link.js`, over `shared/server-socket.js`.
 
-- **Connecting.** The server answers with `hello`: the show, the live mix (master, submasters, crossfade, LIVE and the selected cue, whether a transition is running, held flash / blackout faders, blackout snapshots) and the DMX status. An empty server (first run) takes the first console's show (`seed`).
+- **Connecting.** The server answers with `hello`: the show, the live mix (master, submasters, crossfade, LIVE and the selected cue, whether a transition is running, held flash / blackout faders) and the DMX status. An empty server (first run) takes the first console's show (`seed`).
 - **Console → server: only what changed.**
 
   | Message | When |
@@ -693,7 +692,7 @@ Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F
 | `seed` | `show` | the `hello` had no show: this console's show becomes the show (ignored if the server already has one) |
 | `show` | `show` | the show's structure changed (anything but the live fields and fader levels): the whole show; the server keeps its own live fields |
 | `levels` | `cells`: `[cueId, fader, level]` triples | fader cells changed (sent at most once per tick, only the cells that changed) |
-| `live` | `live`: only the [live fields](#the-live-object) and blackout snapshots that changed | master, submasters, crossfade, LIVE or selected cue moved |
+| `live` | `live`: only the [live fields](#the-live-object) that changed | master, submasters, crossfade, LIVE or selected cue moved |
 | `hold` | `flashing`, `blackedOut`: fader indexes this console holds | a flash / blackout button pressed or let go |
 | `go` / `pause` / `stop` | none | GO (fade from the selected cue to UP NEXT); pause / resume the running fade; stop it (a hand move on the crossfade, picking a cue or song, a new or loaded show) |
 | `stage` | `stage` (the [stage object](#other-details)) | a show file with a stage was loaded: the server keeps it and passes it to the stage pages |
@@ -724,7 +723,6 @@ What changes while playing (`show.live()` in `server/show.js`; the field lists a
 | `cross` | crossfade, 0 (all LIVE) – 100 (all UP NEXT) |
 | `fromCue` | the LIVE cue (index in the active song) |
 | `selectedCue` | the selected cue (GO fades from it) |
-| `masterBlackoutSnapshot`, `fromSubBlackoutSnapshot`, `toSubBlackoutSnapshot` | what a blackout button cut (to restore it), or `null` when not blacked out |
 | `fade` | `null`, or `{ paused }` while a transition runs (server → console only) |
 | `flashing`, `blackedOut` | fader indexes held by any console (server → console only) |
 

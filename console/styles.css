@@ -697,21 +697,20 @@ body {
   margin-left: auto;
 }
 
-/* Run page: the active set's running order (click a song to play it). Its
-   scrollbar sits below the songs (in the bottom padding), thin, and only
-   shows while the pointer is over it. */
+/* Running order: a scrolling list left of the GO area, as tall as it (click
+   a song to play it). */
 .set-strip {
   display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
-  padding-bottom: 0.6rem;
-  margin-bottom: 0.1rem;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.set-strip:hover {
-  scrollbar-color: var(--line-strong) transparent;
+  flex-direction: column;
+  gap: 0.25rem;
+  /* Height 0 + min-height 100%: the GO area sets the row's height, the list scrolls within it. */
+  height: 0;
+  min-height: 100%;
+  overflow-y: auto;
+  padding: 0.35rem;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
 }
 
 .set-strip:empty {
@@ -720,14 +719,17 @@ body {
 
 .set-strip-song {
   flex: 0 0 auto;
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.55rem;
   font-size: var(--text-sm);
   font-weight: 600;
+  text-align: left;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 4px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .set-strip-song.is-next {
@@ -927,9 +929,13 @@ body {
 
 .transport-main {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr);
+  grid-template-columns: minmax(8rem, 12rem) minmax(220px, 1fr);
   gap: 0.75rem;
   align-items: stretch;
+}
+
+.transport-main:has(> .set-strip:empty) {
+  grid-template-columns: minmax(220px, 1fr);
 }
 
 .fader-row-drag-handle {
@@ -1134,6 +1140,24 @@ body {
   background: color-mix(in srgb, var(--select) 42%, var(--panel));
 }
 
+.go-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.go-step {
+  align-self: stretch;
+  min-width: 2.4rem;
+  padding: 0 0.5rem;
+  font-size: var(--text-md);
+  color: var(--muted);
+}
+
+.go-step:hover:not(:disabled) {
+  color: var(--ink);
+}
+
 .go-btn.is-running {
   border-color: var(--select);
   background: color-mix(in srgb, var(--select) 55%, var(--panel));
@@ -1276,54 +1300,27 @@ body {
   accent-color: var(--cross-to);
 }
 
-.master #blackoutBtn,
-.submaster button {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 100%;
-  padding: 0.15rem;
-  min-height: 1.65rem;
-  font-size: var(--text-xl);
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0;
-  text-transform: none;
-  border-color: color-mix(in srgb, var(--warn) 55%, var(--line-strong));
-  color: color-mix(in srgb, var(--warn) 85%, var(--ink));
-}
-
-.master #blackoutBtn span,
-.submaster button span {
-  display: block;
-  margin-top: -0.08em;
-}
-
-.master #blackoutBtn:not(:disabled):hover,
-.submaster button:hover {
-  border-color: var(--warn);
-  color: var(--warn);
-}
-
-.master #blackoutBtn.is-blackout,
-.submaster button.is-blackout {
-  border-color: var(--warn);
-  color: #1a1010;
-  background: color-mix(in srgb, var(--warn) 82%, #2a1818);
-}
-
-.master #blackoutBtn.is-blackout:hover,
-.submaster button.is-blackout:hover {
-  background: var(--warn);
-  color: #1a1010;
-}
-
 .crossfade-head {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 0.75rem;
   align-items: end;
   margin-bottom: 0.35rem;
+}
+
+/* Equal side columns: ◀ GO ▶ stay centered whatever the LIVE / UP NEXT names. */
+.go-transport .crossfade-head {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.go-transport .go-slot {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.go-transport .cross-to-label {
+  justify-self: end;
+  text-align: right;
 }
 
 .crossfade-head label {
@@ -1455,7 +1452,8 @@ body {
   margin-top: 0.65rem;
   overflow: auto;
   overscroll-behavior: contain;
-  padding-right: 0.25rem;
+  /* Room for the thin scrollbar beside the cues, not over them. */
+  padding-right: 0.6rem;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg) 55%, var(--panel));
@@ -1865,6 +1863,36 @@ body {
   padding: 0.55rem 3px 0.35rem;
 }
 
+/* Cue rows and the Live strip scroll together under one bar at the bottom
+   of the cue area (.cues-hscroll), so they show none of their own. */
+.cues .faders,
+.live-faders {
+  scrollbar-width: none;
+}
+
+.cues-hscroll {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Tall enough for the bar (overlay scrollbars draw inside the box); cues
+     scrolling past underneath go behind it rather than through it. */
+  height: 10px;
+  margin: 0 0.45rem;
+  background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.cues-scroll:hover .cues-hscroll {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.cues-hscroll > div {
+  height: 1px;
+}
+
 /* Blackout / flash buttons under dimmer faders. */
 .dim-btns {
   grid-row: 2;
@@ -2087,8 +2115,8 @@ button.fader-name:hover {
 
 /* Cue rows are kept short: shorter sliders, less padding. */
 .cues .fader-row {
-  padding-top: 0.3rem;
-  padding-bottom: 0.3rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
 }
 
 .cues .fader {
@@ -2097,7 +2125,7 @@ button.fader-name:hover {
 }
 
 .cues .fader input[type="range"] {
-  height: 70px;
+  height: 60px;
 }
 
 input[type="range"] {
@@ -2155,13 +2183,6 @@ input[type="range"] {
     height: auto;
     min-height: 0;
     flex: 1 1 auto;
-  }
-
-  .master #blackoutBtn,
-  .submaster button {
-    width: 2rem;
-    min-width: 2rem;
-    min-height: 2rem;
   }
 }
 

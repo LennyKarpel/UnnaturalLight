@@ -7,7 +7,7 @@ import { parseShow, serializeShow } from "../console/show.js";
 import { normalizeCueFadeTime, resolveActiveSong } from "../console/songs.js";
 import { nextSetSong, playbackCue, playbackLevels, upNextCue } from "../console/sets.js";
 import { computeChannelLevels, easeFade, liveLevel } from "../shared/engine.js";
-import { LIVE_FIELDS, SNAPSHOT_FIELDS } from "../shared/live-fields.js";
+import { LIVE_FIELDS } from "../shared/live-fields.js";
 
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -23,8 +23,6 @@ export function createShow(saved) {
       console.warn(`Saved session ignored: ${err.message}`);
     }
   }
-  /** @type {Record<string, number | null>} */
-  const snapshots = Object.fromEntries(SNAPSHOT_FIELDS.map((f) => [f, null]));
   /** @type {null | { start: number, target: number, durationMs: number, startedAt: number, pausedAt: number | null, mode?: "go" }} */
   let fade = null;
   /** client id → faders it holds flashed / blacked out */
@@ -81,11 +79,6 @@ export function createShow(saved) {
       show.cross = clamp(show.cross, 0, 100);
       show.fromSub = clamp(show.fromSub, 0, 100);
       show.toSub = clamp(show.toSub, 0, 100);
-      for (const f of SNAPSHOT_FIELDS) {
-        if (!(f in live)) continue;
-        const v = live[f];
-        snapshots[f] = v == null || !Number.isFinite(Number(v)) ? null : Number(v);
-      }
       clampPlayback();
     },
 
@@ -189,7 +182,6 @@ export function createShow(saved) {
       if (!show) return null;
       return {
         ...Object.fromEntries(LIVE_FIELDS.map((f) => [f, show[f]])),
-        ...snapshots,
         fade: fade ? { paused: fade.pausedAt != null } : null,
         flashing: [...heldUnion("flashing")],
         blackedOut: [...heldUnion("blackedOut")],

@@ -89,9 +89,8 @@
                 <span id="activeSetLabel" class="active-song-label"></span>
                 <button id="addCueBtn" type="button" class="quiet" title="Add a cue at the end of the song">+ Add cue</button>
               </div>
-              <div id="setStrip" class="set-strip" role="list" aria-label="Running order"></div>
-
               <div class="transport-main">
+                <div id="setStrip" class="set-strip thin-scroll" role="list" aria-label="Running order"></div>
                 <div class="crossfade go-transport">
                   <div class="crossfade-head">
                     <div class="cross-from-label go-slot">
@@ -99,9 +98,13 @@
                       <span id="crossFromLabel" class="go-slot-name">A</span>
                     </div>
                     <div class="crossfade-title go-title">
-                      <button id="goBtn" type="button" class="go-btn" title="GO — fade to the next cue">
-                        GO
-                      </button>
+                      <div class="go-row">
+                        <button id="prevCueBtn" type="button" class="go-step" title="Previous cue (make it live now)" aria-label="Previous cue">◀</button>
+                        <button id="goBtn" type="button" class="go-btn" title="GO — fade to the next cue">
+                          GO
+                        </button>
+                        <button id="nextCueBtn" type="button" class="go-step" title="Next cue (make it live now, no fade)" aria-label="Next cue">▶</button>
+                      </div>
                       <output id="crossValue" class="go-progress">0%</output>
                     </div>
                     <div class="cross-to-label go-slot">
@@ -136,9 +139,6 @@
                   <output id="fromSubValue" for="fromSub">100%</output>
                 </label>
                 <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Live cue submaster" />
-                <button id="fromSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-                  <span aria-hidden="true">✕</span>
-                </button>
               </div>
               <div class="submaster submaster-to">
                 <label for="toSub">
@@ -146,9 +146,6 @@
                   <output id="toSubValue" for="toSub">100%</output>
                 </label>
                 <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Up next cue submaster" />
-                <button id="toSubBlackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-                  <span aria-hidden="true">✕</span>
-                </button>
               </div>
             </div>
           </aside>
@@ -159,14 +156,13 @@
               <output id="masterValue" for="master">100%</output>
             </label>
             <input id="master" type="range" min="0" max="100" value="100" />
-            <button id="blackoutBtn" type="button" title="Blackout" aria-label="Blackout">
-              <span aria-hidden="true">✕</span>
-            </button>
           </aside>
         </div>
 
-        <div id="cuesScroll" class="cues-scroll">
+        <div id="cuesScroll" class="cues-scroll thin-scroll">
           <main id="cues" class="cues" aria-label="Cues"></main>
+          <!-- One sideways scrollbar for every cue row (and the Live strip): see app.js. -->
+          <div id="cuesHScroll" class="cues-hscroll" aria-hidden="true"><div></div></div>
         </div>
       </section>
 
@@ -199,7 +195,7 @@
               <span class="cue-menu-dots" aria-hidden="true"></span>
             </button>
           </div>
-          <div id="selectedGroupFaders" class="faders selected-group-faders"></div>
+          <div id="selectedGroupFaders" class="faders selected-group-faders thin-scroll"></div>
         </section>
       </section>
 

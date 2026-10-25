@@ -363,7 +363,8 @@ function beginInlineSongRename(id, target) {
  * @param {string} songId
  * @param {string | null} [entryId]
  */
-export function setActiveSong(songId, entryId) {
+/** Play a song: make its first cue (or `startCue`) LIVE. */
+export function setActiveSong(songId, entryId, startCue = 0) {
   const song = state.songs.find((item) => item.id === songId);
   if (!song) return;
   stopTimedFade();
@@ -371,9 +372,8 @@ export function setActiveSong(songId, entryId) {
   state.activeEntryId = entryId !== undefined
     ? entryId
     : (getActiveSet().entries.find((entry) => entry.songId === song.id)?.id ?? null);
-  state.fromCue = 0;
-  state.toCue = Math.min(1, song.cues.length - 1);
-  state.selectedCue = 0;
+  state.fromCue = Math.min(Math.max(0, startCue), song.cues.length - 1);
+  state.selectedCue = state.fromCue;
   state.cross = 0;
   bindActiveSong();
   syncCrossUi();

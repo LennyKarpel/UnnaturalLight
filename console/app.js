@@ -49,15 +49,14 @@ import { normalizeSets } from "./sets.js";
 import {
   currentCueTitle,
   channelsCueMenuBtn,
-  blackoutBtn,
   masterInput,
   masterValue,
   fromSubInput,
-  fromSubBlackoutBtn,
   toSubInput,
-  toSubBlackoutBtn,
   crossfader,
   goBtn,
+  prevCueBtn,
+  nextCueBtn,
   fadePauseBtn,
   addCueBtn,
   addSongBtn,
@@ -68,6 +67,9 @@ import {
   fixtureNameInput,
   addFixtureGroupBtn,
   meterUniverseSelect,
+  cuesScroll,
+  cuesEl,
+  cuesHScroll,
 } from "./dom.js";
 import {
   blankShowState,
@@ -111,8 +113,6 @@ import {
   renderSelectedGroup,
   persistAndRefresh,
   syncCrossUi,
-  syncBlackoutButtons,
-  clearBlackoutSnapshots,
   syncSubmasterLive,
   syncSubmasterUi,
   setSubmasterFromLive,
@@ -120,6 +120,7 @@ import {
   updateFadePauseButton,
   stopTimedFade,
   goNextCue,
+  stepLiveCue,
   showArrivedCue,
   toggleFadePause,
 } from "./live.js";
@@ -264,26 +265,10 @@ function syncMasterUi() {
   masterInput.value = String(Math.round(state.master));
   masterValue.textContent = `${Math.round(state.master)}%`;
   syncSubmasterLive();
-  syncBlackoutButtons();
 }
-
-blackoutBtn.addEventListener("click", () => {
-  if (state.masterBlackoutSnapshot != null) {
-    state.master = state.masterBlackoutSnapshot;
-    state.masterBlackoutSnapshot = null;
-  } else {
-    state.masterBlackoutSnapshot = state.master;
-    state.master = 0;
-  }
-  syncMasterUi();
-  pushToDmx();
-});
 
 masterInput.addEventListener("input", () => {
   state.master = Number(masterInput.value);
-  if (state.masterBlackoutSnapshot != null) {
-    state.masterBlackoutSnapshot = null;
-  }
   syncMasterUi();
   pushToDmx();
 });
@@ -298,30 +283,6 @@ toSubInput.addEventListener("input", () => {
   pushToDmx();
 });
 
-fromSubBlackoutBtn.addEventListener("click", () => {
-  if (state.fromSubBlackoutSnapshot != null) {
-    state.fromSub = state.fromSubBlackoutSnapshot;
-    state.fromSubBlackoutSnapshot = null;
-  } else {
-    state.fromSubBlackoutSnapshot = state.fromSub;
-    state.fromSub = 0;
-  }
-  syncSubmasterUi();
-  pushToDmx();
-});
-
-toSubBlackoutBtn.addEventListener("click", () => {
-  if (state.toSubBlackoutSnapshot != null) {
-    state.toSub = state.toSubBlackoutSnapshot;
-    state.toSubBlackoutSnapshot = null;
-  } else {
-    state.toSubBlackoutSnapshot = state.toSub;
-    state.toSub = 0;
-  }
-  syncSubmasterUi();
-  pushToDmx();
-});
-
 crossfader.addEventListener("input", () => {
   setCross(Number(crossfader.value), { fromUser: true });
 });
@@ -329,6 +290,8 @@ crossfader.addEventListener("input", () => {
 goBtn.addEventListener("click", () => {
   goNextCue();
 });
+prevCueBtn.addEventListener("click", () => stepLiveCue(-1));
+nextCueBtn.addEventListener("click", () => stepLiveCue(1));
 
 fadePauseBtn.addEventListener("click", () => {
   toggleFadePause();
@@ -380,12 +343,11 @@ clearPatchBtn.addEventListener("click", async () => {
 
 /**
  * Replace the whole show. `fromServer`: another console (or the server) changed
- * it, so leave the fade, blackouts and held buttons alone.
+ * it, so leave the fade and held buttons alone.
  */
 function applyShow(next, { fromServer = false } = {}) {
   if (!fromServer) {
     stopTimedFade();
-    clearBlackoutSnapshots();
     blackedOutFaders.clear();
     flashingFaders.clear();
   }
@@ -712,22 +674,37 @@ function afterStageFixturesChanged() {
 }
 
 // Fader blocks scroll sideways (256 faders): keep them lined up, so the Live
-// strip and every cue row show the same faders.
+// strip and every cue row show the same faders. The cue rows and the Live
+// strip have no scrollbar of their own: one bar at the bottom of the cue
+// area (cuesHScroll) scrolls them all.
 let syncingFaderScroll = false;
 document.addEventListener(
   "scroll",
   (event) => {
     const el = event.target;
     if (syncingFaderScroll || !(el instanceof HTMLElement)) return;
-    if (!el.classList.contains("faders") || el.classList.contains("channel-faders")) return;
+    const isFaders = el.classList.contains("faders") && !el.classList.contains("channel-faders");
+    if (!isFaders && el !== cuesHScroll) return;
     syncingFaderScroll = true;
-    for (const other of document.querySelectorAll(".faders:not(.channel-faders)")) {
+    for (const other of [...document.querySelectorAll(".faders:not(.channel-faders)"), cuesHScroll]) {
       if (other !== el) other.scrollLeft = el.scrollLeft;
     }
     syncingFaderScroll = false;
   },
   true,
 );
+
+/** Give the cue-area scrollbar the same scroll range as a cue row (hidden when nothing overflows). */
+function fitCuesHScroll() {
+  const row = cuesEl.querySelector(".faders");
+  const extra = row ? row.scrollWidth - row.clientWidth : 0;
+  cuesHScroll.hidden = extra <= 0;
+  if (extra <= 0) return;
+  /** @type {HTMLElement} */ (cuesHScroll.firstElementChild).style.width = `${cuesHScroll.clientWidth + extra}px`;
+  cuesHScroll.scrollLeft = row.scrollLeft;
+}
+new ResizeObserver(fitCuesHScroll).observe(cuesScroll);
+new MutationObserver(fitCuesHScroll).observe(cuesEl, { childList: true });
 
 // For the page header (../index.html): what it shows, and the actions it offers.
 const consoleHeader = {
@@ -833,9 +810,6 @@ function applyServerLive(live) {
   if ("fromCue" in live) state.fromCue = live.fromCue;
   if ("selectedCue" in live) state.selectedCue = live.selectedCue;
   syncPlaybackPair();
-  if ("masterBlackoutSnapshot" in live) state.masterBlackoutSnapshot = live.masterBlackoutSnapshot;
-  if ("fromSubBlackoutSnapshot" in live) state.fromSubBlackoutSnapshot = live.fromSubBlackoutSnapshot;
-  if ("toSubBlackoutSnapshot" in live) state.toSubBlackoutSnapshot = live.toSubBlackoutSnapshot;
   state.fadeState = live.fade ?? null;
   state.serverFlashing = new Set(live.flashing ?? []);
   state.serverBlackedOut = new Set(live.blackedOut ?? []);
@@ -851,7 +825,6 @@ function applyServerLive(live) {
 state.serverLink = createServerLink({
   view: () => ({
     show: currentShowState(),
-    snapshots: { masterBlackoutSnapshot: state.masterBlackoutSnapshot, fromSubBlackoutSnapshot: state.fromSubBlackoutSnapshot, toSubBlackoutSnapshot: state.toSubBlackoutSnapshot },
     flashing: flashingFaders,
     blackedOut: blackedOutFaders,
   }),

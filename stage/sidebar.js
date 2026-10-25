@@ -224,7 +224,7 @@ function setField(fixture, k, raw) {
 /** Put everything under the inspector's heading in one block, which scrolls. */
 function wrapInspectorBody() {
   const body = document.createElement("div");
-  body.className = "inspector-body";
+  body.className = "inspector-body thin-scroll";
   body.append(...[...inspectorEl.children].filter((el) => el.tagName !== "H2"));
   inspectorEl.append(body);
   applyCollapsed(inspectorEl);

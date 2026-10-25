@@ -23,26 +23,25 @@ import {
   cuePicker,
   cuePickerList,
   channelsCueMenuBtn,
-  blackoutBtn,
   fromSubInput,
   fromSubValue,
   fromSubLabel,
-  fromSubBlackoutBtn,
   toSubInput,
   toSubValue,
   toSubLabel,
-  toSubBlackoutBtn,
   crossfader,
   crossValue,
   crossFromLabel,
   crossToLabel,
   goBtn,
+  prevCueBtn,
+  nextCueBtn,
   goNextFade,
   fadePauseBtn,
   addCueBtn,
   placePopup,
 } from "./dom.js";
-import { zeros, syncPlaybackPair, persistSession, state } from "./state.js";
+import { zeros, syncPlaybackPair, persistSession, getActiveEntry, getActiveSet, state } from "./state.js";
 import {
   cueName,
   cueLabel,
@@ -65,7 +64,7 @@ import {
   refreshFaderPatchLabels,
   syncSlidersFromState,
 } from "./faders.js";
-import { syncSongUi } from "./show-page.js";
+import { syncSongUi, setActiveSong } from "./show-page.js";
 import { cueUi, closeChannelsCueMenu, renderCues, closeActionMenu } from "./cues.js";
 import {
   updateConflictBanner,
@@ -304,6 +303,11 @@ export function refreshCueSelects() {
     fillCueTitle(crossToLabel, state.toCue);
   }
   goBtn.disabled = state.toCue === state.fromCue;
+  for (const [btn, step, word] of [[prevCueBtn, -1, "Previous"], [nextCueBtn, 1, "Next"]]) {
+    const target = stepTarget(step);
+    btn.disabled = !target;
+    if (target) btn.title = `${word} cue: make ${target.label} live now (no fade)`;
+  }
   const nextFade = playbackCue(state, state.toCue)?.fadeTime ?? DEFAULT_CUE_FADE_TIME;
   goNextFade.textContent = state.toCue === state.fromCue ? "" : `${nextFade}s`;
   goBtn.title = `GO — fade to ${cueLabel(state.toCue)} (${nextFade}s)`;
@@ -531,40 +535,11 @@ export function syncCrossUi() {
   crossValue.textContent = `${pct}%`;
 }
 
-export function syncBlackoutButtons() {
-  const masterLatched = state.masterBlackoutSnapshot != null;
-  blackoutBtn.classList.toggle("is-blackout", masterLatched);
-  blackoutBtn.title = masterLatched ? "Restore" : "Blackout";
-  blackoutBtn.setAttribute("aria-label", masterLatched ? "Restore" : "Blackout");
-
-  const fromLatched = state.fromSubBlackoutSnapshot != null;
-  fromSubBlackoutBtn.classList.toggle("is-blackout", fromLatched);
-  fromSubBlackoutBtn.title = fromLatched
-    ? `Restore ${cueLabel(state.fromCue)}`
-    : `Blackout ${cueLabel(state.fromCue)}`;
-  fromSubBlackoutBtn.setAttribute("aria-label", fromSubBlackoutBtn.title);
-
-  const toLatched = state.toSubBlackoutSnapshot != null;
-  toSubBlackoutBtn.classList.toggle("is-blackout", toLatched);
-  toSubBlackoutBtn.title = toLatched
-    ? `Restore ${cueLabel(state.toCue)}`
-    : `Blackout ${cueLabel(state.toCue)}`;
-  toSubBlackoutBtn.setAttribute("aria-label", toSubBlackoutBtn.title);
-}
-
-export function clearBlackoutSnapshots() {
-  state.masterBlackoutSnapshot = null;
-  state.fromSubBlackoutSnapshot = null;
-  state.toSubBlackoutSnapshot = null;
-  syncBlackoutButtons();
-}
-
 function syncSubmasterLabels() {
   fromSubLabel.textContent = cueLabel(state.fromCue);
   toSubLabel.textContent = cueLabel(state.toCue);
   fromSubInput.setAttribute("aria-label", `${cueLabel(state.fromCue)} submaster`);
   toSubInput.setAttribute("aria-label", `${cueLabel(state.toCue)} submaster`);
-  syncBlackoutButtons();
 }
 
 function fromCrossWeight() {
@@ -606,16 +581,8 @@ export function setSubmasterFromLive(which, live) {
   const setting = weight > 0.001 ? Math.min(100, level / weight) : level;
   if (which === "from") {
     state.fromSub = setting;
-    if (state.fromSubBlackoutSnapshot != null) {
-      state.fromSubBlackoutSnapshot = null;
-      syncBlackoutButtons();
-    }
   } else {
     state.toSub = setting;
-    if (state.toSubBlackoutSnapshot != null) {
-      state.toSubBlackoutSnapshot = null;
-      syncBlackoutButtons();
-    }
   }
   syncSubmasterLive();
 }
@@ -656,6 +623,43 @@ export function stopTimedFade() {
 export function goNextCue() {
   if (state.toCue === state.fromCue) return;
   state.serverLink?.command("go");
+}
+
+/**
+ * The cue ◀ / ▶ beside GO go to: the previous / next cue of the song, or past
+ * its first / last cue the previous set song's last cue / the next set
+ * song's first. null at the ends of the set (or a song not in the set).
+ * @param {-1 | 1} step
+ * @returns {{ cue: number, label: string, song?: { songId: string, entryId: string } } | null}
+ */
+function stepTarget(step) {
+  const cue = state.fromCue + step;
+  if (cue >= 0 && cue < state.cueLevels.length) return { cue, label: cueLabel(cue) };
+  const set = getActiveSet();
+  const entry = getActiveEntry();
+  const next = entry ? set.entries[set.entries.indexOf(entry) + step] : null;
+  const song = next && state.songs.find((s) => s.id === next.songId);
+  if (!song?.cues.length) return null;
+  const songCue = step < 0 ? song.cues.length - 1 : 0;
+  const name = song.cues[songCue].name;
+  return {
+    cue: songCue,
+    label: `${song.name} · Cue ${songCue + 1}${name ? `: ${name}` : ""}`,
+    song: { songId: song.id, entryId: next.id },
+  };
+}
+
+/**
+ * ◀ / ▶ beside GO: make the previous / next cue LIVE at once (no fade), as
+ * clicking it does; across songs too, in the active set's order.
+ * @param {-1 | 1} step
+ */
+export function stepLiveCue(step) {
+  const target = stepTarget(step);
+  if (!target) return;
+  if (target.song) setActiveSong(target.song.songId, target.song.entryId, target.cue);
+  else setSelectedCue(target.cue);
+  cuesEl.querySelector(`.fader-row[data-row="${state.selectedCue}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 /** A GO finished on the server: show the cue it arrived on. */

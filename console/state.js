@@ -122,12 +122,6 @@ export const state = {
   /** The show server's timed fade (it runs there): null = none. */
   /** @type {null | { paused: boolean }} */
   fadeState: null,
-  /** @type {number | null} */
-  masterBlackoutSnapshot: null,
-  /** @type {number | null} */
-  fromSubBlackoutSnapshot: null,
-  /** @type {number | null} */
-  toSubBlackoutSnapshot: null,
   // The show name, show buttons, DMX outputs and status are drawn in the header
   // of the page around the console (../index.html), which calls consoleHeader
   // (app.js) and is told (notifyHeader) when any of it changes.

@@ -117,6 +117,17 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
+/* Scroll areas (cue rows, cue list, running order, stage sidebar lists): a
+   thin scrollbar, shown only while the pointer is over the area. Give the
+   area padding on the scrolling side so the bar sits beside the content. */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.thin-scroll:hover {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
 /* Segmented switch: Console / Both / Stage, plan views (.on = chosen). */
 .seg {
   display: inline-flex;

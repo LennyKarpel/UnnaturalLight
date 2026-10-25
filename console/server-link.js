@@ -24,7 +24,7 @@
  */
 
 import { openServerSocket } from "../shared/server-socket.js";
-import { LIVE_FIELDS, SNAPSHOT_FIELDS } from "../shared/live-fields.js";
+import { LIVE_FIELDS } from "../shared/live-fields.js";
 
 /** How long a value changed here wins over the server's broadcasts. */
 const PENDING_MS = 600;
@@ -32,7 +32,6 @@ const PENDING_MS = 600;
 /**
  * @typedef {{
  *   show: Record<string, any>,
- *   snapshots: Record<string, number | null>,
  *   flashing: Set<number>,
  *   blackedOut: Set<number>,
  * }} LocalView what the console shows now (`show` = currentShowState(), live fields included)
@@ -91,7 +90,7 @@ export function createServerLink(api) {
     if (connected) socket.send(msg);
   }
 
-  const liveOf = (v) => Object.fromEntries([...LIVE_FIELDS.map((f) => [f, v.show[f]]), ...SNAPSHOT_FIELDS.map((f) => [f, v.snapshots[f]])]);
+  const liveOf = (v) => Object.fromEntries(LIVE_FIELDS.map((f) => [f, v.show[f]]));
 
   /** Remember the console's current view as agreed with the server. */
   function agree() {
@@ -134,7 +133,6 @@ export function createServerLink(api) {
 
     const live = {};
     for (const f of LIVE_FIELDS) if (v.show[f] !== agreed.live[f]) live[f] = v.show[f];
-    for (const f of SNAPSHOT_FIELDS) if (v.snapshots[f] !== agreed.live[f]) live[f] = v.snapshots[f];
     if (Object.keys(live).length) {
       for (const f of Object.keys(live)) {
         agreed.live[f] = live[f];
@@ -153,7 +151,7 @@ export function createServerLink(api) {
   /** Live values from the server, minus fields changed here moments ago. */
   function filterLive(live) {
     const out = { ...live };
-    for (const f of [...LIVE_FIELDS, ...SNAPSHOT_FIELDS]) if (isPending(f)) delete out[f];
+    for (const f of LIVE_FIELDS) if (isPending(f)) delete out[f];
     return out;
   }
 
