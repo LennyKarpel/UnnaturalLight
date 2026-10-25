@@ -161,7 +161,7 @@ Choose **From fixture library…** as the console type to use a real, named fixt
 2. The preview lists the mode's channels in order. Channels marked **→** are drawn on the stage (dimmer, pan, tilt, red / green / blue, zoom).
 3. Click **Place…** and place it as usual.
 
-The fixture is named after the model (e.g. *MAC Aura 1*) and uses the fixture's real pan / tilt range and beam angles. In the console it gets **every channel of the mode, in order, each with its own fader** named after the channel (e.g. *MAC Aura 1 Shutter*, *MAC Aura 1 Pan fine*), so you can control everything, including channels the stage can't show (strobe, gobos, color wheels, white, "fine" channels…).
+The fixture is named after the model (e.g. *MAC Aura 1*) and uses the fixture's real pan / tilt range and beam angles. In the console it gets **every channel of the mode, in order, each with its own fader** named after the channel (e.g. *MAC Aura 1 Shutter*, *MAC Aura 1 Pan fine*), so you can control everything, including channels the stage can't show (strobe, gobos, color wheels, "fine" channels…).
 
 - Browsing needs internet; a placed fixture keeps working offline.
 - Modes with more than 64 channels, and pixel-mapping modes, can't be picked.
@@ -190,9 +190,10 @@ Every fixture is controlled by values from **0 to 255**, just like a dimmer chan
 | **Pan** | turned fully one way … the other; **128 = straight ahead** (its "zero") |
 | **Tilt** | tilted fully down … up; **128 = straight ahead** |
 | **Red / Green / Blue** | the amount of each color |
+| **Deep Red / White / Amber / Lime / Cyan / Indigo / UV** | the amount of each extra emitter, for fixtures that have them |
 | **Zoom** | narrowest … widest beam |
 
-Change them with the keys, or the sliders and numbers in the inspector:
+Change them with the keys, or the sliders and numbers in the inspector (each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; channels a linked fixture doesn't have — e.g. pan and tilt on a fixed light — are dimmed and can't be changed; a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage):
 
 | Key | Does |
 |---|---|
@@ -203,7 +204,7 @@ Change them with the keys, or the sliders and numbers in the inspector:
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's **Color** picker (and **color** in the key strip) sets red, green and blue together (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
+The inspector's **Color** picker (and **color** in the key strip) sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
 
 #### The color picker
 
@@ -211,9 +212,21 @@ The console's color bars and the stage's color pickers all open the same picker 
 
 - **Wheel:** hue around the edge, saturation toward the center. Click or drag. It picks at full brightness; the dimmer sets how bright the fixture is.
 - **Swatches:** common lighting colors (warm white, white, cool white, amber, orange, red, pink, magenta, UV, blue, cyan, green), then a row of colors already in use (**In use** in the console, **On stage** on the stage).
-- **R / G / B and hex:** the 0–255 values it sets; type in them to set a color exactly.
+- **R / G / B and hex:** the color's 0–255 values; type in them to set a color exactly. On a fixture with extra emitters these are the color you're asking for, not the faders' values (see below).
 
 Every change applies straight away. Click anywhere outside the picker, or press `Esc` or `Enter`, to close it. That click only closes the picker, so nothing under it is clicked (the fixture stays selected). While it's open, keys go to the picker, not the stage or console.
+
+#### Mixing onto extra emitters
+
+Some fixtures have more than red, green and blue: deep red, white, amber, lime, cyan, indigo, UV. The picker still picks one color, and `shared/color.js` works out the level of every emitter the fixture has so the mix **is that color** (accurate color, not "everything up"). Each emitter is treated as the color it gives at full (white = equal red, green and blue; deep red ≈ a darker red leaning toward crimson; amber ≈ red with some green; lime ≈ green with some red; cyan = green and blue; indigo ≈ blue with a little red), and they take their share in order:
+
+1. **White** takes the part red, green and blue have in common.
+2. **Deep red**, **amber**, **lime**, **cyan** and **indigo** take as much of what's left as they can — the one nearest in hue first, so a crimson goes to deep red, an orange to amber, a yellow-green to lime, a sea green to cyan and a violet to indigo. Plain red stays on red.
+3. **Red, green and blue** make up the rest.
+
+So white on an RGBW fixture is the white channel alone, a warm white is white plus amber, and a fixture with only red, green and blue gets the picked values exactly, as before. **UV isn't mixed** — it's barely visible — so it stays on its own fader and the picker leaves it alone. The color shown (color bars, the stage's beams) is worked out the other way round, from all the emitters, UV included. The emitter colors are general values; real LEDs differ a little by manufacturer.
+
+Library fixtures get these roles from their channels automatically (warm and cold white count as white; a channel named *Deep Red* is deep red, since the library calls it just red). Fixtures placed before the extra emitters were supported pick them up the next time the stage and console are open together. If a fixture has two channels of one kind (e.g. *Deep Red* and *Red*), they move together: the picker sets both, and on the stage the first is the color (the inspector lists both channels on its row); changing that color on the stage sets the second too, while moving just one fader in the console leaves the other alone.
 
 **The keys bar** along the bottom of the 3D view works with the mouse too: click any key in it to do what that key does (**hold** an arrow, `+`/`−` or `[`/`]` to repeat; **⇧-click** for steps of 10). A key goes dim, and a held key stops, once the selected fixtures reach 0 or 255 in that direction (or when nothing is selected); the keyboard keys stop there too. It also has a **color** picker that sets the color of the selected fixtures.
 
@@ -320,9 +333,10 @@ The **show** holds every song. A **set** is the running order for one event (*Br
 - The **Live** row shows what each fader is actually putting out after the submasters, the blend and the Master.
 - A fader only does something once it's **patched** to a channel; unpatched faders are grayed out.
 - **Rename** a fader by right-clicking it (or on the Patch page). Fixtures placed on the stage name their faders automatically.
-- **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any white channel — go to full too; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognized automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
+- **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any deep red, white, amber, lime, cyan or indigo channel — go to full too; UV doesn't; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognized automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
 - **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labeled with the fixture's name (neighboring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-page strip, and update when you change the patch.
-- **Color bars:** when three faders side by side control the **red, green and blue** of the same fixture, a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all three faders are set at once (you can still fine-tune each one). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*).
+- **Color fader strips:** each fader in a color bar's group has a thin strip along its bottom in the color it controls (red, amber, lime, indigo, …), so you can tell the emitters apart at a glance.
+- **Color bars:** when faders side by side control the **color channels** of the same fixture — red, green and blue, plus any deep red, white, amber, lime, cyan, indigo or UV — a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all of them are set at once (you can still fine-tune each one), mixed as described in [Mixing onto extra emitters](#mixing-onto-extra-emitters). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*), and any extras *W / A / L / C / I / UV* (or *White / Amber / Lime / Cyan / Indigo*).
 - **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Fixtures placed from the stage are recognized automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
 
 ### Master and submasters
@@ -494,7 +508,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | Where | Action |
 |---|---|
 | drag a fader | set its level |
-| click a color bar (under R/G/B faders) | pick a color for those three faders |
+| click a color bar (under a fixture's color faders) | pick a color for those faders |
 | hold **B** under a dimmer fader | black that fixture out while held |
 | hold **F** under a dimmer fader | flash that fixture at full, in white |
 | hold **✥** under pan / tilt faders and move the mouse | left / right = pan, up / down = tilt (⇧ = fine) |
@@ -598,7 +612,8 @@ The console and the stage are one app: anything both use (and the page header, o
 | `shared/live-fields.js` | Which show fields change while playing, used by the server and the console |
 | `shared/address.js` | Universes and channel addresses (`2/45` ↔ 557) |
 | `shared/attributes.js` | Fixture attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
-| `shared/color.js`, `numbers.js`, `html.js`, `ids.js` | Small helpers: hex ↔ R/G/B, clamping to 0–255 and ranges, escaping text for HTML, new ids |
+| `shared/color.js` | Hex ↔ R/G/B, and mixing a color onto a fixture's emitters (red, green, blue, deep red, white, amber, lime, cyan, indigo, UV) and back |
+| `shared/numbers.js`, `html.js`, `ids.js` | Small helpers: clamping to 0–255 and ranges, escaping text for HTML, new ids |
 
 ### How it all talks
 
@@ -746,7 +761,7 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 | `faderNames` | 256 names |
 | `patch` | 256 lists of `{ channel, max }`: the channels each fader drives, and the level (0–255) a full fader sends |
 | `fixtureGroups` | `[{ id, name }]` |
-| `fixtures` | `[{ id, name, mount, color, channelStart, channelEnd, groupId, roles? }]`: `mount` is `fixed` / `movable`, `color` is `single` / `multi`, `roles` says what each channel does (`dimmer`, `pan`, `tilt`, `red`, `green`, `blue`, `zoom`) |
+| `fixtures` | `[{ id, name, mount, color, channelStart, channelEnd, groupId, roles? }]`: `mount` is `fixed` / `movable`, `color` is `single` / `multi`, `roles` says what each channel does (`dimmer`, `pan`, `tilt`, `red`, `green`, `blue`, `deepred`, `white`, `amber`, `lime`, `cyan`, `indigo`, `uv`, `zoom`) |
 
 ##### DMX status
 

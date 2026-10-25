@@ -4,6 +4,7 @@ import {
   setDmx,
   layoutFor,
   linkChannels,
+  followerChannels,
   LAYOUT_PRESETS,
   CONSOLE_TYPES,
   consoleTypeFromKey,
@@ -14,6 +15,8 @@ import { createConsoleLink } from "./console-link.js";
 import { createFixturePicker } from "./fixture-library.js";
 import { DMX_ATTRS, DMX_LABELS } from "../shared/attributes.js";
 import { escapeHtml } from "../shared/html.js";
+import { clampByte } from "../shared/numbers.js";
+import { COLOR_ROLES } from "../shared/color.js";
 import { formatAddress, parseAddress, MAX_UNIVERSES } from "../shared/address.js";
 import { state, save, byId, selectedFixtures, rigOf, rigMembers, commonRig } from "./state.js";
 import { syncScene } from "./view3d.js";
@@ -56,6 +59,13 @@ const addr = (ch) => formatAddress(ch, consoleLink.universes);
 const parseAddr = (text) => parseAddress(text, MAX_UNIVERSES);
 const chRange = (c) => `Ch ${addr(c.channelStart)}${c.channelEnd > c.channelStart ? `–${addr(c.channelEnd)}` : ""}`;
 
+/**
+ * Each follower channel's color as last sent or heard ("fixtureId:attr" →
+ * 0–255): followers are sent only when the stage changes that color, not
+ * when the console does (so moving fader 58 doesn't drag 59 along).
+ */
+const followed = new Map();
+
 /** Take the console's current values for linked, patched channels. */
 function applyConsoleLevels() {
   let moved = false;
@@ -67,6 +77,7 @@ function applyConsoleLevels() {
       const v = consoleLink.incoming(channel);
       if (v != null && v !== fixture.dmx[attr]) { setDmx(fixture, attr, v); moved = true; }
     }
+    for (const { attr } of followerChannels(fixture)) followed.set(`${fixture.id}:${attr}`, fixture.dmx[attr]);
   }
   requestRegistrations();
   if (moved) { syncScene(); drawPlan(); renderList(); save({ share: false }); publishStage(); }
@@ -80,6 +91,11 @@ export function pushToConsole() {
   const entries = [];
   for (const fixture of state.fixtures) {
     for (const { channel, attr } of linkChannels(fixture)) entries.push({ channel, value: fixture.dmx[attr] });
+    for (const { channel, attr } of followerChannels(fixture)) {
+      const key = `${fixture.id}:${attr}`;
+      if (followed.has(key) && followed.get(key) !== fixture.dmx[attr]) entries.push({ channel, value: fixture.dmx[attr] });
+      followed.set(key, fixture.dmx[attr]);
+    }
   }
   consoleLink.push(entries);
 }
@@ -217,9 +233,102 @@ export function bindLinkControls() {
   });
 }
 
-/** DMX rows in the inspector: values, units, and which channel / fader drives each. */
+/**
+ * What a fixture really has (its library mode's channels, or its console
+ * layout), or null when it's stage-only and every attribute is its own.
+ */
+function presentAttrList(fixture) {
+  const { fixture: profile, start, layout } = fixture.link;
+  if (profile) return profile.channels.map((c) => c.attr).filter(Boolean);
+  return start ? layout.filter(Boolean) : null;
+}
+
+function presentAttrs(fixture) {
+  const list = presentAttrList(fixture);
+  return list ? new Set(list) : null;
+}
+
+/**
+ * Inspector row order: the color rows in the fixture's channel order (like
+ * its console faders), then the colors it doesn't have; the rest as usual.
+ */
+export function inspectorAttrs(fixture) {
+  const isColor = (a) => COLOR_ROLES.includes(a);
+  const present = (presentAttrList(fixture) ?? []).filter(isColor);
+  const colors = [...new Set([...present, ...DMX_ATTRS.filter(isColor)])];
+  const others = DMX_ATTRS.filter((a) => !isColor(a));
+  const at = DMX_ATTRS.findIndex(isColor);
+  return [...others.slice(0, at), ...colors, ...others.slice(at)];
+}
+
+/** A channel badge: its address and the console fader(s) patched to it (⌥-click traces it). */
+function chanChip(ch) {
+  const faders = consoleLink.fadersFor(ch);
+  return `<span class="chan${faders.length ? " on" : ""}" data-ch="${ch}" title="${faders.length ? `DMX ${addr(ch)} ← fader ${faders.join(", ")}` : `DMX ${addr(ch)} · no fader patched`} · ⌥-click to trace">${addr(ch)}${faders.length ? ` F${faders.join(",")}` : ""}</span>`;
+}
+
+/**
+ * "Other channels": a library fixture's channels the stage doesn't draw
+ * (strobe, dimmer curve, fan, fine channels, …). Their sliders show the
+ * console's value and set the channel there; nothing changes on the stage.
+ */
+function syncOtherChannels(fixture) {
+  const box = inspectorEl.querySelector("[data-other]");
+  if (!box) return;
+  const { start, fixture: profile } = fixture.link;
+  const others = start && profile
+    ? profile.channels.flatMap((c, k) => (c.attr || c.also || c.name.endsWith("(unused)") ? [] : [{ name: c.name, channel: start + k }]))
+    : [];
+  box.hidden = !others.length;
+  // Rebuild only when the channels change, so a slider being dragged stays put.
+  const key = others.map((o) => `${o.channel}:${o.name}`).join("|");
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = `<div class="subhead">Other channels · not shown on the stage</div>${others.map(({ name, channel }) => `
+      <label title="${escapeHtml(name)}">${escapeHtml(name)}</label>
+      <div class="dmx-row">
+        <input type="range" min="0" max="255" step="1" data-oc="${channel}" />
+        <input type="number" min="0" max="255" step="1" data-oc="${channel}" />
+        <span class="dmx-note" data-oc-note="${channel}"></span>
+      </div>`).join("")}`;
+    box.querySelectorAll("[data-oc]").forEach((el) => {
+      el.addEventListener("input", () => {
+        const v = clampByte(el.value);
+        consoleLink.setChannel(Number(el.dataset.oc), v);
+        box.querySelectorAll(`[data-oc="${el.dataset.oc}"]`).forEach((other) => { if (other !== el) other.value = String(v); });
+      });
+      if (el.type === "range") el.addEventListener("change", () => el.blur());
+    });
+  }
+  const levels = consoleLink.traceInfo().levels;
+  const live = consoleLink.live;
+  box.querySelectorAll("[data-oc]").forEach((el) => {
+    el.disabled = !live;
+    if (el === document.activeElement) return;
+    el.value = String(levels?.[Number(el.dataset.oc) - 1] ?? 0);
+  });
+  box.querySelectorAll("[data-oc-note]").forEach((el) => {
+    const html = `<span></span><span class="chans">${chanChip(Number(el.dataset.ocNote))}</span>`;
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
+}
+
+/**
+ * DMX rows in the inspector: values, units, and which channel / fader drives
+ * each. Attributes the fixture doesn't have (e.g. pan on a fixed light) are
+ * dimmed and can't be changed.
+ */
 export function syncDmxRows(fixture) {
-  const chans = new Map(linkChannels(fixture).map(({ channel, attr }) => [attr, channel]));
+  /** attr → its channels (the first, then any followers). */
+  const chans = new Map();
+  for (const { channel, attr } of [...linkChannels(fixture), ...followerChannels(fixture)]) chans.set(attr, [...(chans.get(attr) ?? []), channel]);
+  const present = presentAttrs(fixture);
+  inspectorEl.querySelectorAll("[data-dl]").forEach((el) => {
+    const absent = present != null && !present.has(el.dataset.dl);
+    el.classList.toggle("is-absent", absent);
+    el.title = absent ? "This fixture doesn't have this channel" : "";
+    el.querySelectorAll("input").forEach((input) => { input.disabled = absent; });
+  });
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     if (el === document.activeElement && el.type !== "range") return;
     el.value = String(fixture.dmx[el.dataset.d]);
@@ -227,13 +336,9 @@ export function syncDmxRows(fixture) {
   inspectorEl.querySelectorAll("[data-note]").forEach((el) => {
     const a = el.dataset.note;
     const unit = { dimmer: `${Math.round(fixture.intensity * 100)}%`, pan: `${fixture.pan}°`, tilt: `${fixture.tilt}°`, zoom: `${fixture.beam}°` }[a] ?? "";
-    const ch = chans.get(a);
-    const faders = ch ? consoleLink.fadersFor(ch) : [];
-    const chan = ch
-      ? `<span class="chan${faders.length ? " on" : ""}" data-ch="${ch}" title="${faders.length ? `DMX ${addr(ch)} ← fader ${faders.join(", ")}` : `DMX ${addr(ch)} · no fader patched`} · ⌥-click to trace">${addr(ch)}${faders.length ? ` F${faders.join(",")}` : ""}</span>`
-      : "";
-    el.innerHTML = `<span>${unit}</span>${chan}`;
+    el.innerHTML = `<span>${unit}</span><span class="chans">${(chans.get(a) ?? []).map(chanChip).join("")}</span>`;
   });
+  syncOtherChannels(fixture);
   const status = inspectorEl.querySelector("#linkStatus");
   if (!status) return;
   const linked = linkChannels(fixture);

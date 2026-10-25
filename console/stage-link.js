@@ -14,7 +14,9 @@
  * becomes V, allowing for the patch max, master, submasters and crossfade.
  * The stage also sends its fixtures, so ⌥-click traces here can show them, and
  * asks to register / unregister fixtures placed / deleted there (app.js creates
- * the console fixture, patches free faders and names them).
+ * the console fixture, patches free faders and names them). Channel roles the
+ * stage knows and the console fixture lacks (e.g. amber, registered before
+ * the console knew it) are filled in.
  *
  * Trace: ⌥-click a fader (rows, Live meters, Patch cards), a channel meter or
  * a fixture row for a card showing what controls it, what it controls
@@ -43,6 +45,7 @@ const HEARTBEAT_MS = 1000;
  *   afterSet: () => void,
  *   register: (requests: { stageId: string, name: string, mount: string, color: string, labels: string[], roles?: (string | null)[], width: number, group: string | null, universe?: number | null }[]) => { stageId: string, ok: boolean, error?: string, consoleId?: string, start?: number, faders?: number[] }[],
  *   unregister: (consoleIds: string[]) => void,
+ *   adoptRoles: (stageFixtures: { consoleId?: string | null, layout?: (string | null)[] }[]) => void,
  *   reveal: (consoleIds: string[]) => void,
  * }} StageLinkApi
  */
@@ -183,6 +186,7 @@ export function startStageLink(linkApi) {
     if (msg?.type === MSG.STAGE && Array.isArray(msg.fixtures)) {
       stageFixtures = msg.fixtures;
       trace?.refresh();
+      if (leader) api.adoptRoles(msg.fixtures);
     }
   });
   setInterval(send, HEARTBEAT_MS);

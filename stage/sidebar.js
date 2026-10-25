@@ -12,8 +12,9 @@ import {
 } from "./stage-model.js";
 import { clamp } from "../shared/numbers.js";
 import { applyCollapsed } from "./panel.js";
-import { DMX_ATTRS, DMX_LABELS } from "../shared/attributes.js";
+import { DMX_LABELS, DMX_SHORT } from "../shared/attributes.js";
 import { escapeHtml } from "../shared/html.js";
+import { COLOR_ROLES, emitterHex } from "../shared/color.js";
 import { state, selectedFixtures, rigOf, commonRig, setRigField } from "./state.js";
 import {
   flashing,
@@ -24,7 +25,7 @@ import {
   openContextMenu,
   act,
 } from "./actions.js";
-import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows } from "./link.js";
+import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.js";
 import { showTrace } from "./stage.js";
 
 // ---------------------------------------------------------------------
@@ -155,15 +156,16 @@ export function renderInspector() {
       <label></label><div class="hint" style="margin:0">x · height · z (m)${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
 
       <div class="subhead">DMX values · 0–255</div>
-      ${DMX_ATTRS.map((a) => `
-      <label>${DMX_LABELS[a]}</label>
-      <div class="dmx-row">
+      ${inspectorAttrs(sel[0]).map((a) => `
+      <label data-dl="${a}">${DMX_LABELS[a]}</label>
+      <div data-dl="${a}" ${COLOR_ROLES.includes(a) ? `class="dmx-row has-emitter" style="--emitter: ${emitterHex(a)}"` : `class="dmx-row"`}>
         <input type="range" min="0" max="255" step="1" data-d="${a}" />
         <input type="number" min="0" max="255" step="1" data-d="${a}" />
         <span class="dmx-note" data-note="${a}"></span>
       </div>`).join("")}
       <label>Color</label>
-      <input type="color" data-k="color" title="Sets red / green / blue" />
+      <input type="color" data-k="color" title="Mixed onto the color channels it's linked with (red / green / blue when none)" />
+      <div class="other-chans" data-other hidden></div>
 
       <div class="subhead">Ranges (what 0 and 255 mean)</div>
       <label>Pan / Tilt ±°</label>
@@ -346,6 +348,12 @@ export const NUDGE_KEYS = {
 /** Can this nudge still change any of these fixtures (0–255)? */
 export const canNudge = (sel, [attr, dir]) => sel.some((i) => (dir > 0 ? i.dmx[attr] < 255 : i.dmx[attr] > 0));
 
+/** "255 128 0", plus any other emitter that's on ("W 40 · A 200"). */
+function colorReadout(fixture) {
+  const extras = ["deepred", "white", "amber", "lime", "cyan", "indigo", "uv"].filter((a) => fixture.dmx[a] > 0).map((a) => `${DMX_SHORT[a]} ${fixture.dmx[a]}`);
+  return [`${fixture.dmx.red} ${fixture.dmx.green} ${fixture.dmx.blue}`, ...extras].join(" · ");
+}
+
 export function renderHud() {
   const sel = selectedFixtures();
   // Keep the keys-bar color picker on the selection's color.
@@ -373,7 +381,7 @@ export function renderHud() {
     <div class="row"><span>pan</span><span>${i.dmx.pan} · ${i.pan.toFixed(1)}°</span></div>
     <div class="row"><span>tilt</span><span>${i.dmx.tilt} · ${i.tilt.toFixed(1)}°</span></div>
     <div class="row"><span>zoom</span><span>${i.dmx.zoom} · ${i.beam}°</span></div>
-    <div class="row"><span>color</span><span><span class="swatch hud-swatch" style="background:${i.color}"></span>${i.dmx.red} ${i.dmx.green} ${i.dmx.blue}</span></div>
+    <div class="row"><span>color</span><span><span class="swatch hud-swatch" style="background:${i.color}"></span>${colorReadout(i)}</span></div>
     ${flashRow}`;
   hudEl.querySelector(".name").textContent = i.name;
 }

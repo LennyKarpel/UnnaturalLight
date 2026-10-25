@@ -17,7 +17,7 @@ import {
   applyFixture,
 } from "./stage-model.js";
 import { clamp } from "../shared/numbers.js";
-import { rgbFromHex } from "../shared/color.js";
+import { COLOR_ROLES, rgbFromHex } from "../shared/color.js";
 import { PLACE_OFFSET } from "./view3d.js";
 import { renderInspector } from "./sidebar.js";
 import { changed, setBanner, setPlacing } from "./actions.js";
@@ -131,8 +131,7 @@ function makeRigMember(rig, k, like) {
     rigId: rig.id, rigIndex: k,
     panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax,
   });
-  const { dimmer, red, green, blue, zoom } = like.dmx;
-  Object.assign(fixture.dmx, { dimmer, red, green, blue, zoom });
+  for (const a of ["dimmer", "zoom", ...COLOR_ROLES]) fixture.dmx[a] = like.dmx[a] ?? 0;
   deriveFromDmx(fixture);
   fixture.link.register = rig.consoleType ?? null;
   fixture.link.universe = rig.universe ?? null;

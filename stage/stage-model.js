@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { normalizeProfile } from "./fixture-library.js";
 import { clamp, clampByte } from "../shared/numbers.js";
-import { hexFromRgb, rgbFromHex } from "../shared/color.js";
+import { COLOR_ROLES, colorFromLevels, levelsFromColor, rgbFromHex } from "../shared/color.js";
 import { newId } from "../shared/ids.js";
 import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
 
@@ -26,7 +26,7 @@ export const FORWARD = new THREE.Vector3(0, 0, -1);
 export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "#ffe066", "#7fffe0", "#ffb070"];
 
 /** @typedef {{ yaw: number, pitch: number, roll: number }} Frame */
-/** @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} DmxAttr */
+/** @typedef {(typeof DMX_ATTRS)[number]} DmxAttr */
 /** @typedef {Record<DmxAttr, number>} DmxValues */
 /** @typedef {{ mount: "fixed" | "movable", color: "single" | "multi" }} ConsoleType */
 /** @typedef {{
@@ -82,7 +82,7 @@ export function deriveFromDmx(fixture) {
   fixture.intensity = d.dimmer / 255;
   fixture.pan = round(angleFromDmx(d.pan, fixture.panLimit));
   fixture.tilt = round(angleFromDmx(d.tilt, fixture.tiltLimit));
-  fixture.color = hexFromRgb(d.red, d.green, d.blue);
+  fixture.color = colorFromLevels(d);
   fixture.beam = round(beamFromZoom(d.zoom, fixture.zoomMin, fixture.zoomMax), 1);
 }
 
@@ -92,10 +92,13 @@ export function setDmx(fixture, attr, v) {
   deriveFromDmx(fixture);
 }
 
-/** Set the color as hex (the picker) by setting red / green / blue. */
+/**
+ * Set the color as hex (the picker): mixed onto the color channels the
+ * fixture is linked with (red / green / blue when it has none of them).
+ */
 export function setColorHex(fixture, hex) {
-  const [r, g, b] = rgbFromHex(hex);
-  Object.assign(fixture.dmx, { red: r, green: g, blue: b });
+  const linked = fixture.link.layout.filter((a) => a && COLOR_ROLES.includes(a));
+  Object.assign(fixture.dmx, levelsFromColor(hex, linked.length ? linked : ["red", "green", "blue"]));
   deriveFromDmx(fixture);
 }
 
@@ -131,6 +134,17 @@ export const consoleTypeKey = (t) => (t ? `${t.mount}/${t.color}` : "none");
 export function layoutFor(mount, color, count) {
   const preset = LAYOUT_PRESETS[`${mount === "movable" ? "movable" : "fixed"}/${color === "multi" ? "multi" : "single"}`];
   return Array.from({ length: Math.max(1, count) }, (_, k) => preset[k] ?? null);
+}
+
+/**
+ * [{ channel, attr }] second channels of a color (a library fixture's
+ * `also` channels, e.g. Red after Deep Red): set along with `attr` when it's
+ * changed here, but not listened on (the first channel is the color).
+ */
+export function followerChannels(fixture) {
+  const { start, fixture: profile } = fixture.link;
+  if (!start || !profile) return [];
+  return profile.channels.flatMap((c, k) => (c.also ? [{ channel: start + k, attr: c.also }] : []));
 }
 
 /** [{ channel, attr }] a fixture listens on / sends to (none if unlinked). */
@@ -268,7 +282,7 @@ export function createFixture(x, y, z, n, box) {
     name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
-    dmx: { dimmer: 191, pan: DMX_CENTER, tilt: DMX_CENTER, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    dmx: { ...Object.fromEntries(DMX_ATTRS.map((a) => [a, 0])), dimmer: 191, pan: DMX_CENTER, tilt: DMX_CENTER, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
     link: { consoleId: null, start: null, layout: [] },
     rigId: null, rigIndex: 0,
@@ -285,6 +299,15 @@ function normalizeType(raw) {
 function normalizeLink(raw) {
   const start = Number(raw?.start);
   const layout = Array.isArray(raw?.layout) ? raw.layout.slice(0, 16).map((a) => (DMX_ATTRS.includes(a) ? a : null)) : [];
+  const fixture = normalizeProfile(raw?.fixture);
+  // A library fixture saved before its color channels had their attr (e.g.
+  // amber, deep red): take the profile's color attrs.
+  if (fixture) {
+    fixture.channels.forEach((c, k) => {
+      const color = (a) => COLOR_ROLES.includes(a);
+      if (k < layout.length && color(c.attr) && (!layout[k] || color(layout[k]))) layout[k] = c.attr;
+    });
+  }
   return {
     consoleId: typeof raw?.consoleId === "string" ? raw.consoleId : null,
     // Channels run continuously across universes (513 = universe 2/1), up to 8 universes.
@@ -295,7 +318,7 @@ function normalizeLink(raw) {
     owned: raw?.owned === true,
     type: normalizeType(raw?.type),
     register: normalizeType(raw?.register),
-    fixture: normalizeProfile(raw?.fixture),
+    fixture,
   };
 }
 

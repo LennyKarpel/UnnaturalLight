@@ -150,5 +150,12 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
       }
       if (values.length) bus.postMessage({ type: MSG.SET, values });
     },
+    /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
+    setChannel(channel, value) {
+      if (!bus || !this.live) return;
+      synced.set(channel, value);
+      pending.set(channel, { value, until: Date.now() + PENDING_MS });
+      bus.postMessage({ type: MSG.SET, values: [{ channel, value }] });
+    },
   };
 }

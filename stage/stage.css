@@ -226,8 +226,19 @@ dialog.dlg .fields input[type="number"] { width: 100%; }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
 .dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
 .dmx-row input[type="number"] { width: 100%; }
+/* Color channels: an upright strip between the label and the slider, in the emitter's color (like the console's color faders). */
+.dmx-row.has-emitter { position: relative; }
+/* Channels the fixture doesn't have (link.js): dimmed, can't be changed. */
+[data-dl].is-absent { opacity: 0.35; }
+[data-dl].is-absent input:disabled { opacity: 1; }
+.dmx-row.has-emitter::before { content: ""; position: absolute; left: -5px; top: 15%; bottom: 15%; width: 3px; border-radius: 2px; background: var(--emitter); }
 .dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
 .chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
+/* Other channels (link.js): sliders for channels the stage doesn't draw, under the DMX rows. */
+.other-chans { grid-column: 1 / -1; display: grid; grid-template-columns: 74px 1fr; gap: 6px 8px; align-items: center; }
+.other-chans label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A color with two channels (e.g. Deep Red and Red) lists both, one above the other. */
+.chans { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .chan.on { border-color: var(--ok); color: var(--ok); }
 .fields.link-fields { margin-top: 10px; }
 .layout { display: flex; flex-wrap: wrap; gap: 4px; }

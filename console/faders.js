@@ -4,7 +4,7 @@
 import { liveLevel as mixLevel } from "../shared/engine.js";
 import { installColorPicker } from "../shared/color-picker.js";
 import { ask } from "../shared/ask.js";
-import { hexFromRgb, rgbFromHex } from "../shared/color.js";
+import { COLOR_ROLES, MIXED_ROLES, colorFromLevels, emitterHex, levelsFromColor } from "../shared/color.js";
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { formatChannelRange } from "./fixtures.js";
 import { defaultFaderName } from "./show.js";
@@ -430,10 +430,11 @@ export function refreshLiveRow() {
 }
 
 // ---------------------------------------------------------------------
-// R/G/B color bars: three side-by-side faders driving one fixture's red,
-// green and blue get a color bar under them. In a cue (and the
-// Channels-page strip) clicking it opens a color picker that sets all
-// three; on the Live strip it just shows the mix going out.
+// Color bars: side-by-side faders driving one fixture's color emitters
+// (red, green and blue, plus any white / amber / lime / cyan / indigo / UV) get a
+// color bar under them. In a cue (and the Channels-page strip) clicking it
+// opens a color picker that mixes the color onto them (shared/color.js);
+// on the Live strip it just shows the mix going out.
 // ---------------------------------------------------------------------
 
 /** What a fader drives, if it's a single channel with a known color role. */
@@ -444,23 +445,35 @@ function faderColorRole(fader) {
   const owner = state.fixtures.find((i) => ch >= i.channelStart && ch <= i.channelEnd);
   const role = owner?.roles?.[ch - owner.channelStart];
   if (role) return { owner: owner.id, role };
-  // Hand-made fixtures: fall back to names ending in R / G / B or Red / Green / Blue.
+  // Hand-made fixtures: fall back to names ending in a color (R / Red, W / White, UV, …).
   const name = faderName(fader).trim();
-  const m = /(?:^|[\s·])(r|red|g|green|b|blue)$/i.exec(name);
+  const m = /(?:^|[\s·])(r|red|g|green|b|blue|w|white|a|amber|l|lime|c|cyan|i|indigo|uv)$/i.exec(name);
   if (!m) return null;
-  const c = m[1][0].toLowerCase();
-  return { owner: owner?.id ?? name.slice(0, -m[1].length).trim(), role: c === "r" ? "red" : c === "g" ? "green" : "blue" };
+  const word = m[1].toLowerCase();
+  return { owner: owner?.id ?? name.slice(0, -m[1].length).trim(), role: COLOR_ROLES.find((r) => r === word || r[0] === word) ?? word };
 }
 
-/** First fader of each R, G, B trio (side by side, same fixture). */
-function rgbTrios() {
+const isColorRole = (r) => r != null && COLOR_ROLES.includes(r.role);
+
+/**
+ * Runs of side-by-side color faders of one fixture that include red, green
+ * and blue: [{ start, end, faders: [{ fader, role }] }].
+ */
+function colorGroups() {
   const out = [];
-  for (let i = 0; i + 2 < FADER_COUNT; i++) {
-    const [r, g, b] = [faderColorRole(i), faderColorRole(i + 1), faderColorRole(i + 2)];
-    if (r?.role === "red" && g?.role === "green" && b?.role === "blue" && r.owner === g.owner && g.owner === b.owner) {
-      out.push(i);
-      i += 2;
+  for (let i = 0; i < FADER_COUNT; ) {
+    const first = faderColorRole(i);
+    if (!isColorRole(first)) { i++; continue; }
+    const faders = [{ fader: i, role: first.role }];
+    let j = i + 1;
+    while (j < FADER_COUNT) {
+      const r = faderColorRole(j);
+      if (!isColorRole(r) || r.owner !== first.owner) break;
+      faders.push({ fader: j, role: r.role });
+      j++;
     }
+    if (["red", "green", "blue"].every((role) => faders.some((f) => f.role === role))) out.push({ start: i, end: j - 1, faders });
+    i = j;
   }
   return out;
 }
@@ -542,7 +555,7 @@ function addFixtureOutlines(grid, { col, template } = faderColumns()) {
   [...grid.children].filter((el) => el.classList.contains("fader")).forEach((el, i) => { el.style.gridColumn = String(col[i]); });
   // When there's a second row (color bars, B / F buttons), outlines reach down
   // over it too, so they sit inside the fixture's box (all outlines, for even heights).
-  const withBars = rgbTrios().length > 0 || dimmerFaderList().length > 0 || panTiltPairs().length > 0;
+  const withBars = colorGroups().length > 0 || dimmerFaderList().length > 0 || panTiltPairs().length > 0;
   fixtureRuns().forEach((run, k) => {
     const box = document.createElement("div");
     box.className = "fixture-outline";
@@ -603,8 +616,9 @@ function isDimmerFader(fader) {
 }
 
 /**
- * What a flash drives to full: the dimmer fader plus its fixture's red /
- * green / blue faders (and any "white" one), so the fixture flashes white.
+ * What a flash drives to full: the dimmer fader plus its fixture's color
+ * faders (red, green, blue, white, amber, lime, cyan, indigo; not UV), so the
+ * fixture flashes bright and white.
  */
 function flashGroup(fader) {
   const target = state.patch[fader]?.[0];
@@ -614,8 +628,7 @@ function flashGroup(fader) {
   for (let j = 0; j < FADER_COUNT; j++) {
     if (j === fader) continue;
     const color = faderColorRole(j);
-    const isRgb = color?.owner === owner.id && ["red", "green", "blue"].includes(color.role);
-    if (isRgb || (faderOwner(j) === owner && /white$/i.test(faderName(j).trim()))) group.push(j);
+    if (color?.owner === owner.id && MIXED_ROLES.includes(color.role)) group.push(j);
   }
   return group;
 }
@@ -746,24 +759,35 @@ export function addColorBars(grid, row) {
   addFixtureOutlines(grid, columns);
   for (const fader of dimmerFaderList()) addDimmerButtons(grid, fader, col);
   if (row != null) for (const pair of panTiltPairs()) addPanTiltPad(grid, pair, row, col);
-  for (const start of rgbTrios()) {
+  // A strip along the bottom of each color fader, in its emitter's color.
+  const faderEls = [...grid.children].filter((el) => el.classList.contains("fader"));
+  for (const { fader, role } of colorGroups().flatMap((g) => g.faders)) {
+    const el = faderEls[fader];
+    if (!el) continue;
+    el.classList.add("has-emitter");
+    el.style.setProperty("--emitter", emitterHex(role));
+  }
+  for (const group of colorGroups()) {
     const bar = document.createElement("label");
     bar.className = "rgb-bar";
-    bar.style.gridColumn = `${col[start]} / ${col[start + 2] + 1}`;
-    bar.dataset.start = String(start);
+    bar.style.gridColumn = `${col[group.start]} / ${col[group.end] + 1}`;
+    bar.dataset.faders = group.faders.map((f) => `${f.fader}:${f.role}`).join(",");
+    const names = group.faders.map((f) => faderName(f.fader)).join(" / ");
     if (row == null) {
       bar.dataset.live = "1";
-      bar.title = `${faderName(start)} / ${faderName(start + 1)} / ${faderName(start + 2)} · live color`;
+      bar.title = `${names} · live color`;
     } else {
       bar.dataset.row = String(row);
-      bar.title = "Click to pick a color (sets these three faders)";
+      bar.title = group.faders.length === 3 ? "Click to pick a color (sets these three faders)" : "Click to pick a color (mixed onto these faders; UV stays as it is)";
       const input = document.createElement("input");
       input.type = "color";
-      input.setAttribute("aria-label", `Color for ${faderName(start)}, ${faderName(start + 1)}, ${faderName(start + 2)}`);
+      input.setAttribute("aria-label", `Color for ${names}`);
       input.addEventListener("input", () => {
         const levels = state.cueLevels[row];
         if (!levels) return;
-        [levels[start], levels[start + 1], levels[start + 2]] = rgbFromHex(input.value);
+        const mix = levelsFromColor(input.value, group.faders.map((f) => f.role));
+        // Faders with the same role (e.g. Deep Red and Red) move together.
+        for (const { fader, role } of group.faders) if (role in mix) levels[fader] = mix[role];
         syncSlidersFromState();
         pushToDmx();
       });
@@ -776,9 +800,14 @@ export function addColorBars(grid, row) {
 /** Show each bar's current color (cue values, or live output). */
 export function refreshColorBars() {
   for (const bar of document.querySelectorAll(".rgb-bar")) {
-    const start = Number(bar.dataset.start);
-    const levels = bar.dataset.live ? [liveLevel(start), liveLevel(start + 1), liveLevel(start + 2)] : (state.cueLevels[Number(bar.dataset.row)] ?? []).slice(start, start + 3);
-    const color = hexFromRgb(levels[0] ?? 0, levels[1] ?? 0, levels[2] ?? 0);
+    const cue = bar.dataset.live ? null : state.cueLevels[Number(bar.dataset.row)] ?? [];
+    const levels = {};
+    for (const item of bar.dataset.faders.split(",")) {
+      const [fader, role] = item.split(":");
+      // Same role twice (Deep Red and Red): shown as the brighter one.
+      levels[role] = Math.max(levels[role] ?? 0, cue ? cue[Number(fader)] ?? 0 : liveLevel(Number(fader)));
+    }
+    const color = colorFromLevels(levels);
     bar.style.setProperty("--rgb", color);
     const input = bar.querySelector("input");
     if (input && document.activeElement !== input) setValue(input, color);
@@ -791,12 +820,12 @@ installColorPicker({
   usedColors: () => [...document.querySelectorAll(".rgb-bar")].map((bar) => bar.style.getPropertyValue("--rgb")),
 });
 
-/** Trio layout the fader rows were last drawn with (redraw when it changes). */
+/** Color group layout the fader rows were last drawn with (redraw when it changes). */
 let colorBarKey = "";
 
 export function refreshFaderPatchLabels() {
-  // Patch / fixture edits can create or break an R/G/B trio: redraw the rows.
-  const key = `${rgbTrios().join(",")}|${fixtureRuns().map((r) => `${r.start}+${r.length}:${r.fixture.id}:${r.fixture.name}`).join(",")}|${dimmerFaderList().join(",")}|${panTiltPairs().map((p) => `${p.pan}:${p.tilt}`).join(",")}`;
+  // Patch / fixture edits can create or break a color group: redraw the rows.
+  const key = `${colorGroups().map((g) => g.faders.map((f) => `${f.fader}:${f.role}`).join(",")).join(";")}|${fixtureRuns().map((r) => `${r.start}+${r.length}:${r.fixture.id}:${r.fixture.name}`).join(",")}|${dimmerFaderList().join(",")}|${panTiltPairs().map((p) => `${p.pan}:${p.tilt}`).join(",")}`;
   if (key !== colorBarKey) {
     colorBarKey = key;
     renderLiveRow();

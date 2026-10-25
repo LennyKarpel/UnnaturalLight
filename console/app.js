@@ -5,6 +5,7 @@
 import { startStageLink } from "./stage-link.js";
 import { createServerLink } from "./server-link.js";
 import { LIVE_FIELDS } from "../shared/live-fields.js";
+import { COLOR_ROLES } from "../shared/color.js";
 import {
   FADER_COUNT,
   identityPatch,
@@ -29,6 +30,7 @@ import {
   normalizeFixtureGroups,
   normalizeFixtures,
   normalizeMount,
+  normalizeRoles,
 } from "./fixtures.js";
 import {
   defaultFaderName,
@@ -662,6 +664,30 @@ function unregisterFromStage(consoleIds) {
   if (removed) afterStageFixturesChanged();
 }
 
+/**
+ * Take channel roles from the stage that a console fixture it linked is
+ * missing (e.g. amber on a fixture registered before amber was a role) and
+ * its color roles (e.g. deep red, once it had its own), so its color bar
+ * covers every emitter. Other roles the console has are kept.
+ * @param {{ consoleId?: string | null, layout?: (string | null)[] }[]} stageFixtures
+ */
+function adoptRolesFromStage(stageFixtures) {
+  let changed = false;
+  for (const sf of stageFixtures) {
+    const fixture = sf.consoleId && state.fixtures.find((f) => f.id === sf.consoleId);
+    if (!fixture || !Array.isArray(sf.layout) || !fixture.roles?.length) continue;
+    const roles = normalizeRoles(sf.layout);
+    const color = (r) => COLOR_ROLES.includes(r);
+    roles.forEach((role, k) => {
+      if (!role || k >= fixture.roles.length || fixture.roles[k] === role) return;
+      if (fixture.roles[k] ? !(color(role) && color(fixture.roles[k])) : fixture.roles.includes(role) && !color(role)) return;
+      fixture.roles[k] = role;
+      changed = true;
+    });
+  }
+  if (changed) afterStageFixturesChanged();
+}
+
 function afterStageFixturesChanged() {
   renderFixtures();
   suggestFixtureFormStart();
@@ -778,6 +804,7 @@ startStageLink({
   },
   register: registerFromStage,
   unregister: unregisterFromStage,
+  adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
 });
 

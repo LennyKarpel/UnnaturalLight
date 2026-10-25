@@ -2017,6 +2017,12 @@ body {
   min-width: 0;
 }
 
+/* Color faders: a strip along the bottom in the emitter's color (faders.js),
+   clear of the fixture outline's name label at the top. */
+.fader.has-emitter {
+  box-shadow: inset 0 -3px 0 var(--emitter);
+}
+
 .fader.is-selected-fader {
   border-color: color-mix(in srgb, var(--select) 60%, var(--line));
   background: color-mix(in srgb, var(--select) 10%, var(--panel));

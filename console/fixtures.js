@@ -1,5 +1,6 @@
 import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress, clampChannel as wholeChannel } from "./patch.js";
 import { newId } from "../shared/ids.js";
+import { DMX_ATTRS } from "../shared/attributes.js";
 
 export const MAX_FIXTURES = 64;
 export const MAX_FIXTURE_GROUPS = 32;
@@ -25,15 +26,15 @@ export const MAX_FIXTURE_QTY = 16;
  *   groupId: string | null,
  *   roles?: (ChannelRole | null)[],
  * }} Fixture
- * @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} ChannelRole
+ * @typedef {(typeof import("../shared/attributes.js").DMX_ATTRS)[number]} ChannelRole
  * roles: what each channel of the block does, when known (fixtures registered
- * from the stage); used e.g. to show R/G/B faders as a color picker.
+ * from the stage); used e.g. to show a fixture's color faders as a color picker.
  */
 
-const CHANNEL_ROLES = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];
+const CHANNEL_ROLES = DMX_ATTRS;
 
 /** @param {unknown} list @returns {(ChannelRole | null)[]} */
-function normalizeRoles(list) {
+export function normalizeRoles(list) {
   if (!Array.isArray(list)) return [];
   return list.slice(0, MAX_FIXTURE_CHANNELS).map((r) => (CHANNEL_ROLES.includes(r) ? r : null));
 }

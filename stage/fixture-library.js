@@ -5,7 +5,8 @@
 // Needs internet while browsing. A picked profile is saved with the fixture,
 // so placed fixtures keep working offline.
 
-import { DMX_LABELS as LABEL } from "../shared/attributes.js";
+import { DMX_ATTRS, DMX_LABELS as LABEL } from "../shared/attributes.js";
+import { COLOR_ROLES } from "../shared/color.js";
 import { escapeHtml as esc } from "../shared/html.js";
 /** Console fixtures are capped at this many channels. */
 import { MAX_FIXTURE_CHANNELS } from "../console/fixtures.js";
@@ -19,8 +20,10 @@ const RAW = "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-
 const GITHUB_LIST = "https://api.github.com/repos/OpenLightingProject/open-fixture-library/contents/fixtures";
 
 /**
- * @typedef {"dimmer" | "pan" | "tilt" | "red" | "green" | "blue" | "zoom"} DmxAttr
- * @typedef {{ name: string, attr: DmxAttr | null }} ProfileChannel
+ * @typedef {(typeof import("../shared/attributes.js").DMX_ATTRS)[number]} DmxAttr
+ * @typedef {{ name: string, attr: DmxAttr | null, also?: DmxAttr }} ProfileChannel
+ * also: a second channel of a color the fixture already has (e.g. Red after
+ * Deep Red); it follows that color.
  * @typedef {{
  *   manufacturer: string, model: string, mode: string, key: string,
  *   channels: ProfileChannel[],
@@ -92,7 +95,10 @@ const loadFixture = (manufacturer, fixture) =>
 // Fixture → profile
 // ---------------------------------------------------------------------
 
-const COLOR_ATTR = { Red: "red", Green: "green", Blue: "blue" };
+const COLOR_ATTR = { Red: "red", Green: "green", Blue: "blue", White: "white", "Warm White": "white", "Cold White": "white", Amber: "amber", Lime: "lime", Cyan: "cyan", Indigo: "indigo", UV: "uv" };
+
+/** Channel names of a deep red LED (e.g. ETC x8 "Deep Red"). */
+const DEEP_RED = /^deep\s*red$/i;
 
 /** "540deg" → 540; anything else → null. */
 const degrees = (v) => {
@@ -161,7 +167,10 @@ function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, mode
     const ch = channelFor(key);
     // Fine (16-bit) and switching aliases aren't defined as channels.
     if (!ch) return { name: key, attr: null };
-    const { attr, range } = classify(ch);
+    const { attr: kind, range } = classify(ch);
+    // The library calls a deep red LED just "Red": tell it apart by name.
+    const attr = kind === "red" && DEEP_RED.test(key) ? "deepred" : kind;
+    if (attr && used.has(attr) && COLOR_ROLES.includes(attr)) return { name: key, attr: null, also: attr };
     if (!attr || used.has(attr)) return { name: key, attr: null };
     used.add(attr);
     if (range) ranges[attr] = range;
@@ -176,7 +185,7 @@ function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, mode
     key: `${manufacturerKey}/${fixtureKey}`,
     channels,
     mount: used.has("pan") || used.has("tilt") ? "movable" : "fixed",
-    color: used.has("red") || used.has("green") || used.has("blue") ? "multi" : "single",
+    color: ["red", "green", "blue"].some((a) => used.has(a)) ? "multi" : "single",
     panLimit: halfRange(ranges.pan),
     tiltLimit: halfRange(ranges.tilt),
     zoomMin: ranges.zoom?.lo ?? (Array.isArray(lens) ? lens[0] : null),
@@ -184,20 +193,46 @@ function profileFor(fixture, manufacturerName, manufacturerKey, fixtureKey, mode
   };
 }
 
+/**
+ * Profiles saved before the stage knew white / amber / lime / cyan / indigo
+ * / UV, or second channels of a color, have those channels without an attr:
+ * give them one by channel name ("Amber", "Warm White", …), like
+ * profileFor() does now.
+ */
+function upgradeColorAttrs(channels) {
+  // Deep red was "red" (with a later Red as its second channel) before it had its own attr.
+  for (const c of channels) {
+    if (c.attr !== "red" || !DEEP_RED.test(c.name.trim())) continue;
+    c.attr = "deepred";
+    const second = channels.find((d) => d.also === "red");
+    if (second) { second.attr = "red"; delete second.also; }
+  }
+  const used = new Set(channels.map((c) => c.attr));
+  for (const c of channels) {
+    const name = c.name.trim();
+    const attr = DEEP_RED.test(name) ? "deepred" : COLOR_ATTR[Object.keys(COLOR_ATTR).find((k) => k.toLowerCase() === name.toLowerCase()) ?? ""];
+    if (c.attr || c.also || !attr) continue;
+    if (used.has(attr)) c.also = attr;
+    else c.attr = attr;
+    used.add(attr);
+  }
+  return channels;
+}
+
 /** A quick check of a saved profile; null if it doesn't look right. */
 export function normalizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.channels) || !raw.channels.length) return null;
-  const ATTRS = ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"];
   const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
   return {
     manufacturer: String(raw.manufacturer ?? ""),
     model: String(raw.model ?? "Fixture"),
     mode: String(raw.mode ?? ""),
     key: String(raw.key ?? ""),
-    channels: raw.channels.slice(0, MAX_FIXTURE_CHANNELS).map((c, k) => ({
+    channels: upgradeColorAttrs(raw.channels.slice(0, MAX_FIXTURE_CHANNELS).map((c, k) => ({
       name: String(c?.name ?? `Ch ${k + 1}`),
-      attr: ATTRS.includes(c?.attr) ? c.attr : null,
-    })),
+      attr: DMX_ATTRS.includes(c?.attr) ? c.attr : null,
+      ...(COLOR_ROLES.includes(c?.also) ? { also: c.also } : {}),
+    }))),
     mount: raw.mount === "movable" ? "movable" : "fixed",
     color: raw.color === "multi" ? "multi" : "single",
     panLimit: num(raw.panLimit), tiltLimit: num(raw.tiltLimit),
