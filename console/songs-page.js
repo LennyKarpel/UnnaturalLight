@@ -1,10 +1,10 @@
 // Songs page: the song list (add, remove, rename, reorder).
-import { defaultSongName, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.js";
-import { addSongBtn, songScroll, songList, songEmpty, activeSongLabel, pageSet } from "./dom.js";
+import { defaultSongName, createCue, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.js";
+import { addSongBtn, songScroll, songList, songEmpty, activeSongLabel, pageSet, dropSlot, showDropLine } from "./dom.js";
 import { getActiveSong, bindActiveSong, persistSession, state } from "./state.js";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.js";
 import { pushToDmx, renderSelectedGroup, syncCrossUi, stopTimedFade } from "./live.js";
-import { renderCues } from "./cues.js";
+import { renderCues, openActionMenu, closeActionMenu } from "./cues.js";
 
 /** @type {null | (() => void)} */
 export let endInlineSongRename = null;
@@ -154,25 +154,30 @@ export function renderSongs() {
     badge.className = "song-row-badge";
     badge.textContent = song.id === state.activeSongId ? "Playing" : "Play";
 
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "fixture-remove";
-    removeBtn.textContent = "✕";
-    removeBtn.title = `Remove ${song.name}`;
-    removeBtn.setAttribute("aria-label", `Remove ${song.name}`);
-    removeBtn.disabled = state.songs.length <= 1;
-    removeBtn.addEventListener("click", (event) => {
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "cue-menu-btn";
+    menuBtn.innerHTML = '<span class="cue-menu-dots" aria-hidden="true"></span>';
+    menuBtn.title = "Song options";
+    menuBtn.setAttribute("aria-label", `Options for ${song.name}`);
+    menuBtn.setAttribute("aria-haspopup", "menu");
+    menuBtn.setAttribute("aria-expanded", "false");
+    menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
-      void removeSong(song.id);
+      if (menuBtn.getAttribute("aria-expanded") === "true") {
+        closeActionMenu?.();
+        return;
+      }
+      void openSongMenu(menuBtn, song.id);
     });
 
-    row.append(handle, name, meta, badge, removeBtn);
+    row.append(handle, name, meta, badge, menuBtn);
     wireSongRowDrag(row, handle, song.id);
     row.addEventListener("click", (event) => {
       if (
         event.target instanceof Element &&
         event.target.closest(
-          ".song-drag-handle, .song-row-name, .fixture-remove, .cue-title-input",
+          ".song-drag-handle, .song-row-name, .cue-menu-btn, .cue-title-input",
         )
       ) {
         return;
@@ -228,36 +233,49 @@ function wireSongRowDrag(row, handle, songId) {
     stopSongDragSession?.();
     dragSongId = null;
   });
-
-  row.addEventListener("dragover", (event) => {
-    if (!dragSongId || dragSongId === songId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    songDragClientY = event.clientY;
-    clearSongDropMarks();
-    const rect = row.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    row.classList.add(after ? "is-drop-after" : "is-drop-before");
-  });
-
-  row.addEventListener("drop", (event) => {
-    if (!dragSongId || dragSongId === songId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const fromId = dragSongId;
-    const rect = row.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    clearSongDropMarks();
-    stopSongDragSession?.();
-    dragSongId = null;
-    if (moveSong(state.songs, fromId, songId, after)) {
-      persistSession();
-      renderSongs();
-      syncSongUi();
-    }
-  });
 }
+
+/** Where the dragged song would land (see dropSlot), or null. @param {number} clientY */
+function songDropSlot(clientY) {
+  const rows = /** @type {HTMLElement[]} */ ([...songList.querySelectorAll(":scope > .song-row")]);
+  const slot = dropSlot(rows, rows.find((row) => row.dataset.dragSongId === dragSongId), clientY);
+  return slot == null ? null : { rows, slot };
+}
+
+// Anywhere in the song area (between songs, below the last one too): a line
+// in the gap the dragged song will land in.
+songScroll.addEventListener("dragover", (event) => {
+  if (!dragSongId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  songDragClientY = event.clientY;
+  const drop = songDropSlot(event.clientY);
+  if (drop) showDropLine(drop.rows, drop.slot);
+  else clearSongDropMarks();
+});
+
+songScroll.addEventListener("dragleave", (event) => {
+  if (!(event.relatedTarget instanceof Node) || !songScroll.contains(event.relatedTarget)) clearSongDropMarks();
+});
+
+songScroll.addEventListener("drop", (event) => {
+  if (!dragSongId) return;
+  event.preventDefault();
+  const fromId = dragSongId;
+  const drop = songDropSlot(event.clientY);
+  clearSongDropMarks();
+  stopSongDragSession?.();
+  dragSongId = null;
+  if (!drop) return;
+  const { rows, slot } = drop;
+  const after = slot === rows.length;
+  const targetId = rows[after ? rows.length - 1 : slot].dataset.songId;
+  if (targetId && moveSong(state.songs, fromId, targetId, after)) {
+    persistSession();
+    renderSongs();
+    syncSongUi();
+  }
+});
 
 /**
  * @param {string} id
@@ -371,15 +389,48 @@ export async function addSong() {
   renderSongs();
 }
 
+/**
+ * @param {HTMLElement} anchor
+ * @param {string} id
+ */
+async function openSongMenu(anchor, id) {
+  const action = await openActionMenu(anchor, "Song actions", [
+    { label: "Duplicate", action: "duplicate", disabled: state.songs.length >= MAX_SONGS },
+    { label: "Delete", action: "delete", danger: true, disabled: state.songs.length <= 1 },
+  ]);
+  if (action === "duplicate") duplicateSong(id);
+  if (action === "delete") await deleteSong(id);
+}
+
+/**
+ * Put a copy of a song (its cues: levels, names, In times) right after it,
+ * named "… copy". The song that's playing stays playing.
+ * @param {string} id
+ */
+function duplicateSong(id) {
+  if (state.songs.length >= MAX_SONGS) return;
+  const index = state.songs.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  const song = state.songs[index];
+  const copy = createSong({
+    name: `${song.name} copy`.slice(0, 40),
+    cues: song.cues.map((cue) => createCue({ name: cue.name, levels: cue.levels, fadeTime: cue.fadeTime })),
+  });
+  state.songs.splice(index + 1, 0, copy);
+  persistSession();
+  renderSongs();
+  syncSongUi();
+}
+
 /** @param {string} id */
-async function removeSong(id) {
+async function deleteSong(id) {
   if (state.songs.length <= 1) return;
   const song = state.songs.find((item) => item.id === id);
   if (!song) return;
   const ok = await confirmAction({
-    title: "Remove song?",
-    message: `Remove “${song.name}” and all of its cues?`,
-    confirmLabel: "Remove",
+    title: "Delete song?",
+    message: `Delete “${song.name}” and all of its cues?`,
+    confirmLabel: "Delete",
   });
   if (!ok) return;
   const index = state.songs.findIndex((item) => item.id === id);

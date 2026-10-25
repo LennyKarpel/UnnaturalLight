@@ -7,9 +7,12 @@ import {
   currentCueTitle,
   channelsCueMenu,
   channelsCueMenuList,
-  cueMenu,
-  cueMenuList,
+  actionMenu,
+  actionMenuList,
   pageSongs,
+  dropSlot,
+  placePopup,
+  showDropLine,
 } from "./dom.js";
 import { getActiveSong, bindActiveSong, syncPlaybackPair, persistSession, state } from "./state.js";
 import {
@@ -173,24 +176,11 @@ function wireCueRowDrag(bank, handle, index) {
   });
 }
 
-/**
- * Where a dragged cue would land: the slot (0 = before the first cue,
- * n = after the last) nearest the pointer, or null when it would stay put.
- * @param {number} clientY
- */
+/** Where the dragged cue would land (see dropSlot), or null. @param {number} clientY */
 function cueDropSlot(clientY) {
-  const rows = [...cuesEl.querySelectorAll(":scope > .fader-row")];
-  const from = rows.findIndex((row) => row.dataset.dragCueId === dragCueId);
-  let slot = rows.length;
-  for (let i = 0; i < rows.length; i++) {
-    const rect = rows[i].getBoundingClientRect();
-    if (clientY < rect.top + rect.height / 2) {
-      slot = i;
-      break;
-    }
-  }
-  if (from < 0 || slot === from || slot === from + 1) return null;
-  return { rows, slot };
+  const rows = /** @type {HTMLElement[]} */ ([...cuesEl.querySelectorAll(":scope > .fader-row")]);
+  const slot = dropSlot(rows, rows.find((row) => row.dataset.dragCueId === dragCueId), clientY);
+  return slot == null ? null : { rows, slot };
 }
 
 // One line in the gap between the two cues the dragged cue will land between.
@@ -199,12 +189,9 @@ cuesEl.addEventListener("dragover", (event) => {
   event.preventDefault();
   if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
   cueDragClientY = event.clientY;
-  clearCueDropMarks();
   const drop = cueDropSlot(event.clientY);
-  if (!drop) return;
-  const { rows, slot } = drop;
-  if (slot < rows.length) rows[slot].classList.add("is-drop-before");
-  else rows[rows.length - 1].classList.add("is-drop-after");
+  if (drop) showDropLine(drop.rows, drop.slot);
+  else clearCueDropMarks();
 });
 
 cuesEl.addEventListener("dragleave", (event) => {
@@ -296,7 +283,7 @@ export function renderCues() {
     menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       if (menuBtn.getAttribute("aria-expanded") === "true") {
-        closeCueMenu?.();
+        closeActionMenu?.();
         return;
       }
       void openCueMenu(menuBtn, r);
@@ -539,7 +526,7 @@ export function wireCurrentCueTitle(el) {
 export function openChannelsCueMenu(anchor) {
   closeChannelsCueMenu?.();
   closeCuePicker?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
@@ -593,19 +580,7 @@ export function openChannelsCueMenu(anchor) {
     anchor.setAttribute("aria-expanded", "true");
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 150;
-    const menuHeight = 48;
-    let left = anchorRect.right - menuWidth;
-    let top = anchorRect.bottom + 6;
-    if (left < 8) left = 8;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    channelsCueMenu.style.left = `${left}px`;
-    channelsCueMenu.style.top = `${top}px`;
+    placePopup(channelsCueMenu, anchorRect.right - channelsCueMenu.offsetWidth, anchorRect.bottom + 6, anchorRect.top);
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);
@@ -654,15 +629,18 @@ export function duplicateCueAt(index) {
 }
 
 /** @type {null | (() => void)} */
-export let closeCueMenu = null;
+export let closeActionMenu = null;
 
 /**
+ * A small menu of actions below `anchor` (the ⋮ menus of cues and songs).
+ * Resolves with the chosen item's action, or null when it's closed.
  * @param {HTMLElement} anchor
- * @param {number} index
- * @returns {Promise<"rename" | "duplicate" | "remove" | null>}
+ * @param {string} ariaLabel
+ * @param {{ label: string, action: string, danger?: boolean, disabled?: boolean }[]} items
+ * @returns {Promise<string | null>}
  */
-function openCueMenu(anchor, index) {
-  closeCueMenu?.();
+export function openActionMenu(anchor, ariaLabel, items) {
+  closeActionMenu?.();
   closeFaderNameMenu?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
@@ -680,7 +658,30 @@ function openCueMenu(anchor, index) {
       resolve(value);
     };
 
-    const addItem = (label, action, { danger = false, disabled = false } = {}) => {
+    const onDocPointer = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (actionMenu.contains(target) || anchor.contains(target)) return;
+      finish(null);
+    };
+
+    const onDocKeydown = (event) => {
+      if (event.key === "Escape") finish(null);
+    };
+
+    const cleanup = () => {
+      actionMenu.hidden = true;
+      anchor.setAttribute("aria-expanded", "false");
+      if (closeActionMenu === finishNull) closeActionMenu = null;
+      document.removeEventListener("pointerdown", onDocPointer, true);
+      document.removeEventListener("keydown", onDocKeydown, true);
+    };
+
+    const finishNull = () => finish(null);
+    closeActionMenu = finishNull;
+
+    actionMenuList.setAttribute("aria-label", ariaLabel);
+    actionMenuList.replaceChildren(...items.map(({ label, action, danger = false, disabled = false }) => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "menu-item";
@@ -692,62 +693,31 @@ function openCueMenu(anchor, index) {
         event.stopPropagation();
         finish(action);
       });
-      cueMenuList.append(item);
-    };
+      return item;
+    }));
 
-    const onDocPointer = (event) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (cueMenu.contains(target) || anchor.contains(target)) return;
-      finish(null);
-    };
-
-    const onDocKeydown = (event) => {
-      if (event.key === "Escape") finish(null);
-    };
-
-    const cleanup = () => {
-      cueMenu.hidden = true;
-      anchor.setAttribute("aria-expanded", "false");
-      if (closeCueMenu === finishNull) closeCueMenu = null;
-      document.removeEventListener("pointerdown", onDocPointer, true);
-      document.removeEventListener("keydown", onDocKeydown, true);
-    };
-
-    const finishNull = () => finish(null);
-    closeCueMenu = finishNull;
-
-    cueMenuList.replaceChildren();
-    addItem("Rename", "rename");
-    addItem("Duplicate", "duplicate");
-    addItem("Remove", "remove", {
-      danger: true,
-      disabled: state.cueLevels.length <= MIN_CUES,
-    });
-
-    cueMenu.hidden = false;
+    actionMenu.hidden = false;
     anchor.setAttribute("aria-expanded", "true");
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 140;
-    const menuHeight = 128;
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    cueMenu.style.left = `${left}px`;
-    cueMenu.style.top = `${top}px`;
+    placePopup(actionMenu, anchorRect.left, anchorRect.bottom + 6, anchorRect.top);
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);
-  }).then(async (action) => {
-    if (action === "rename") beginInlineRename(index);
-    if (action === "duplicate") duplicateCueAt(index);
-    if (action === "remove") await removeCueAt(index);
-    return action;
   });
+}
+
+/**
+ * @param {HTMLElement} anchor
+ * @param {number} index
+ */
+async function openCueMenu(anchor, index) {
+  const action = await openActionMenu(anchor, "Cue actions", [
+    { label: "Rename", action: "rename" },
+    { label: "Duplicate", action: "duplicate" },
+    { label: "Remove", action: "remove", danger: true, disabled: state.cueLevels.length <= MIN_CUES },
+  ]);
+  if (action === "rename") beginInlineRename(index);
+  if (action === "duplicate") duplicateCueAt(index);
+  if (action === "remove") await removeCueAt(index);
 }

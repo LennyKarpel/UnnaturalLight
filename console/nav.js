@@ -136,9 +136,14 @@ export function wireNavReorder() {
   }
 }
 
+// The open tab is remembered in this browser, so a refresh comes back to it
+// (the page around the console reloads it without its #tab).
+const PAGE_KEY = "unnaturallight.console.page";
+
 export function showPage(name) {
   const page = pages[name] ? name : "songs";
   abortInlineEdits();
+  try { localStorage.setItem(PAGE_KEY, page); } catch { /* storage unavailable */ }
 
   for (const [key, el] of Object.entries(pages)) {
     const active = key === page;
@@ -159,7 +164,13 @@ export function showPage(name) {
   }
 }
 
+/** Show the tab in the address (#set, #patch, …), else the one last open. */
 export function routeFromHash() {
-  const hash = location.hash.replace("#", "");
-  showPage(DEFAULT_NAV_ORDER.includes(hash) ? hash : "songs");
+  let page = location.hash.replace("#", "");
+  if (!DEFAULT_NAV_ORDER.includes(page)) {
+    try { page = localStorage.getItem(PAGE_KEY) ?? ""; } catch { page = ""; }
+    if (!DEFAULT_NAV_ORDER.includes(page)) page = "songs";
+    history.replaceState(null, "", `#${page}`);
+  }
+  showPage(page);
 }

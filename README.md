@@ -283,11 +283,11 @@ The small overlay in the 3D view's top-left corner (the **HUD**) shows the selec
 
 ### Pages
 
-Switch with the tabs along the top (drag them to reorder):
+Switch with the tabs along the top (drag them to reorder). The console reopens on the tab you last had open:
 
 | Page | What it's for |
 |---|---|
-| **Set** | your list of songs: add, rename, reorder; click one to open it |
+| **Set** | your list of songs: add, rename (click the name), reorder (drag **⋮⋮**; a line shows where it will land), and **⋮** to **Duplicate** (a copy, *“… copy”*, right after it) or **Delete** it; click a song to open it |
 | **Songs** | the cues of the open song, GO, and the faders |
 | **Channels** | meters showing every DMX channel's output, and the live cue's faders |
 | **Fixtures** | your lighting fixtures and the DMX channels each one uses |
@@ -527,6 +527,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/state.js` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the page is in the middle of (placing, aiming) |
 | `stage/view3d.js`, `plan.js` | The 3D view and the plan view, with their mouse handling |
 | `stage/sidebar.js` | Fixture list, inspector and key strip |
+| `stage/panel.js` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
 | `stage/actions.js`, `keys.js` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
 | `stage/dialogs.js` | Box size, View settings, Place rig and Place fixture dialogs |
 | `stage/link.js` | Linking stage fixtures to console fixtures and channels, and registering them in the console |

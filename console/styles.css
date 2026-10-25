@@ -143,9 +143,10 @@ body {
 }
 
 .nav {
+  --drop-gap: 0.35rem;
   flex: 0 0 auto;
   display: flex;
-  gap: 0.35rem;
+  gap: var(--drop-gap);
   margin-bottom: 0.85rem;
   border-bottom: 1px solid var(--line);
 }
@@ -174,16 +175,6 @@ body {
 .nav-link.is-dragging {
   opacity: 0.35;
   cursor: grabbing;
-}
-
-.nav-link.is-drop-before {
-  box-shadow: inset 3px 0 0 var(--select);
-  color: var(--select);
-}
-
-.nav-link.is-drop-after {
-  box-shadow: inset -3px 0 0 var(--select);
-  color: var(--select);
 }
 
 .page {
@@ -411,8 +402,9 @@ body {
 }
 
 .fixture-group-body {
+  --drop-gap: 0px;
   display: grid;
-  gap: 0;
+  gap: var(--drop-gap);
 }
 
 .fixture-group-empty {
@@ -458,14 +450,6 @@ body {
 
 .fixture-row.is-dragging {
   opacity: 0.45;
-}
-
-.fixture-row.is-drop-before {
-  box-shadow: inset 0 2px 0 var(--select);
-}
-
-.fixture-row.is-drop-after {
-  box-shadow: inset 0 -2px 0 var(--select);
 }
 
 .fixture-group-body.is-drop-target {
@@ -736,9 +720,11 @@ body {
 }
 
 .song-list {
+  --drop-gap: 0.45rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: var(--drop-gap);
+  padding: 6px 0; /* room for the drop line above the first song and below the last */
 }
 
 .song-row {
@@ -760,14 +746,6 @@ body {
 
 .song-row.is-dragging {
   opacity: 0.45;
-}
-
-.song-row.is-drop-before {
-  box-shadow: inset 0 2px 0 var(--select);
-}
-
-.song-row.is-drop-after {
-  box-shadow: inset 0 -2px 0 var(--select);
 }
 
 .song-drag-handle {
@@ -812,14 +790,6 @@ body {
   align-items: stretch;
 }
 
-.menu-item.is-drop-before {
-  box-shadow: inset 0 2px 0 var(--select);
-}
-
-.menu-item.is-drop-after {
-  box-shadow: inset 0 -2px 0 var(--select);
-}
-
 .fader-row-drag-handle {
   color: var(--muted);
   font-size: var(--text-md);
@@ -836,30 +806,57 @@ body {
   opacity: 0.45;
 }
 
-/* Drop line: centered on the gap above (or, for the last cue, below) the cue. */
-.cues > .fader-row {
+/* Drop line when reordering by drag (cues, songs, fixtures, page tabs): a
+   line centered on the gap before (is-drop-before) or after (is-drop-after)
+   the item, so both marks for one spot look the same. --drop-gap is the
+   list's gap (set with the list); the 2.5px is half the line plus the item's 1px border. */
+.cues > .fader-row,
+.song-row,
+.fixture-row,
+.nav-link {
   position: relative;
 }
 
-.fader-row.is-drop-before::before,
-.fader-row.is-drop-after::after {
+:is(.cues > .fader-row, .song-row, .fixture-row, .nav-link).is-drop-before::before,
+:is(.cues > .fader-row, .song-row, .fixture-row, .nav-link).is-drop-after::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 3px;
   border-radius: 2px;
   background: var(--select);
   pointer-events: none;
-  z-index: 3; /* over the neighboring cue when the gap is thinner than the line */
+  z-index: 3; /* over the neighbor when the gap is thinner than the line */
 }
 
-.fader-row.is-drop-before::before {
-  top: calc(var(--cue-gap) / -2 - 2.5px);
+/* Lists (top to bottom): a horizontal line. */
+:is(.cues > .fader-row, .song-row, .fixture-row).is-drop-before::before,
+:is(.cues > .fader-row, .song-row, .fixture-row).is-drop-after::after {
+  left: 0;
+  right: 0;
+  height: 3px;
 }
 
-.fader-row.is-drop-after::after {
-  bottom: calc(var(--cue-gap) / -2 - 2.5px);
+:is(.cues > .fader-row, .song-row, .fixture-row).is-drop-before::before {
+  top: calc(var(--drop-gap) / -2 - 2.5px);
+}
+
+:is(.cues > .fader-row, .song-row, .fixture-row).is-drop-after::after {
+  bottom: calc(var(--drop-gap) / -2 - 2.5px);
+}
+
+/* Page tabs (left to right): a vertical line (tabs have no side borders). */
+.nav-link.is-drop-before::before,
+.nav-link.is-drop-after::after {
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+}
+
+.nav-link.is-drop-before::before {
+  left: calc(var(--drop-gap) / -2 - 1.5px);
+}
+
+.nav-link.is-drop-after::after {
+  right: calc(var(--drop-gap) / -2 - 1.5px);
 }
 
 .master,
@@ -1341,9 +1338,9 @@ body {
 }
 
 .cues {
-  --cue-gap: 2px;
+  --drop-gap: 2px;
   display: grid;
-  gap: var(--cue-gap);
+  gap: var(--drop-gap);
   padding: 0.65rem 0.45rem 0.85rem;
 }
 

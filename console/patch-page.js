@@ -23,6 +23,7 @@ import {
   countMenuList,
   fixtureGroupMenu,
   fixtureGroupMenuList,
+  placePopup,
 } from "./dom.js";
 import { state } from "./state.js";
 import {
@@ -36,7 +37,7 @@ import {
   confirmClearFaderPatch,
 } from "./faders.js";
 import { closeCuePicker, persistAndRefresh } from "./live.js";
-import { closeChannelsCueMenu, closeCueMenu } from "./cues.js";
+import { closeChannelsCueMenu, closeActionMenu } from "./cues.js";
 
 const CHANNEL_GROUP_SIZE = 32;
 /** Channel-picker groups of 32 across every universe in the set. */
@@ -262,7 +263,7 @@ function pickFixtureGroup({ anchor, current }) {
   closeChannelPicker?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
 
   return new Promise((resolve) => {
@@ -323,18 +324,7 @@ function pickFixtureGroup({ anchor, current }) {
     fixtureGroupMenu.hidden = false;
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 180;
-    const menuHeight = Math.min(320, 48 + (state.fixtureGroups.length + 1) * 36);
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    fixtureGroupMenu.style.left = `${left}px`;
-    fixtureGroupMenu.style.top = `${top}px`;
+    placePopup(fixtureGroupMenu, anchorRect.left, anchorRect.bottom + 6, anchorRect.top);
 
     const currentEl = fixtureGroupMenuList.querySelector(".is-current");
     if (currentEl) currentEl.scrollIntoView({ block: "nearest" });
@@ -354,7 +344,7 @@ function pickCount({ anchor, current }) {
   closeFixtureGroupPicker?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
 
   const clamped = Math.min(
@@ -411,18 +401,7 @@ function pickCount({ anchor, current }) {
     countMenu.hidden = false;
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 100;
-    const menuHeight = 280;
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    countMenu.style.left = `${left}px`;
-    countMenu.style.top = `${top}px`;
+    placePopup(countMenu, anchorRect.left, anchorRect.bottom + 6, anchorRect.top);
 
     const currentEl = countMenuList.querySelector(".is-current");
     if (currentEl) currentEl.scrollIntoView({ block: "nearest" });
@@ -442,7 +421,7 @@ function pickChannel({ anchor, current }) {
   closeFixtureGroupPicker?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
 
   return new Promise((resolve) => {
@@ -596,18 +575,7 @@ function pickChannel({ anchor, current }) {
     channelMenu.hidden = false;
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 320;
-    const menuHeight = 320;
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - menuHeight - 6);
-    }
-    channelMenu.style.left = `${left}px`;
-    channelMenu.style.top = `${top}px`;
+    placePopup(channelMenu, anchorRect.left, anchorRect.bottom + 6, anchorRect.top);
 
     channelMenuFilter.addEventListener("input", onFilterInput);
     channelMenuFilter.addEventListener("keydown", onFilterKeydown);

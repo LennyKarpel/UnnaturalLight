@@ -8,7 +8,7 @@ import { hexFromRgb, rgbFromHex } from "../shared/color.js";
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { formatChannelRange } from "./fixtures.js";
 import { defaultFaderName } from "./set.js";
-import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, pagePatch } from "./dom.js";
+import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, pagePatch, placePopup } from "./dom.js";
 import { persistSession, state } from "./state.js";
 import {
   liveUi,
@@ -24,7 +24,7 @@ import {
   refreshSelectedGroup,
 } from "./live.js";
 import { endInlineSongRename } from "./songs-page.js";
-import { cueUi, closeChannelsCueMenu, renderCues, endInlineRename, closeCueMenu } from "./cues.js";
+import { cueUi, closeChannelsCueMenu, renderCues, endInlineRename, closeActionMenu } from "./cues.js";
 import {
   closeChannelPicker,
   closeCountPicker,
@@ -123,7 +123,7 @@ export function abortInlineEdits() {
   endInlineSongRename?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
@@ -267,7 +267,7 @@ export let closeFaderNameMenu = null;
  */
 function openFaderNameMenu(anchor, index, clientX, clientY) {
   closeFaderNameMenu?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeChannelsCueMenu?.();
   closeCuePicker?.();
   closeChannelPicker?.();
@@ -325,18 +325,8 @@ function openFaderNameMenu(anchor, index, clientX, clientY) {
 
     faderNameMenu.hidden = false;
 
-    const menuWidth = 160;
-    const menuHeight = 84;
-    let left = clientX ?? anchor.getBoundingClientRect().left;
-    let top = clientY ?? anchor.getBoundingClientRect().bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, (clientY ?? anchor.getBoundingClientRect().top) - menuHeight - 6);
-    }
-    faderNameMenu.style.left = `${left}px`;
-    faderNameMenu.style.top = `${top}px`;
+    const anchorRect = anchor.getBoundingClientRect();
+    placePopup(faderNameMenu, clientX ?? anchorRect.left, clientY ?? anchorRect.bottom + 6, clientY ?? anchorRect.top);
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);

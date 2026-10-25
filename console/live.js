@@ -40,6 +40,7 @@ import {
   fadePauseBtn,
   addCueBtn,
   removeCueBtn,
+  placePopup,
 } from "./dom.js";
 import { zeros, getActiveSong, syncPlaybackPair, persistSession, state } from "./state.js";
 import {
@@ -65,7 +66,7 @@ import {
   syncSlidersFromState,
 } from "./faders.js";
 import { syncSongUi } from "./songs-page.js";
-import { cueUi, closeChannelsCueMenu, renderCues, closeCueMenu } from "./cues.js";
+import { cueUi, closeChannelsCueMenu, renderCues, closeActionMenu } from "./cues.js";
 import {
   updateConflictBanner,
   closeChannelPicker,
@@ -358,7 +359,7 @@ export let closeCuePicker = null;
 export function pickCue({ anchor, clientX, clientY }) {
   closeCuePicker?.();
   closeChannelsCueMenu?.();
-  closeCueMenu?.();
+  closeActionMenu?.();
   closeFaderNameMenu?.();
   closeChannelPicker?.();
   closeCountPicker?.();
@@ -418,18 +419,7 @@ export function pickCue({ anchor, clientX, clientY }) {
     cuePicker.hidden = false;
 
     const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = 168;
-    const menuHeight = 280;
-    let left = clientX ?? anchorRect.left;
-    let top = clientY ?? anchorRect.bottom + 6;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - menuWidth - 8);
-    }
-    if (top + menuHeight > window.innerHeight - 8) {
-      top = Math.max(8, (clientY ?? anchorRect.top) - menuHeight - 6);
-    }
-    cuePicker.style.left = `${left}px`;
-    cuePicker.style.top = `${top}px`;
+    placePopup(cuePicker, clientX ?? anchorRect.left, clientY ?? anchorRect.bottom + 6, clientY ?? anchorRect.top);
 
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onDocKeydown, true);
