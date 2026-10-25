@@ -6,7 +6,7 @@ import {
   normalizeRig,
   consoleTypeFromKey,
 } from "./stage-model.js";
-import { clamp } from "../shared/numbers.js";
+import { clamp, numberFrom } from "../shared/numbers.js";
 import { state, save, ui } from "./state.js";
 import { updateSurfaces, updateBox } from "./view3d.js";
 import { changed, setPlacing } from "./actions.js";
@@ -28,8 +28,8 @@ const boxInputs = { w: document.getElementById("boxW"), d: document.getElementBy
 export function syncBoxInputs() { for (const k in boxInputs) boxInputs[k].value = String(state.box[k]); }
 for (const [k, el] of Object.entries(boxInputs)) {
   el.addEventListener("input", () => {
-    const v = Number(el.value);
-    if (!Number.isFinite(v) || v < 1) return;
+    const v = numberFrom(el.value);
+    if (v == null || v < 1) return;
     state.box[k] = clamp(v, 1, 100);
     updateBox();
     changed();

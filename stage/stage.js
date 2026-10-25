@@ -10,7 +10,7 @@ import { inspectorEl, renderInspector } from "./sidebar.js";
 import { changed } from "./actions.js";
 import "./keys.js";
 import { syncBoxInputs } from "./dialogs.js";
-import { consoleLink, consoleFixtureById, othersRegistering } from "./link.js";
+import { consoleLink, consoleFixtureById, leaveToOtherWindow } from "./link.js";
 
 // ---------------------------------------------------------------------
 // Other app windows, and the show server
@@ -34,7 +34,7 @@ function takeStage(data) {
     if (was) {
       for (const { attr } of linkChannels(fixture)) if (fixture.dmx[attr] !== was.dmx[attr]) setDmx(fixture, attr, was.dmx[attr]);
     } else if (fixture.link.register) {
-      othersRegistering.add(fixture.id);
+      leaveToOtherWindow(fixture.id);
     }
   }
   state.selected = selected.filter((id) => byId(id));

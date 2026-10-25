@@ -15,7 +15,7 @@ import { createConsoleLink } from "./console-link.js";
 import { createFixturePicker } from "./fixture-library.js";
 import { DMX_ATTRS, DMX_LABELS } from "../shared/attributes.js";
 import { escapeHtml } from "../shared/html.js";
-import { clampByte } from "../shared/numbers.js";
+import { clampByte, numberFrom } from "../shared/numbers.js";
 import { COLOR_ROLES } from "../shared/color.js";
 import { formatAddress, parseAddress, MAX_UNIVERSES } from "../shared/address.js";
 import { state, save, byId, selectedFixtures, rigOf, rigMembers, commonRig } from "./state.js";
@@ -293,8 +293,9 @@ function syncOtherChannels(fixture) {
       </div>`).join("")}`;
     box.querySelectorAll("[data-oc]").forEach((el) => {
       el.addEventListener("input", () => {
-        if (el.value.trim() === "") return; // emptied mid-edit, not 0
-        const v = clampByte(el.value);
+        const n = numberFrom(el.value);
+        if (n == null) return;
+        const v = clampByte(n);
         consoleLink.setChannel(Number(el.dataset.oc), v);
         box.querySelectorAll(`[data-oc="${el.dataset.oc}"]`).forEach((other) => { if (other !== el) other.value = String(v); });
       });
@@ -407,15 +408,24 @@ export function libraryPickerFor(select, container) {
 
 /** Fixtures asked for but not answered yet (the console answers right after this update). */
 const registering = new Set();
-/** Fixtures another stage window placed and is registering (its job, not ours). */
-export const othersRegistering = new Set();
+/** Fixtures another app window placed and is registering (stage id → when this window takes over). */
+const othersRegistering = new Map();
+/** How long another window gets to register a fixture it placed (if it closed first, this one does it). */
+const TAKE_OVER_MS = 5000;
+
+/** A fixture another window placed arrived still waiting to register: leave it to that window, for now. */
+export function leaveToOtherWindow(id) {
+  othersRegistering.set(id, Date.now() + TAKE_OVER_MS);
+  setTimeout(requestRegistrations, TAKE_OVER_MS + 50);
+}
 
 export function requestRegistrations() {
   if (!consoleLink.live) return;
   const requests = [];
   for (const fixture of state.fixtures) {
     const t = fixture.link.register;
-    if (!t || registering.has(fixture.id) || othersRegistering.has(fixture.id)) continue;
+    if (!t || registering.has(fixture.id) || Date.now() < (othersRegistering.get(fixture.id) ?? 0)) continue;
+    othersRegistering.delete(fixture.id);
     const layout = registerLayout(fixture.link, t);
     requests.push({
       stageId: fixture.id,

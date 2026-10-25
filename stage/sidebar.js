@@ -10,7 +10,7 @@ import {
   setColorHex,
   deriveFromDmx,
 } from "./stage-model.js";
-import { clamp } from "../shared/numbers.js";
+import { clamp, numberFrom } from "../shared/numbers.js";
 import { applyCollapsed } from "./panel.js";
 import { DMX_LABELS, DMX_SHORT } from "../shared/attributes.js";
 import { escapeHtml } from "../shared/html.js";
@@ -212,10 +212,8 @@ function getField(fixture, k) {
 function setField(fixture, k, raw) {
   if (k === "name") { fixture.name = raw; return; }
   if (k === "color") { setColorHex(fixture, raw); return; }
-  // An emptied field (mid-edit) isn't 0: leave the value as it was.
-  if (String(raw).trim() === "") return;
-  const v = Number(raw);
-  if (!Number.isFinite(v)) return;
+  const v = numberFrom(raw);
+  if (v == null) return;
   // Ranges change what the same 0–255 values mean, so re-derive afterwards.
   if (k === "panLimit") { fixture.panLimit = clamp(v, 0, 360); deriveFromDmx(fixture); }
   else if (k === "tiltLimit") { fixture.tiltLimit = clamp(v, 0, 180); deriveFromDmx(fixture); }
@@ -253,8 +251,8 @@ function bindInspector() {
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     el.addEventListener("input", () => {
       const fixture = selectedFixtures()[0];
-      const v = Number(el.value);
-      if (!fixture || el.value === "" || !Number.isFinite(v)) return;
+      const v = numberFrom(el.value);
+      if (!fixture || v == null) return;
       setDmx(fixture, el.dataset.d, v);
       changed();
     });
@@ -267,8 +265,8 @@ function bindInspector() {
         changed();
         return;
       }
-      const v = Number(el.value);
-      if (el.value === "" || !Number.isFinite(v)) return;
+      const v = numberFrom(el.value);
+      if (v == null) return;
       for (const fixture of selectedFixtures()) setDmx(fixture, el.dataset.multi, v);
       changed();
     });

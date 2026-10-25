@@ -666,7 +666,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
   | `select` | which fixtures are selected, so the console highlights them |
 
 - **Hello.** Whichever side starts second gets the other's state at once: the stage's `hello` gets the console's levels, the console's `hello` gets the stage's layouts.
-- **Registering once.** A fixture another window placed (it arrives with the stage from the server, still waiting to register) is left to that window, so it isn't registered twice.
+- **Registering once.** A fixture another window placed (it arrives with the stage from the server, still waiting to register) is left to that window, so it isn't registered twice. If that window closes first, this one registers it after 5 s.
 - **Smooth drawing.** A value just sent from the stage wins over the console's updates for 0.6 s (e.g. an older copy from the server), so dragging doesn't jitter. The stage redraws only when something changed, and not at all while it's hidden, because it shares the page's one thread with the console.
 
 #### Message reference (WebSocket `/ws`)

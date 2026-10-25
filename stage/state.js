@@ -16,7 +16,7 @@ import {
   zoomFromBeam,
   applyFixture,
 } from "./stage-model.js";
-import { clamp } from "../shared/numbers.js";
+import { clamp, numberFrom } from "../shared/numbers.js";
 import { COLOR_ROLES, rgbFromHex } from "../shared/color.js";
 import { PLACE_OFFSET } from "./view3d.js";
 import { renderInspector } from "./sidebar.js";
@@ -196,10 +196,8 @@ export function setRigField(rig, k, raw) {
     rigMembers(rig).forEach((m, i) => { m.name = `${raw} · ${i + 1}`; });
     return;
   }
-  // An emptied field (mid-edit) isn't 0: leave the value as it was.
-  if (String(raw).trim() === "") return;
-  const v = Number(raw);
-  if (!Number.isFinite(v)) return;
+  const v = numberFrom(raw);
+  if (v == null) return;
   if (k === "count") setRigCount(rig, v);
   else if (k === "size") rig.size = clamp(v, 0.5, 50);
   else if (k === "tilt") rig.tilt = clamp(v, -90, 90);

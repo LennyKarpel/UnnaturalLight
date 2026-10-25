@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { normalizeProfile } from "./fixture-library.js";
-import { clamp, clampByte } from "../shared/numbers.js";
+import { clamp, clampByte, numberFrom } from "../shared/numbers.js";
 import { COLOR_ROLES, colorFromLevels, levelsFromColor, rgbFromHex } from "../shared/color.js";
 import { newId } from "../shared/ids.js";
 import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
@@ -346,7 +346,7 @@ export function applyFixture(fixture, p) {
 }
 
 export function normalizeFixture(raw, i) {
-  const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
+  const num = (v, fb) => numberFrom(v) ?? fb;
   const b = raw.base || {};
   const panLimit = clamp(num(raw.panLimit, 270), 0, 360);
   const tiltLimit = clamp(num(raw.tiltLimit, 135), 0, 180);
@@ -506,7 +506,7 @@ export function rigLowestY(rig) {
 
 export function normalizeRig(raw, i) {
   // Missing or empty (a cleared dialog field) → the default.
-  const num = (v, fb) => (v != null && String(v).trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : fb);
+  const num = (v, fb) => numberFrom(v) ?? fb;
   const type = RIG_TYPES[raw?.type] ? raw.type : "circle";
   const d = RIG_TYPES[type].defaults;
   return {

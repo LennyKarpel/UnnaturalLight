@@ -8,6 +8,7 @@
 import { DMX_ATTRS, DMX_LABELS as LABEL } from "../shared/attributes.js";
 import { COLOR_ROLES } from "../shared/color.js";
 import { escapeHtml as esc } from "../shared/html.js";
+import { numberFrom } from "../shared/numbers.js";
 /** Console fixtures are capped at this many channels. */
 import { MAX_FIXTURE_CHANNELS } from "../console/fixtures.js";
 
@@ -222,7 +223,7 @@ function upgradeColorAttrs(channels) {
 /** A quick check of a saved profile; null if it doesn't look right. */
 export function normalizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.channels) || !raw.channels.length) return null;
-  const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
+  const num = numberFrom;
   return {
     manufacturer: String(raw.manufacturer ?? ""),
     model: String(raw.model ?? "Fixture"),
