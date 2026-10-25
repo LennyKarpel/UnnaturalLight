@@ -55,6 +55,9 @@ body {
   z-index: 10;
   min-width: 140px;
 }
+.output-menu { min-width: 260px; max-height: calc(100vh - var(--bar) - 16px); overflow-y: auto; }
+.menu-label { padding: 4px 8px 2px; color: var(--muted); font-size: var(--text-xs); }
+.menu-item:disabled { color: var(--muted); cursor: default; background: none; }
 
 /* Console status message, then the show and DMX buttons. */
 .status {

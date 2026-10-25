@@ -3,7 +3,8 @@
 //   - serves the console / stage pages (no caching, so a reload always picks up changes)
 //   - holds the show (server/show.js): every console is a remote view of it
 //   - keeps the stage (the 3D layout) with the show, for every stage page
-//   - runs timed fades and sends DMX to the Enttec DMX USB Pro(s) (server/dmx.js),
+//   - runs timed fades and sends DMX to the Enttec DMX USB Pro(s) (server/dmx.js)
+//     and to Art-Net / sACN nodes (server/net-dmx.js),
 //     so closing or backgrounding a browser tab never affects the lights
 //   - saves the show to server/data/session.json
 //
@@ -26,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { MAX_UNIVERSES } from "../console/patch.js";
 import { createDmx } from "./dmx.js";
+import { createNetDmx } from "./net-dmx.js";
 import { createShow } from "./show.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -86,8 +88,15 @@ const dmx = createDmx({
   dataDir: DATA_DIR,
   maxUniverses: MAX_UNIVERSES,
   fake: flag("--fake-dmx"),
-  onChange: () => broadcast({ type: "dmx", outputs: dmx.status() }),
+  onChange: () => broadcast({ type: "dmx", outputs: outputStatus() }),
 });
+const netDmx = createNetDmx({
+  dataDir: DATA_DIR,
+  maxUniverses: MAX_UNIVERSES,
+  onChange: () => broadcast({ type: "dmx", outputs: outputStatus() }),
+});
+/** Each universe's outputs: its DMX USB Pro, plus `network` ("Art-Net 0 → 192.168.1.50" or null). */
+const outputStatus = () => dmx.status().map((s) => ({ ...s, network: netDmx.label(s.universe) }));
 
 // --- WebSocket clients -------------------------------------------------------
 
@@ -176,6 +185,21 @@ async function onMessage(ws, client, msg) {
         reply({ ok: false, error: err.message });
       }
       return;
+    case "net-set":
+      try {
+        netDmx.set(msg.universe, msg.output ?? null);
+        reply({ ok: true });
+      } catch (err) {
+        reply({ ok: false, error: err.message });
+      }
+      return;
+    case "net-discover":
+      try {
+        reply({ ok: true, nodes: await netDmx.discover() });
+      } catch (err) {
+        reply({ ok: false, error: err.message });
+      }
+      return;
     default:
   }
 }
@@ -230,7 +254,7 @@ wss.on("connection", (ws, req) => {
   clients.set(ws, client);
   ws.send(JSON.stringify(role === "stage"
     ? { type: "hello", stage }
-    : { type: "hello", seq: nextSeq(), clientId: client.id, show: show.serialized(), live: show.live(), outputs: dmx.status() }));
+    : { type: "hello", seq: nextSeq(), clientId: client.id, show: show.serialized(), live: show.live(), outputs: outputStatus() }));
   ws.on("message", (data) => {
     let msg;
     try {
@@ -256,7 +280,9 @@ setInterval(() => {
     else sendLive();
     if (step.arrived != null) scheduleSave();
   }
-  dmx.write(show.levels(), show.universes);
+  const levels = show.levels();
+  dmx.write(levels, show.universes);
+  netDmx.write(levels, show.universes);
 }, FRAME_MS);
 
 // --- start / stop ------------------------------------------------------------
@@ -274,6 +300,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   console.log(`    directory : ${ROOT}`);
   console.log(`    show file : ${path.relative(ROOT, SESSION_FILE)}${show.hasShow ? "" : " (none yet: the first console provides it)"}`);
   console.log(`    DMX       : ${flag("--fake-dmx") ? "fake output (--fake-dmx)" : "Enttec DMX USB Pro via USB"}`);
+  for (const line of netDmx.describe()) console.log(`    network   : ${line}`);
   console.log(`    this Mac  : ${local}`);
   if (LAN) {
     for (const ip of lanAddresses()) console.log(`    remote    : http://${ip}:${PORT}/index.html?token=${TOKEN}`);
@@ -287,7 +314,8 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
 function stop(signal) {
   console.log(`\n==> ${signal}: saving the show and stopping…`);
   saveNow();
-  process.exit(0);
+  netDmx.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 500).unref();
 }
 process.on("SIGINT", () => stop("SIGINT"));
 process.on("SIGTERM", () => stop("SIGTERM"));

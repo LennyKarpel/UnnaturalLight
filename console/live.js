@@ -74,10 +74,23 @@ import {
   closeFixtureGroupPicker,
 } from "./patch-page.js";
 
-/** One DMX USB Pro per universe, plugged into the show server's machine (index 0 = universe 1). */
+/**
+ * Each universe's outputs from the show server (index 0 = universe 1): a DMX
+ * USB Pro plugged into its machine, and / or an Art-Net or sACN node.
+ */
 export const outputs = Array.from({ length: MAX_UNIVERSES }, (_, i) => ({
+  /** The DMX USB Pro is connected. */
   get connected() {
     return state.outputStatus[i]?.connected ?? false;
+  },
+  /** The network output ("Art-Net 0 → 192.168.1.50"), or null. */
+  get network() {
+    return state.outputStatus[i]?.network ?? null;
+  },
+  /** @param {{ protocol: "artnet" | "sacn", netUniverse?: number, host?: string } | null} output null stops it */
+  async setNetwork(output) {
+    const reply = await state.serverLink.request({ type: "net-set", universe: i + 1, output });
+    if (!reply.ok) throw new Error(reply.error ?? "Couldn't set the network output");
   },
   async connect() {
     const reply = await state.serverLink.request({ type: "dmx-connect", universe: i + 1 });

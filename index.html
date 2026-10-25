@@ -32,7 +32,7 @@
           <button type="button" id="loadBtn">Load show</button>
           <input id="loadFile" type="file" accept="application/json,.json" hidden />
           <span class="sep"></span>
-          <select id="universeCount" title="Universes in this show (one DMX USB Pro each)"></select>
+          <select id="universeCount" title="Universes in this show (each goes to a DMX USB Pro or a network node)"></select>
           <span id="outputBtns" class="show-controls"></span>
           <span id="serverPill" class="pill" title="Not connected to the show server">Server · offline</span>
           <span class="sep"></span>
@@ -54,6 +54,7 @@
     <div id="showMenu" class="menu" role="menu" aria-label="Show actions" hidden>
       <button type="button" class="menu-item" role="menuitem" data-act="rename">Rename</button>
     </div>
+    <div id="outputMenu" class="menu output-menu" role="menu" aria-label="DMX output" hidden></div>
 
     <script type="module" src="page/page.js"></script>
   </body>

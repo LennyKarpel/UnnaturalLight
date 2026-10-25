@@ -69,7 +69,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 6. **Point it somewhere:** press `T` and click a spot on the floor; the fixture swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
-9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the page header (top bar).
+9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh`, click **Connect DMX** in the page header (top bar) and choose **DMX USB Pro**, or pick an Art-Net node from the same menu (see [Network DMX](#network-dmx-art-net--sacn)).
 10. **Save:** everything autosaves on the show server. To keep a file, use **Save show** in the page header: it holds the whole show, console and stage.
 
 ---
@@ -89,7 +89,7 @@ The page shows the Stage on the left and the Console on the right. The switch at
 - The page remembers your choice, the split and the sides.
 - Cues keep fading and DMX keeps flowing in every view: both run on the show server.
 - Keyboard shortcuts go to whichever side you last clicked in.
-- **The page header** (top bar) holds the console's show controls, in every view: the show's name (click it, or **⋮ → Rename**, to rename it), **New show**, **Save show**, **Load show**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
+- **The page header** (top bar) holds the console's show controls, in every view: the show's name (click it, or **⋮ → Rename**, to rename it), **New show**, **Save show**, **Load show**, the universe count and the **DMX output** button(s), the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
 
 The console and the stage only open inside this page (going to `console/console.html` or `stage/stage.html` directly brings you here).
 
@@ -341,7 +341,7 @@ The Patch page connects **faders to DMX channels**. A fader can drive several ch
 
 ### Connecting to your fixtures
 
-Plug your Enttec DMX USB Pro into the computer running the show server and click **Connect DMX Pro** in the page header; the server finds it. The status message in the header shows when it's connected. The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **Disconnect** makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
+Plug your Enttec DMX USB Pro into the computer running the show server, click **Connect DMX** in the page header and choose **DMX USB Pro**; the server finds it. The button turns green and reads **DMX · USB**, and the status message in the header shows when it's connected. (For a network node instead, see [Network DMX](#network-dmx-art-net--sacn).) The server remembers the device: after a restart, or if it's unplugged and plugged back in, it reconnects by itself. **DMX USB Pro → Disconnect** in the same menu makes it forget. (For more than one universe, see [Multiple universes](#7-multiple-universes).)
 
 ---
 
@@ -398,7 +398,7 @@ The card updates live. ⌥-click something else to trace that; `Esc` or ✕ clos
 A DMX **universe** is 512 channels sent down one cable by one interface. For bigger rigs:
 
 1. In the page header, change **1 universe** to the number you need (up to 8). It's saved with the show.
-2. Each universe gets its own button, **U1, U2, …**. Plug in one Enttec DMX USB Pro per universe and click its button to connect it; it turns green when connected. Connect them one at a time: each button takes a device not already on another universe, and remembers it (by serial number) from then on.
+2. Each universe gets its own button, **U1, U2, …**, which opens that universe's output menu; it turns green when the universe has an output. For USB, plug in one Enttec DMX USB Pro per universe and choose **DMX USB Pro** in each button's menu, one at a time: each takes a device not already on another universe, and remembers it (by serial number) from then on. Or send the universe to a network node.
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
 
@@ -406,7 +406,43 @@ With several universes, channel numbers are shown and typed as **universe/channe
 - A fixture always fits inside one universe.
 - On the Channels page, a switch picks which universe the meters show.
 - You can't reduce the number of universes while something is using the ones that would go; move or remove it first.
-- Only USB interfaces are supported (network DMX such as Art-Net / sACN isn't).
+- Universes can also go out over the network as Art-Net or sACN; see [Network DMX (Art-Net / sACN)](#network-dmx-art-net--sacn).
+
+### Network DMX (Art-Net / sACN)
+
+Instead of (or as well as) a DMX USB Pro, the server can send any universe over Ethernet to an **Art-Net** or **sACN** (E1.31) node, or to a fixture with a network port. The node goes on the same network as the computer running the show server.
+
+Click the universe's DMX button in the page header (**Connect DMX**, or **U1**, **U2**, …). Its menu:
+
+- **Art-Net nodes found**: the server searches the network each time the menu opens (Art-Net "ArtPoll"; many sACN devices answer it too). Each node's DMX outputs are listed with the Art-Net universe they're set to listen on; pick one to send this universe straight to it. **Search again** repeats the search.
+- **Art-Net broadcast**: send to every node on the network, as Art-Net universe *U − 1* (Art-Net counts from 0).
+- **sACN multicast**: send as sACN universe *U*, to that universe's multicast address (nodes listening to it pick it up).
+- **Stop …**: stop the network output. An sACN output tells the receivers it's gone (as it does when the server stops), so a backup console takes over at once.
+
+The button turns green and shows the output (**DMX · Art-Net**, **DMX · USB + sACN**, …; hover for the details). A universe has at most one network output, and can also have a DMX USB Pro. The choice is kept in `server/data/network.json`, which can also be edited by hand (restart the server after):
+
+```json
+{
+  "interface": "192.168.1.10",
+  "outputs": [
+    { "universe": 1, "protocol": "artnet", "host": "192.168.1.50" },
+    { "universe": 2, "protocol": "sacn" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `universe` | the console's universe (1, 2, …) |
+| `protocol` | `"artnet"` or `"sacn"` |
+| `netUniverse` | universe number on the network (optional). Default: one less for Art-Net, which counts from 0 (U1 → Art-Net 0); the same for sACN (U1 → sACN 1) |
+| `host` | the node's IP address (optional). Default: broadcast for Art-Net, the universe's multicast address for sACN |
+| `priority` | sACN only, 0–200 (optional, default 100) |
+| `interface` | this computer's IP on the lighting network (optional; picks the network card for broadcast / multicast) |
+
+The terminal lists each network output at start (`network : U1: Art-Net 0 → 192.168.1.50`). A frame is sent when it changes and at least once a second otherwise. On Wi-Fi, or with a switch that handles multicast badly, pick a node from the list (or give each output a `host`) so it's sent to that node only.
+
+If no nodes are found: check the node and this computer are on the same network (and subnet), and that the Mac's firewall lets `node` receive connections. If another lighting program on this computer has the Art-Net port (6454), the menu says the search can't run; Art-Net broadcast, sACN and outputs set by hand still work.
 
 ---
 
@@ -473,7 +509,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | Problem | Try |
 |---|---|
 | The console says **Connecting to the show server…** | Start `./server.sh` (or check it's still running in its terminal). The console reconnects by itself. |
-| **Connect DMX Pro** is grayed out | The console isn't connected to the show server (see above). |
+| **Connect DMX** is grayed out | The console isn't connected to the show server (see above). |
 | **No DMX USB Pro found** | Plug it into the computer running the server, check the USB cable, close other software using it, unplug and replug. |
 | Another computer can't open the console | Start the server with `--lan` and use the full address it prints, including `?token=…`. The token changes each time the server starts. |
 | The fixture library won't load | Check your internet connection. Generic console types still work. |
@@ -517,12 +553,13 @@ The console and the stage are one app: anything both use (and the page header, o
 | Path | What's in it |
 |---|---|
 | `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider, and the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`) |
-| `page/page.js`, `page.css` | The combined page's header, panes and show menu, and its styles |
+| `page/page.js`, `page.css` | The combined page's header, panes, show menu and DMX output menu, and their styles |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
 | `server/show.js` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
-| `server/data/` | `session.json` (the show, with the stage under `stage`) and `dmx.json` (which device is on which universe); not in git |
+| `server/net-dmx.js` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
+| `server/data/` | `session.json` (the show, with the stage under `stage`), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
 | `console/console.html`, `styles.css` | Console page and styles |
 | `console/app.js` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
 | `console/state.js` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
@@ -646,8 +683,8 @@ Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F
 | `show` | `seq`, `show`, `live` | another console changed the show's structure, or seeded an empty server; also to every console when GO arrives on the next set song |
 | `live` | `seq`, `live` | every fade step; another console moved a live value; flash / blackout holds changed (also when a console disconnects while holding some) |
 | `levels` | `seq`, `cells`: `[cueId, fader, level]` triples (level 0–255) | another console dragged faders |
-| `dmx` | `seq`, `outputs` | a DMX USB Pro connected, disconnected or failed |
-| `reply` | `id` (the request's), `ok`, `error` (when not ok), `stage` (for `get-stage`: the stage or `null`) | answer to a request (no `seq`) |
+| `dmx` | `seq`, `outputs` | a DMX USB Pro connected, disconnected or failed; a network output set or stopped |
+| `reply` | `id` (the request's), `ok`, `error` (when not ok), `stage` (for `get-stage`: the stage or `null`), `nodes` (for `net-discover`) | answer to a request (no `seq`) |
 
 **Console → show server**
 
@@ -661,7 +698,9 @@ Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F
 | `go` / `pause` / `stop` | none | GO (fade from the selected cue to UP NEXT); pause / resume the running fade; stop it (a hand move on the crossfade, picking a cue or song, a new or loaded show) |
 | `stage` | `stage` (the [stage object](#other-details)) | a show file with a stage was loaded: the server keeps it and passes it to the stage pages |
 | `get-stage` | `id` | **Save show**: asks for the stage to put in the file |
-| `dmx-connect` / `dmx-disconnect` | `id`, `universe` (1–8) | **Connect DMX Pro** / **Disconnect** |
+| `dmx-connect` / `dmx-disconnect` | `id`, `universe` (1–8) | **DMX USB Pro → Connect / Disconnect** |
+| `net-set` | `id`, `universe`, `output`: `{ protocol: "artnet" \| "sacn", netUniverse?, host?, priority? }` or `null` to stop | a network output picked or stopped in the DMX menu |
+| `net-discover` | `id` | the DMX menu opened or **Search again**: the reply's `nodes` is `[{ ip, name, ports: [{ port, netUniverse }] }]` (Art-Net output ports, after ~1.5 s) |
 
 Requests (those with `id`, a number the console picks) are answered with a `reply` carrying the same `id`. While the console isn't connected they resolve at once with `{ ok: false, error }`.
 
@@ -713,11 +752,11 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 
 ##### DMX status
 
-`outputs` is one entry per universe: `{ universe, connected, remembered, path, error }`. `remembered` is true when the universe has a device it reconnects to; `path` is the device's serial port, and `error` is the last failure, if any.
+`outputs` is one entry per universe: `{ universe, connected, remembered, path, error, network }`. `connected` … `error` are its DMX USB Pro: `remembered` is true when the universe has a device it reconnects to; `path` is the device's serial port, and `error` is the last failure, if any. `network` is its Art-Net / sACN output as text (`"Art-Net 0 → 192.168.1.50"`, `"sACN 2 (multicast)"`), or `null`.
 
 #### DMX output
 
-Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved, and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.js`). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
+Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved, and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.js`) and its network output (`server/net-dmx.js`; a packet only when the frame changed, or after 1 s). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
 
 #### Other computers
 

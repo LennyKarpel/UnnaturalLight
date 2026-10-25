@@ -13,7 +13,7 @@ const ENTTEC_START = 0x7e;
 const ENTTEC_END = 0xe7;
 const LABEL_SEND_DMX = 0x06;
 const BAUD = 57600;
-const CHANNEL_COUNT = 512;
+export const CHANNEL_COUNT = 512;
 /** How often missing remembered devices are looked for. */
 const RESCAN_MS = 2000;
 
@@ -29,6 +29,20 @@ async function listDevices() {
   return ports
     .filter((p) => VENDOR_IDS.has((p.vendorId ?? "").toLowerCase()) || /enttec/i.test(p.manufacturer ?? ""))
     .map((p) => ({ path: calloutPath(p.path), serial: p.serialNumber ?? p.path, manufacturer: p.manufacturer ?? "" }));
+}
+
+/**
+ * Split continuous channel levels into one 512-channel frame per universe
+ * (also used by the network output, server/net-dmx.js).
+ * @param {Uint8Array[]} frames
+ * @param {Map<number, number>} byChannel continuous channel numbers (513 = universe 2/1)
+ */
+export function fillFrames(frames, byChannel, universeCount) {
+  for (const f of frames) f.fill(0);
+  for (const [channel, level] of byChannel) {
+    const n = Math.floor((channel - 1) / CHANNEL_COUNT) + 1;
+    if (n <= universeCount && n <= frames.length) frames[n - 1][(channel - 1) % CHANNEL_COUNT] = level;
+  }
 }
 
 class Universe {
@@ -215,11 +229,7 @@ export function createDmx({ dataDir, maxUniverses, fake = false, onChange }) {
     disconnect,
     /** @param {Map<number, number>} byChannel continuous channel numbers (513 = universe 2/1) */
     write(byChannel, universeCount) {
-      for (const u of universes) u.frame.fill(0);
-      for (const [channel, level] of byChannel) {
-        const n = Math.floor((channel - 1) / CHANNEL_COUNT) + 1;
-        if (n <= universeCount) universes[n - 1].frame[(channel - 1) % CHANNEL_COUNT] = level;
-      }
+      fillFrames(universes.map((u) => u.frame), byChannel, universeCount);
       for (const u of universes) u.send();
     },
     status() {

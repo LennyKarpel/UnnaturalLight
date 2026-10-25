@@ -120,26 +120,146 @@ function render() {
   }
   universeCount.value = String(st.universes);
 
-  // One universe: Connect DMX Pro / Disconnect. Several: a button per universe.
+  // One universe: one DMX button. Several: a button per universe. Each opens its output menu.
   const key = JSON.stringify([st.outputs, st.serverLive]);
   if (key === outputsKey) return;
   outputsKey = key;
-  outputBtns.replaceChildren(...st.outputs.map((connected, i) => {
+  outputBtns.replaceChildren(...st.outputs.map(({ usb, network }, i) => {
     const u = i + 1;
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.classList.toggle("connected", connected);
+    btn.classList.toggle("connected", usb || network != null);
     btn.disabled = !st.serverLive;
-    if (st.outputs.length === 1) {
-      btn.textContent = connected ? "Disconnect" : "Connect DMX Pro";
-      btn.title = "The DMX USB Pro plugs into the machine running the show server";
-    } else {
-      btn.textContent = `U${u}`;
-      btn.title = connected ? `Universe ${u}: connected (click to disconnect)` : `Universe ${u}: connect its DMX USB Pro`;
-    }
-    btn.addEventListener("click", () => header?.toggleOutput(u));
+    btn.setAttribute("aria-haspopup", "menu");
+    const kinds = [usb && "USB", network?.split(" ")[0]].filter(Boolean);
+    btn.textContent = st.outputs.length > 1 ? `U${u}` : kinds.length ? `DMX · ${kinds.join(" + ")}` : "Connect DMX";
+    const sends = [usb && "DMX USB Pro", network].filter(Boolean);
+    btn.title = `${st.outputs.length > 1 ? `Universe ${u}` : "DMX"}: ${sends.length ? sends.join(" + ") : "no output"} (click to choose)`;
+    btn.addEventListener("click", () => toggleOutputMenu(u, btn));
     return btn;
   }));
+  if (!outputMenu.hidden) {
+    if (!st.serverLive || menuUniverse > st.outputs.length) closeOutputMenu();
+    else renderOutputMenu();
+  }
+}
+
+// ---------------------------------------------------------------
+// DMX output menu (one universe): its DMX USB Pro, or an Art-Net /
+// sACN output, picked from the nodes the show server finds.
+// ---------------------------------------------------------------
+const outputMenu = $("outputMenu");
+/** The universe the menu is open for (0 = closed). */
+let menuUniverse = 0;
+/** Last search: [{ ip, name, ports: [{ port, netUniverse }] }], or null before the first. */
+let nodes = null;
+let searching = false;
+let searchError = "";
+
+/** The label the server gives an output (server/net-dmx.js label()), to mark the current one. */
+const networkLabel = (protocol, netUniverse, host) =>
+  `${protocol === "artnet" ? "Art-Net" : "sACN"} ${netUniverse} ${host ? `→ ${host}` : protocol === "artnet" ? "(broadcast)" : "(multicast)"}`;
+
+function menuItem(text, hint, onClick, { current = false, danger = false, disabled = false } = {}) {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "menu-item";
+  item.setAttribute("role", "menuitem");
+  item.classList.toggle("is-current", current);
+  item.classList.toggle("danger", danger);
+  item.disabled = disabled;
+  const label = document.createElement("span");
+  label.textContent = text;
+  item.append(label);
+  if (hint) {
+    const k = document.createElement("kbd");
+    k.textContent = hint;
+    item.append(k);
+  }
+  item.addEventListener("click", onClick);
+  return item;
+}
+
+function menuLabel(text) {
+  const el = document.createElement("div");
+  el.className = "menu-label";
+  el.textContent = text;
+  return el;
+}
+
+function renderOutputMenu() {
+  const st = header.state();
+  const u = menuUniverse;
+  const { usb, network } = st.outputs[u - 1];
+  const pick = (output) => () => {
+    closeOutputMenu();
+    header.setNetworkOutput(u, output);
+  };
+  const title = document.createElement("div");
+  title.className = "menu-title";
+  title.textContent = st.outputs.length > 1 ? `Universe ${u} output` : "DMX output";
+  const items = [
+    title,
+    menuItem("DMX USB Pro", usb ? "Disconnect" : "Connect", () => {
+      closeOutputMenu();
+      header.toggleOutput(u);
+    }, { current: usb }),
+    document.createElement("hr"),
+    menuLabel("Art-Net nodes found"),
+  ];
+  if (searchError) items.push(menuItem(searchError, "", () => {}, { disabled: true }));
+  else if (!nodes) items.push(menuItem("Searching…", "", () => {}, { disabled: true }));
+  else if (!nodes.length) items.push(menuItem(searching ? "Searching…" : "None found", "", () => {}, { disabled: true }));
+  for (const node of nodes ?? []) {
+    for (const { port, netUniverse } of node.ports) {
+      const name = node.ports.length > 1 ? `${node.name} · port ${port}` : node.name;
+      const label = networkLabel("artnet", netUniverse, node.ip);
+      items.push(menuItem(name, `Art-Net ${netUniverse} · ${node.ip}`, pick({ protocol: "artnet", host: node.ip, netUniverse }), { current: network === label }));
+    }
+  }
+  items.push(
+    menuItem(searching ? "Searching…" : "Search again", "", () => void search(), { disabled: searching }),
+    document.createElement("hr"),
+    menuItem("Art-Net broadcast", `Art-Net ${u - 1}`, pick({ protocol: "artnet" }), { current: network === networkLabel("artnet", u - 1) }),
+    menuItem("sACN multicast", `sACN ${u}`, pick({ protocol: "sacn" }), { current: network === networkLabel("sacn", u) }),
+  );
+  if (network) items.push(menuItem(`Stop ${network}`, "", pick(null), { danger: true }));
+  outputMenu.replaceChildren(...items);
+}
+
+/** Ask the show server for the Art-Net nodes on its network. */
+async function search() {
+  if (searching || !header) return;
+  searching = true;
+  searchError = "";
+  if (menuUniverse) renderOutputMenu();
+  try {
+    nodes = await header.discoverNodes();
+  } catch (err) {
+    searchError = err instanceof Error ? err.message : "Search failed";
+  }
+  searching = false;
+  if (menuUniverse) renderOutputMenu();
+}
+
+function toggleOutputMenu(u, btn) {
+  const reopen = menuUniverse !== u;
+  closeOutputMenu();
+  if (!reopen || !header) return;
+  menuUniverse = u;
+  renderOutputMenu();
+  outputMenu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  outputMenu.style.top = `${r.bottom + 4}px`;
+  outputMenu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - outputMenu.offsetWidth - 8))}px`;
+  btn.setAttribute("aria-expanded", "true");
+  void search();
+}
+
+function closeOutputMenu() {
+  menuUniverse = 0;
+  outputMenu.hidden = true;
+  for (const b of outputBtns.querySelectorAll("[aria-expanded]")) b.setAttribute("aria-expanded", "false");
 }
 
 // console/app.js calls this when it starts (also after it reloads).
@@ -147,6 +267,7 @@ window.onConsoleHeader = (api) => {
   unsubscribe?.();
   header = api;
   outputsKey = "";
+  closeOutputMenu();
   $("showControls").hidden = false;
   unsubscribe = api.subscribe(render);
 };
@@ -227,7 +348,8 @@ showMenu.addEventListener("click", (e) => {
 });
 document.addEventListener("pointerdown", (e) => {
   if (!showMenu.hidden && !showMenu.contains(e.target) && !showMenuBtn.contains(e.target)) closeShowMenu();
+  if (!outputMenu.hidden && !outputMenu.contains(e.target) && !outputBtns.contains(e.target)) closeOutputMenu();
 }, true);
 // A press inside a frame doesn't reach this page: close when it takes focus.
-window.addEventListener("blur", closeShowMenu);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeShowMenu(); });
+window.addEventListener("blur", () => { closeShowMenu(); closeOutputMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeShowMenu(); closeOutputMenu(); } });

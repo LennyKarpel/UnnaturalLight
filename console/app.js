@@ -156,7 +156,7 @@ import {
 } from "./fixtures-page.js";
 
 // ---------------------------------------------------------------------
-// Universes: count, one DMX USB Pro each, Channels-tab meter universe
+// Universes: count, outputs (DMX USB Pro / Art-Net / sACN), Channels-tab meter universe
 // ---------------------------------------------------------------------
 
 /** The DMX outputs changed: redraw the page header and the meters' universe picker. */
@@ -186,6 +186,26 @@ async function toggleOutput(u) {
   }
 }
 
+/** Send universe u to an Art-Net / sACN node, or stop that (null). */
+async function setNetworkOutput(u, output) {
+  const out = outputs[u - 1];
+  const label = state.universes > 1 ? `Universe ${u}` : "DMX";
+  try {
+    await out.setNetwork(output);
+    renderOutputs();
+    setStatus(out.network ? `${label} → ${out.network}` : `${label}: network output stopped`, out.network ? "connected" : "idle");
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : "Couldn't set the network output", "error");
+  }
+}
+
+/** Art-Net nodes on the show server's network: [{ ip, name, ports: [{ port, netUniverse }] }]. */
+async function discoverNodes() {
+  const reply = await state.serverLink.request({ type: "net-discover" });
+  if (!reply.ok) throw new Error(reply.error ?? "Search failed");
+  return reply.nodes;
+}
+
 /** Change the universe count; refuses to drop universes that are in use. */
 function setUniverses(n) {
   const next = Math.max(1, Math.min(MAX_UNIVERSES, Math.round(n) || 1));
@@ -201,7 +221,10 @@ function setUniverses(n) {
       renderOutputs();
       return;
     }
-    for (let u = next + 1; u <= MAX_UNIVERSES; u++) if (outputs[u - 1].connected) void outputs[u - 1].disconnect();
+    for (let u = next + 1; u <= MAX_UNIVERSES; u++) {
+      if (outputs[u - 1].connected) void outputs[u - 1].disconnect();
+      if (outputs[u - 1].network) void outputs[u - 1].setNetwork(null);
+    }
   }
   state.universes = next;
   setUniverseCount(state.universes);
@@ -715,7 +738,7 @@ const consoleHeader = {
     serverHost: location.host,
     universes: state.universes,
     maxUniverses: MAX_UNIVERSES,
-    outputs: outputs.slice(0, state.universes).map((out) => out.connected),
+    outputs: outputs.slice(0, state.universes).map((out) => ({ usb: out.connected, network: out.network })),
   }),
   /** Call `fn` now and whenever the header's state changes; returns an unsubscribe. */
   subscribe(fn) {
@@ -729,6 +752,8 @@ const consoleHeader = {
   saveShow,
   loadShow,
   toggleOutput: (u) => void toggleOutput(u),
+  setNetworkOutput: (u, output) => void setNetworkOutput(u, output),
+  discoverNodes,
   setUniverses,
 };
 window.consoleHeader = consoleHeader;

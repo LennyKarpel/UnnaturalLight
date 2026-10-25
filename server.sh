@@ -7,6 +7,8 @@
 #   ./server.sh --lan           also let other machines on the network in (token printed)
 #   ./server.sh --fake-dmx      pretend a DMX USB Pro is connected (testing)
 #   ./server.sh --no-open       don't open a browser
+#
+# Art-Net / sACN outputs: server/data/network.json (see README, Network DMX).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
