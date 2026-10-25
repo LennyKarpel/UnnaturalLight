@@ -212,6 +212,8 @@ function getField(fixture, k) {
 function setField(fixture, k, raw) {
   if (k === "name") { fixture.name = raw; return; }
   if (k === "color") { setColorHex(fixture, raw); return; }
+  // An emptied field (mid-edit) isn't 0: leave the value as it was.
+  if (String(raw).trim() === "") return;
   const v = Number(raw);
   if (!Number.isFinite(v)) return;
   // Ranges change what the same 0–255 values mean, so re-derive afterwards.
@@ -241,6 +243,11 @@ function bindInspector() {
       setField(fixture, el.dataset.k, el.value);
       changed({ inspector: el.dataset.k !== "name" });
     });
+    // Left empty: show the value it kept.
+    if (el.type === "number") el.addEventListener("blur", () => {
+      const fixture = selectedFixtures()[0];
+      if (fixture && el.value.trim() === "") el.value = String(round(getField(fixture, el.dataset.k)));
+    });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
@@ -269,7 +276,9 @@ function bindInspector() {
   });
   bindLinkControls();
   inspectorEl.querySelectorAll("[data-r]").forEach((el) => {
-    el.addEventListener("input", () => {
+    // A new count rebuilds the rig's members, so it applies on Enter / leaving
+    // the field / the arrows, not per keystroke (typing 12 would pass through 1).
+    el.addEventListener(el.dataset.r === "count" ? "change" : "input", () => {
       const rig = commonRig(selectedFixtures());
       if (!rig) return;
       const before = rig.count;
@@ -279,6 +288,11 @@ function bindInspector() {
       // Moving / turning the rig can take members inside or outside the box,
       // so the list (with its "outside" marks) is always refreshed.
       changed({ inspector: el.dataset.r !== "name" });
+    });
+    // Left empty: show the value it kept.
+    if (el.type === "number") el.addEventListener("blur", () => {
+      const rig = commonRig(selectedFixtures());
+      if (rig && el.value.trim() === "") el.value = String(round(rig[el.dataset.r]));
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });

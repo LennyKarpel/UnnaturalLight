@@ -196,6 +196,8 @@ export function setRigField(rig, k, raw) {
     rigMembers(rig).forEach((m, i) => { m.name = `${raw} · ${i + 1}`; });
     return;
   }
+  // An emptied field (mid-edit) isn't 0: leave the value as it was.
+  if (String(raw).trim() === "") return;
   const v = Number(raw);
   if (!Number.isFinite(v)) return;
   if (k === "count") setRigCount(rig, v);

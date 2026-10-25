@@ -255,7 +255,7 @@ Working with a rig:
 - All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
 - Click one fixture to adjust just it; **Select whole rig** (inspector or right-click) selects them all again.
 - Dragging any of its fixtures moves the whole rig.
-- The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live.
+- The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live. A new number of fixtures applies when you press `Enter`, leave the field or click its arrows, so typing e.g. 12 doesn't first rebuild the rig with 1.
 - In the console, a rig's fixtures are grouped under the rig's name.
 
 ### Flash

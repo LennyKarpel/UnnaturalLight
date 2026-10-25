@@ -293,6 +293,7 @@ function syncOtherChannels(fixture) {
       </div>`).join("")}`;
     box.querySelectorAll("[data-oc]").forEach((el) => {
       el.addEventListener("input", () => {
+        if (el.value.trim() === "") return; // emptied mid-edit, not 0
         const v = clampByte(el.value);
         consoleLink.setChannel(Number(el.dataset.oc), v);
         box.querySelectorAll(`[data-oc="${el.dataset.oc}"]`).forEach((other) => { if (other !== el) other.value = String(v); });

@@ -505,7 +505,8 @@ export function rigLowestY(rig) {
 }
 
 export function normalizeRig(raw, i) {
-  const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
+  // Missing or empty (a cleared dialog field) → the default.
+  const num = (v, fb) => (v != null && String(v).trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : fb);
   const type = RIG_TYPES[raw?.type] ? raw.type : "circle";
   const d = RIG_TYPES[type].defaults;
   return {
