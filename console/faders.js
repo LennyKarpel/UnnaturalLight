@@ -7,9 +7,9 @@ import { ask } from "../shared/ask.js";
 import { hexFromRgb, rgbFromHex } from "../shared/color.js";
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { formatChannelRange } from "./fixtures.js";
-import { defaultFaderName } from "./set.js";
+import { defaultFaderName } from "./show.js";
 import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, pagePatch, placePopup } from "./dom.js";
-import { persistSession, state } from "./state.js";
+import { getNextSetSong, getPlaybackLevels, persistSession, state } from "./state.js";
 import {
   liveUi,
   blackedOutFaders,
@@ -23,7 +23,7 @@ import {
   renderSelectedGroup,
   refreshSelectedGroup,
 } from "./live.js";
-import { endInlineSongRename } from "./songs-page.js";
+import { endInlineSongRename } from "./show-page.js";
 import { cueUi, closeChannelsCueMenu, renderCues, endInlineRename, closeActionMenu } from "./cues.js";
 import {
   closeChannelPicker,
@@ -34,16 +34,27 @@ import {
 import { showPage } from "./nav.js";
 import { endInlineFixtureRename } from "./fixtures-page.js";
 
+/**
+ * The cue at `index` in the active song; the index past its last cue is the
+ * next set song's first cue (UP NEXT after a song's last cue).
+ */
+function cueAt(index) {
+  if (index < state.cueNames.length) return { song: null, number: index + 1, name: state.cueNames[index] };
+  const next = getNextSetSong();
+  return { song: next?.song.name ?? null, number: 1, name: next?.song.cues[0].name };
+}
+
 /** A cue's own name ("" = none). */
 export function cueName(index) {
-  const name = state.cueNames[index];
+  const name = cueAt(index).name;
   return typeof name === "string" ? name.trim() : "";
 }
 
-/** "Cue 3: Chorus": cues are numbered by their position in the song. */
+/** "Cue 3: Chorus": cues are numbered by their position in the song (another song's start: "Song 2 · Cue 1"). */
 export function cueLabel(index) {
+  const { song, number } = cueAt(index);
   const name = cueName(index);
-  return `Cue ${index + 1}${name ? `: ${name}` : ""}`;
+  return `${song ? `${song} · ` : ""}Cue ${number}${name ? `: ${name}` : ""}`;
 }
 
 /**
@@ -53,7 +64,8 @@ export function cueLabel(index) {
 export function fillCueTitle(el, index, editable = false) {
   const num = document.createElement("span");
   num.className = "cue-number";
-  num.textContent = `Cue ${index + 1}`;
+  const { song, number } = cueAt(index);
+  num.textContent = `${song ? `${song} · ` : ""}Cue ${number}`;
   const name = cueName(index);
   if (!name && !editable) {
     el.replaceChildren(num);
@@ -403,7 +415,7 @@ export function applyFaderPatchState(wrap, slider, targets) {
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
 export function liveLevel(faderIndex) {
-  return mixLevel({ master: state.master, cross: state.cross, fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue }, state.cueLevels, faderIndex);
+  return mixLevel({ master: state.master, cross: state.cross, fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue }, getPlaybackLevels(), faderIndex);
 }
 
 export function refreshLiveRow() {

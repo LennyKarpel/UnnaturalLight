@@ -1,23 +1,24 @@
-// Page tabs: the set name, tab order (drag to reorder) and routing.
-import { DEFAULT_NAV_ORDER, normalizeNavOrder, normalizeSetName } from "./set.js";
+// Page tabs: the show name, tab order (drag to reorder) and routing.
+import { DEFAULT_NAV_ORDER, normalizeNavOrder, normalizeShowName } from "./show.js";
 import { navEl, pages, getNavLinks } from "./dom.js";
 import { notifyHeader, persistSession, state } from "./state.js";
 import { abortInlineEdits } from "./faders.js";
 import { refreshChannelRow, renderSelectedGroup } from "./live.js";
-import { renderSongs } from "./songs-page.js";
+import { renderShowPage } from "./show-page.js";
+import { renderSetPage } from "./set-page.js";
 import { renderPatchTable } from "./patch-page.js";
 import { renderFixtures } from "./fixtures-page.js";
 
-export function syncSetNameUi() {
-  state.setName = normalizeSetName(state.setName);
+export function syncShowNameUi() {
+  state.showName = normalizeShowName(state.showName);
   notifyHeader();
 }
 
-export function applySetName(name) {
-  const next = normalizeSetName(name);
-  if (!next || next === state.setName) return false;
-  state.setName = next;
-  syncSetNameUi();
+export function applyShowName(name) {
+  const next = normalizeShowName(name);
+  if (!next || next === state.showName) return false;
+  state.showName = next;
+  syncShowNameUi();
   persistSession();
   return true;
 }
@@ -141,7 +142,7 @@ export function wireNavReorder() {
 const PAGE_KEY = "unnaturallight.console.page";
 
 export function showPage(name) {
-  const page = pages[name] ? name : "songs";
+  const page = pages[name] ? name : "run";
   abortInlineEdits();
   try { localStorage.setItem(PAGE_KEY, page); } catch { /* storage unavailable */ }
 
@@ -157,19 +158,20 @@ export function showPage(name) {
 
   if (page === "patch") renderPatchTable();
   if (page === "fixtures") renderFixtures();
-  if (page === "set") renderSongs();
+  if (page === "show") renderShowPage();
+  if (page === "set") renderSetPage();
   if (page === "channels") {
     refreshChannelRow();
     renderSelectedGroup();
   }
 }
 
-/** Show the tab in the address (#set, #patch, …), else the one last open. */
+/** Show the tab in the address (#show, #set, #patch, …), else the one last open. */
 export function routeFromHash() {
   let page = location.hash.replace("#", "");
   if (!DEFAULT_NAV_ORDER.includes(page)) {
     try { page = localStorage.getItem(PAGE_KEY) ?? ""; } catch { page = ""; }
-    if (!DEFAULT_NAV_ORDER.includes(page)) page = "songs";
+    if (!DEFAULT_NAV_ORDER.includes(page)) page = "run";
     history.replaceState(null, "", `#${page}`);
   }
   showPage(page);

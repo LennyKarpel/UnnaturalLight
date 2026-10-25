@@ -12,25 +12,26 @@
   </head>
   <body>
     <div class="app">
-      <!-- The set name, set buttons, DMX outputs and status are in the header of
+      <!-- The show name, show buttons, DMX outputs and status are in the header of
            the page around the console (../index.html). -->
       <header class="header">
         <h1 class="app-title"><span>Console</span></h1>
       </header>
 
       <nav id="nav" class="nav" aria-label="Pages">
+        <a href="#show" data-page="show" class="nav-link" draggable="true">Show</a>
         <a href="#set" data-page="set" class="nav-link" draggable="true">Set</a>
-        <a href="#songs" data-page="songs" class="nav-link is-active" draggable="true">Songs</a>
+        <a href="#run" data-page="run" class="nav-link is-active" draggable="true">Run</a>
         <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
         <a href="#fixtures" data-page="fixtures" class="nav-link" draggable="true">Fixtures</a>
         <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
       </nav>
 
-      <section id="page-set" class="page" hidden>
+      <section id="page-show" class="page" hidden>
         <div class="page-intro">
           <div>
-            <h2>Set</h2>
-            <p class="page-intro-hint">Songs in this set · click to play · drag to reorder</p>
+            <h2>Show</h2>
+            <p class="page-intro-hint">Every song in the show · click to play · drag to reorder</p>
           </div>
           <div class="patch-actions">
             <button id="addSongBtn" type="button" class="quiet">+ Song</button>
@@ -42,14 +43,53 @@
         </div>
       </section>
 
-      <section id="page-songs" class="page is-active">
+      <section id="page-set" class="page" hidden>
+        <div class="page-intro">
+          <div>
+            <h2>Set</h2>
+            <p class="page-intro-hint">Drag songs from the show into the set · drag to reorder · the Run page runs the active set</p>
+          </div>
+          <div class="patch-actions">
+            <select id="setSelect" aria-label="Set to edit"></select>
+            <button id="setMenuBtn" type="button" class="cue-menu-btn" title="Set options" aria-label="Set options" aria-haspopup="menu" aria-expanded="false"><span class="cue-menu-dots" aria-hidden="true"></span></button>
+            <button id="runSetBtn" type="button" class="quiet">Run this set</button>
+          </div>
+        </div>
+        <div class="set-builder">
+          <section class="set-column" aria-labelledby="setSourceTitle">
+            <div class="set-column-head">
+              <h3 id="setSourceTitle">Show</h3>
+              <input id="setSongSearch" type="search" placeholder="Find a song" aria-label="Find a song" autocomplete="off" />
+            </div>
+            <div id="setSourceScroll" class="song-scroll">
+              <div id="setSourceList" class="song-list" role="list" aria-label="Songs in the show"></div>
+            </div>
+          </section>
+          <section class="set-column" aria-labelledby="setEntryTitle">
+            <div class="set-column-head">
+              <h3 id="setEntryTitle">Running order</h3>
+              <span id="setEntryCount" class="song-row-meta"></span>
+            </div>
+            <div id="setEntryScroll" class="song-scroll set-drop-area">
+              <div id="setEntryEmpty" class="fixture-empty" hidden>Drag songs here from the show (or press + on one).</div>
+              <div id="setEntryList" class="song-list" role="list" aria-label="Running order"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="page-run" class="page is-active">
         <div class="faders-stage">
           <div class="faders-stage-main">
             <section class="transport">
               <div class="active-song-bar">
-                <span class="active-song-label">Song</span>
+                <button id="prevSongBtn" type="button" class="quiet" title="Previous song in the set" aria-label="Previous song">◀</button>
                 <span id="activeSongLabel" class="active-song-name">Song 1</span>
+                <button id="nextSongBtn" type="button" class="quiet" title="Next song in the set" aria-label="Next song">▶</button>
+                <span id="activeSetLabel" class="active-song-label"></span>
+                <button id="addCueBtn" type="button" class="quiet" title="Add a cue at the end of the song">+ Add cue</button>
               </div>
+              <div id="setStrip" class="set-strip" role="list" aria-label="Running order"></div>
 
               <div class="transport-main">
                 <div class="crossfade go-transport">
@@ -74,11 +114,6 @@
                   <div class="timed-crossfade">
                     <button id="fadePauseBtn" type="button" disabled>Pause</button>
                   </div>
-                </div>
-
-                <div class="row-actions">
-                  <button id="addCueBtn" type="button" aria-label="Add cue" title="Add cue">+</button>
-                  <button id="removeCueBtn" type="button" aria-label="Remove cue" title="Remove cue">−</button>
                 </div>
               </div>
             </section>

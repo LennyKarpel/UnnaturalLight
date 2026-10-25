@@ -12,7 +12,8 @@ import {
   universeStart,
   formatAddress,
 } from "./patch.js";
-import { DEFAULT_CUE_FADE_TIME, MAX_CUES, MIN_CUES } from "./songs.js";
+import { DEFAULT_CUE_FADE_TIME, MAX_CUES } from "./songs.js";
+import { playbackCue } from "./sets.js";
 import {
   cuesEl,
   liveFadersEl,
@@ -39,10 +40,9 @@ import {
   goNextFade,
   fadePauseBtn,
   addCueBtn,
-  removeCueBtn,
   placePopup,
 } from "./dom.js";
-import { zeros, getActiveSong, syncPlaybackPair, persistSession, state } from "./state.js";
+import { zeros, syncPlaybackPair, persistSession, state } from "./state.js";
 import {
   cueName,
   cueLabel,
@@ -65,7 +65,7 @@ import {
   refreshFaderPatchLabels,
   syncSlidersFromState,
 } from "./faders.js";
-import { syncSongUi } from "./songs-page.js";
+import { syncSongUi } from "./show-page.js";
 import { cueUi, closeChannelsCueMenu, renderCues, closeActionMenu } from "./cues.js";
 import {
   updateConflictBanner,
@@ -284,21 +284,21 @@ export function refreshCueSelects() {
   state.selectedCue = Math.min(Math.max(0, state.selectedCue), state.cueLevels.length - 1);
   syncPlaybackPair();
   fillCueTitle(crossFromLabel, state.fromCue);
-  fillCueTitle(crossToLabel, state.toCue);
-  const nextFade = getActiveSong().cues[state.toCue]?.fadeTime ?? DEFAULT_CUE_FADE_TIME;
-  goNextFade.textContent = `${nextFade}s`;
+  if (state.toCue === state.fromCue) {
+    // Nothing up next: the set's last song's last cue.
+    crossToLabel.textContent = "End of set";
+  } else {
+    fillCueTitle(crossToLabel, state.toCue);
+  }
+  goBtn.disabled = state.toCue === state.fromCue;
+  const nextFade = playbackCue(state, state.toCue)?.fadeTime ?? DEFAULT_CUE_FADE_TIME;
+  goNextFade.textContent = state.toCue === state.fromCue ? "" : `${nextFade}s`;
   goBtn.title = `GO — fade to ${cueLabel(state.toCue)} (${nextFade}s)`;
   goBtn.setAttribute(
     "aria-label",
     `GO to ${cueLabel(state.toCue)} in ${nextFade} seconds`,
   );
   syncSubmasterLabels();
-  removeCueBtn.disabled = state.cueLevels.length <= MIN_CUES;
-  removeCueBtn.setAttribute(
-    "aria-label",
-    `Remove ${cueLabel(state.selectedCue)}`,
-  );
-  removeCueBtn.title = `Remove ${cueLabel(state.selectedCue)}`;
   addCueBtn.disabled = state.cueLevels.length >= MAX_CUES;
   updateCuesButton();
   syncSongUi();
@@ -330,7 +330,7 @@ export function setSelectedCue(index) {
   if (index < 0 || index >= state.cueLevels.length) return;
   stopTimedFade();
   state.selectedCue = index;
-  // Selecting a cue sets Current; Next follows in song order.
+  // Selecting a cue makes it LIVE; UP NEXT follows from it (and the set).
   state.fromCue = index;
   syncPlaybackPair();
   for (const bank of cuesEl.querySelectorAll(".fader-row")) {
@@ -468,7 +468,7 @@ export function renderSelectedGroup() {
       setSelectedFader(i);
       state.cueLevels[state.selectedCue][i] = Number(slider.value);
       value.textContent = String(state.cueLevels[state.selectedCue][i]);
-      // Keep Songs-page UI in sync if that cue is rendered
+      // Keep the Run page UI in sync if that cue is rendered
       if (cueUi[state.selectedCue]) {
         cueUi[state.selectedCue].sliders[i].value = String(state.cueLevels[state.selectedCue][i]);
         cueUi[state.selectedCue].valueEls[i].textContent = String(state.cueLevels[state.selectedCue][i]);
@@ -622,12 +622,13 @@ export function updateFadePauseButton() {
   fadePauseBtn.textContent = paused ? "Resume" : "Pause";
   fadePauseBtn.classList.toggle("is-paused", paused);
   goBtn.classList.toggle("is-running", running && !paused);
-  goBtn.disabled = state.cueLevels.length < 2;
+  // Nothing up next: the set's last song's last cue.
+  goBtn.disabled = state.toCue === state.fromCue;
 }
 
 // Timed fades run on the show server (server/show.js), so a hidden or closed
 // tab can't stall them; the console asks for GO / pause / stop and follows
-// the crossfade, Current / Next and the cue it arrives on.
+// the crossfade, LIVE / UP NEXT and the cue it arrives on.
 
 export function stopTimedFade() {
   if (state.fadeState) state.serverLink?.command("stop");
@@ -636,11 +637,11 @@ export function stopTimedFade() {
 }
 
 /**
- * GO: fade from the current cue’s fader levels to the next cue
- * in song order (using that next cue’s fadeTime), then advance.
+ * GO: fade from LIVE to UP NEXT (the next cue, or the next set song's first)
+ * over UP NEXT's fadeTime, then advance.
  */
 export function goNextCue() {
-  if (state.cueLevels.length < 2) return;
+  if (state.toCue === state.fromCue) return;
   state.serverLink?.command("go");
 }
 

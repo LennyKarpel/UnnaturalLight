@@ -1,34 +1,43 @@
-// The console's state: the set being worked on (from the autosaved
+// The console's state: the show being worked on (from the autosaved
 // session at first), the active song's cues, and the status line.
 import { FADER_COUNT, defaultPatch, setUniverseCount } from "./patch.js";
 import { normalizeFixtureGroups, normalizeFixtures } from "./fixtures.js";
 import {
   DEFAULT_NAV_ORDER,
-  defaultSetName,
+  defaultShowName,
   loadSession,
   normalizeFaderNames,
   normalizeNavOrder,
-  normalizeSetName,
+  normalizeShowName,
   saveSession,
-  setSnapshot,
+  showSnapshot,
   normalizeUniverses,
-} from "./set.js";
+} from "./show.js";
 import {
   defaultSongName,
   createSong,
   normalizeSongs,
   resolveActiveSong,
 } from "./songs.js";
+import {
+  normalizeSets,
+  nextSetSong,
+  playbackLevels,
+  resolveActiveEntry,
+  resolveActiveSet,
+  upNextCue,
+} from "./sets.js";
 
 export function zeros() {
   return new Array(FADER_COUNT).fill(0);
 }
 
-/** @param {string} [setName] */
-export function blankSetState(setName = defaultSetName()) {
+/** @param {string} [showName] */
+export function blankShowState(showName = defaultShowName()) {
   const song = createSong({ name: defaultSongName(0) });
+  const sets = normalizeSets(null, [song]);
   return {
-    setName: normalizeSetName(setName),
+    showName: normalizeShowName(showName),
     navOrder: [...DEFAULT_NAV_ORDER],
     master: 100,
     cross: 0,
@@ -40,6 +49,9 @@ export function blankSetState(setName = defaultSetName()) {
     selectedCue: 0,
     songs: [song],
     activeSongId: song.id,
+    sets,
+    activeSetId: sets[0].id,
+    activeEntryId: sets[0].entries[0].id,
     faderNames: normalizeFaderNames(null),
     fixtureGroups: [],
     fixtures: [],
@@ -50,15 +62,16 @@ export function blankSetState(setName = defaultSetName()) {
 function initialState() {
   const session = loadSession();
   if (session) return session;
-  return blankSetState();
+  return blankShowState();
 }
 
 const boot = initialState();
 
 const bootSongs = normalizeSongs(boot.songs);
 const bootGroups = normalizeFixtureGroups(boot.fixtureGroups);
+const bootSets = normalizeSets(boot.sets, bootSongs);
 
-/** The console's working set and the UI state its pages share. */
+/** The console's working show and the UI state its pages share. */
 export const state = {
   /** Link to the show server (created once the page is set up, at the end of app.js). */
   /** @type {ReturnType<typeof createServerLink> | null} */
@@ -66,15 +79,23 @@ export const state = {
   /** DMX output per universe as the show server reports it (index 0 = universe 1). */
   outputStatus: [],
   /** @type {string} */
-  setName: normalizeSetName(boot.setName),
+  showName: normalizeShowName(boot.showName),
   /** @type {string[]} */
   navOrder: normalizeNavOrder(boot.navOrder),
-  /** Universes in this set (1…MAX_UNIVERSES); channels go up to universes × 512. */
+  /** Universes in this show (1…MAX_UNIVERSES); channels go up to universes × 512. */
   universes: normalizeUniverses(boot.universes),
   /** @type {import("./songs.js").Song[]} */
   songs: bootSongs,
   /** @type {string} */
   activeSongId: resolveActiveSong(bootSongs, boot.activeSongId).id,
+  /** The show's sets; the Run page runs the active one. */
+  /** @type {import("./sets.js").ShowSet[]} */
+  sets: bootSets,
+  /** @type {string} */
+  activeSetId: resolveActiveSet(bootSets, boot.activeSetId).id,
+  /** The active set's entry that's playing; null = a song played from outside the set. */
+  /** @type {string | null} */
+  activeEntryId: boot.activeEntryId ?? null,
   /** The active song's cues: each one's levels (the same arrays) and name. */
   /** @type {number[][]} */
   cueLevels: [],
@@ -107,7 +128,7 @@ export const state = {
   fromSubBlackoutSnapshot: null,
   /** @type {number | null} */
   toSubBlackoutSnapshot: null,
-  // The set name, set buttons, DMX outputs and status are drawn in the header
+  // The show name, show buttons, DMX outputs and status are drawn in the header
   // of the page around the console (../index.html), which calls consoleHeader
   // (app.js) and is told (notifyHeader) when any of it changes.
   /** Last status message (state: idle | connected | error). */
@@ -126,10 +147,34 @@ export function getActiveSong() {
   return resolveActiveSong(state.songs, state.activeSongId);
 }
 
-/** Rebind cueLevels / cueNames to the active song and clamp Current/Next/selected indices. */
+export function getActiveSet() {
+  return resolveActiveSet(state.sets, state.activeSetId);
+}
+
+/** The active set's entry that's playing, or null (playing from outside the set). */
+export function getActiveEntry() {
+  return resolveActiveEntry(getActiveSet(), state.activeEntryId, state.activeSongId);
+}
+
+/** The next set song (its entry and song), or null. */
+export function getNextSetSong() {
+  return nextSetSong(state);
+}
+
+/**
+ * Levels GO fades between: the song's cues, plus the next set song's first cue
+ * when that's UP NEXT (otherwise just the song's, with nothing to look up).
+ */
+export function getPlaybackLevels() {
+  return state.toCue < state.cueLevels.length ? state.cueLevels : playbackLevels(state, state.cueLevels);
+}
+
+/** Rebind cueLevels / cueNames to the active song and clamp LIVE / UP NEXT / selected indices. */
 export function bindActiveSong() {
   const song = getActiveSong();
   state.activeSongId = song.id;
+  state.activeSetId = getActiveSet().id;
+  state.activeEntryId = getActiveEntry()?.id ?? null;
   state.cueLevels = song.cues.map((t) => t.levels);
   state.cueNames = song.cues.map((t) => t.name);
   const n = state.cueLevels.length;
@@ -138,15 +183,11 @@ export function bindActiveSong() {
   syncPlaybackPair();
 }
 
-/** Next is always the following cue in song order (wraps). */
+/** UP NEXT follows LIVE: the next cue in the song, or the next set song's first (see upNextCue). */
 export function syncPlaybackPair() {
   const n = state.cueLevels.length;
-  if (n < 2) {
-    state.toCue = state.fromCue;
-    return;
-  }
   state.fromCue = Math.min(Math.max(0, state.fromCue), n - 1);
-  state.toCue = (state.fromCue + 1) % n;
+  state.toCue = upNextCue(state);
 }
 
 bindActiveSong();
@@ -155,7 +196,7 @@ bindActiveSong();
 export const headerListeners = new Set();
 export const notifyHeader = () => { for (const fn of headerListeners) fn(); };
 
-/** Snapshot of last explicitly saved/loaded set (or boot state). */
+/** Snapshot of last explicitly saved/loaded show (or boot state). */
 let cleanSnapshot = "";
 
 export function setStatus(text, kind = "idle") {
@@ -164,18 +205,18 @@ export function setStatus(text, kind = "idle") {
 }
 
 export function persistSession() {
-  saveSession(currentSetState());
+  saveSession(currentShowState());
   state.serverLink?.sync();
 }
 
-export function currentSetState() {
+export function currentShowState() {
   // Keep cue names in sync (cueLevels shares the level arrays already).
   const song = getActiveSong();
   for (let i = 0; i < song.cues.length; i++) {
     if (typeof state.cueNames[i] === "string") song.cues[i].name = state.cueNames[i];
   }
   return {
-    setName: state.setName,
+    showName: state.showName,
     navOrder: state.navOrder,
     master: state.master,
     cross: state.cross,
@@ -187,6 +228,9 @@ export function currentSetState() {
     selectedCue: state.selectedCue,
     songs: state.songs,
     activeSongId: state.activeSongId,
+    sets: state.sets,
+    activeSetId: state.activeSetId,
+    activeEntryId: state.activeEntryId,
     faderNames: state.faderNames,
     fixtureGroups: state.fixtureGroups,
     fixtures: state.fixtures,
@@ -195,9 +239,9 @@ export function currentSetState() {
 }
 
 export function markClean() {
-  cleanSnapshot = setSnapshot(currentSetState());
+  cleanSnapshot = showSnapshot(currentShowState());
 }
 
 export function isDirty() {
-  return setSnapshot(currentSetState()) !== cleanSnapshot;
+  return showSnapshot(currentShowState()) !== cleanSnapshot;
 }

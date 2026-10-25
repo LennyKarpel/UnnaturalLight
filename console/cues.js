@@ -1,4 +1,4 @@
-// Cue rows on the Songs page: drawing, reordering, renaming, cue menus.
+// Cue rows on the Run page: drawing, reordering, renaming, cue menus.
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { MAX_CUES, MIN_CUES, createCue, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.js";
 import {
@@ -9,7 +9,7 @@ import {
   channelsCueMenuList,
   actionMenu,
   actionMenuList,
-  pageSongs,
+  pageRun,
   dropSlot,
   placePopup,
   showDropLine,
@@ -40,7 +40,6 @@ import {
   pickCue,
   renderSelectedGroup,
 } from "./live.js";
-import { adjustIndexAfterRemove } from "./songs-page.js";
 import { closeChannelPicker, closeCountPicker, closeFixtureGroupPicker } from "./patch-page.js";
 
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }[]} */
@@ -103,7 +102,7 @@ function startCueDragSession(initialClientY) {
   stopCueDragSession?.();
   cueDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  pageSongs.classList.add("is-dragging-cue");
+  pageRun.classList.add("is-dragging-cue");
 
   const onDragOver = (event) => {
     if (!dragCueId) return;
@@ -122,7 +121,7 @@ function startCueDragSession(initialClientY) {
       cueDragScrollRaf = null;
     }
     cueDragClientY = null;
-    pageSongs.classList.remove("is-dragging-cue");
+    pageRun.classList.remove("is-dragging-cue");
     stopCueDragSession = null;
   };
 }
@@ -213,17 +212,12 @@ cuesEl.addEventListener("drop", (event) => {
   const song = getActiveSong();
   const selectedId = song.cues[state.selectedCue]?.id;
   const fromSelId = song.cues[state.fromCue]?.id;
-  const toSelId = song.cues[state.toCue]?.id;
   if (!targetId || !moveCue(song, fromId, targetId, after)) return;
   const indexOf = (id) =>
     id ? song.cues.findIndex((t) => t.id === id) : -1;
   state.selectedCue = Math.max(0, indexOf(selectedId));
   state.fromCue = Math.max(0, indexOf(fromSelId));
-  state.toCue = Math.max(0, indexOf(toSelId));
   bindActiveSong();
-  if (state.fromCue === state.toCue && state.cueLevels.length > 1) {
-    state.toCue = (state.fromCue + 1) % state.cueLevels.length;
-  }
   renderCues();
   renderSelectedGroup();
   pushToDmx();
@@ -592,6 +586,13 @@ export function openChannelsCueMenu(anchor) {
   });
 }
 
+/** An index into a list after the item at `removed` is taken out (it lands on the next item, or the new last). */
+function adjustIndexAfterRemove(index, removed, lengthAfter) {
+  if (index > removed) return index - 1;
+  if (index === removed) return Math.min(removed, lengthAfter - 1);
+  return index;
+}
+
 export async function removeCueAt(index) {
   const song = getActiveSong();
   if (song.cues.length <= MIN_CUES) return false;
@@ -600,7 +601,6 @@ export async function removeCueAt(index) {
   if (!ok) return false;
   song.cues.splice(index, 1);
   state.fromCue = adjustIndexAfterRemove(state.fromCue, index, song.cues.length);
-  state.toCue = adjustIndexAfterRemove(state.toCue, index, song.cues.length);
   state.selectedCue = adjustIndexAfterRemove(state.selectedCue, index, song.cues.length);
   bindActiveSong();
   renderCues();

@@ -1,6 +1,6 @@
 // Combined page: the console and the stage run in their own frames
 // (still linked live). This page lays them out and shows the console's
-// set and DMX controls in its header (bottom of this script).
+// show and DMX controls in its header (bottom of this script).
 
 import { ask } from "../shared/ask.js";
 
@@ -82,13 +82,13 @@ divider.addEventListener("dblclick", () => { prefs.split = 50; save(); layout();
 layout();
 
 // ---------------------------------------------------------------
-// Set name, set buttons, DMX outputs and status: the console's
+// Show name, show buttons, DMX outputs and status: the console's
 // (console/app.js consoleHeader), shown up here for the whole page.
 // ---------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
-const setNameEl = $("setName");
-const setMenuBtn = $("setMenuBtn");
-const setMenu = $("setMenu");
+const showNameEl = $("showName");
+const showMenuBtn = $("showMenuBtn");
+const showMenu = $("showMenu");
 const statusEl = $("status");
 const universeCount = $("universeCount");
 const outputBtns = $("outputBtns");
@@ -101,10 +101,10 @@ let outputsKey = "";
 
 function render() {
   const st = header.state();
-  setNameEl.textContent = st.setName;
-  setNameEl.hidden = setMenuBtn.hidden = false;
-  setMenuBtn.setAttribute("aria-label", `Options for set ${st.setName}`);
-  document.title = `${st.setName} · UnnaturalLight`;
+  showNameEl.textContent = st.showName;
+  showNameEl.hidden = showMenuBtn.hidden = false;
+  showMenuBtn.setAttribute("aria-label", `Options for show ${st.showName}`);
+  document.title = `${st.showName} · UnnaturalLight`;
   statusEl.textContent = st.status.text;
   statusEl.title = st.status.text;
   statusEl.dataset.state = st.status.state;
@@ -154,37 +154,37 @@ if (consoleFrame.contentWindow?.consoleHeader) window.onConsoleHeader(consoleFra
 
 universeCount.addEventListener("change", () => header?.setUniverses(Number(universeCount.value)));
 
-$("newSetBtn").addEventListener("click", async () => {
+$("newShowBtn").addEventListener("click", async () => {
   if (!header) return;
-  if (header.isDirty() && !(await ask({ title: "New set?", message: "Discard unsaved changes and start a blank set?", confirmLabel: "Continue" }))) return;
-  const name = await ask({ title: "New set", confirmLabel: "Create", initial: "" });
-  if (name) header.newSet(name);
+  if (header.isDirty() && !(await ask({ title: "New show?", message: "Discard unsaved changes and start a blank show?", confirmLabel: "Continue" }))) return;
+  const name = await ask({ title: "New show", confirmLabel: "Create", initial: "" });
+  if (name) header.newShow(name);
 });
-$("saveBtn").addEventListener("click", () => header?.saveSet());
+$("saveBtn").addEventListener("click", () => header?.saveShow());
 $("loadBtn").addEventListener("click", () => { loadFile.value = ""; loadFile.click(); });
 loadFile.addEventListener("change", async () => {
   const file = loadFile.files?.[0];
   if (!file || !header) return;
   if (header.isDirty() && !(await ask({
     title: "Unsaved changes",
-    message: "The current set has changed since it was last saved. Load another set anyway and discard those changes?",
+    message: "The current show has changed since it was last saved. Load another show anyway and discard those changes?",
     confirmLabel: "Load anyway",
   }))) return;
-  header.loadSet(await file.text(), file.name);
+  header.loadShow(await file.text(), file.name);
 });
 
-/** Rename the set in place (Enter or clicking away keeps it, Esc cancels). */
+/** Rename the show in place (Enter or clicking away keeps it, Esc cancels). */
 function beginRename() {
-  if (!header || setNameEl.hidden) return;
+  if (!header || showNameEl.hidden) return;
   const input = document.createElement("input");
-  input.className = "set-name-input";
+  input.className = "show-name-input";
   input.maxLength = 40;
-  input.value = header.state().setName;
-  input.setAttribute("aria-label", "Set name");
+  input.value = header.state().showName;
+  input.setAttribute("aria-label", "Show name");
   input.autocomplete = "off";
   input.spellcheck = false;
-  setNameEl.hidden = true;
-  setNameEl.after(input);
+  showNameEl.hidden = true;
+  showNameEl.after(input);
   input.focus();
   input.select();
   let done = false;
@@ -193,7 +193,7 @@ function beginRename() {
     done = true;
     if (commit && input.value.trim()) header.rename(input.value.trim());
     input.remove();
-    setNameEl.hidden = false;
+    showNameEl.hidden = false;
   };
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") finish(true);
@@ -201,33 +201,33 @@ function beginRename() {
   });
   input.addEventListener("blur", () => finish(true));
 }
-setNameEl.addEventListener("click", beginRename);
-setNameEl.addEventListener("keydown", (e) => {
+showNameEl.addEventListener("click", beginRename);
+showNameEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); beginRename(); }
 });
 
 // ⋮ menu (Rename).
-const closeSetMenu = () => {
-  setMenu.hidden = true;
-  setMenuBtn.setAttribute("aria-expanded", "false");
+const closeShowMenu = () => {
+  showMenu.hidden = true;
+  showMenuBtn.setAttribute("aria-expanded", "false");
 };
-setMenuBtn.addEventListener("click", () => {
-  if (!setMenu.hidden) { closeSetMenu(); return; }
-  const r = setMenuBtn.getBoundingClientRect();
-  setMenu.hidden = false;
-  setMenu.style.top = `${r.bottom + 4}px`;
-  setMenu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - setMenu.offsetWidth - 8))}px`;
-  setMenuBtn.setAttribute("aria-expanded", "true");
+showMenuBtn.addEventListener("click", () => {
+  if (!showMenu.hidden) { closeShowMenu(); return; }
+  const r = showMenuBtn.getBoundingClientRect();
+  showMenu.hidden = false;
+  showMenu.style.top = `${r.bottom + 4}px`;
+  showMenu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - showMenu.offsetWidth - 8))}px`;
+  showMenuBtn.setAttribute("aria-expanded", "true");
 });
-setMenu.addEventListener("click", (e) => {
+showMenu.addEventListener("click", (e) => {
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
-  closeSetMenu();
+  closeShowMenu();
   if (act === "rename") beginRename();
 });
 document.addEventListener("pointerdown", (e) => {
-  if (!setMenu.hidden && !setMenu.contains(e.target) && !setMenuBtn.contains(e.target)) closeSetMenu();
+  if (!showMenu.hidden && !showMenu.contains(e.target) && !showMenuBtn.contains(e.target)) closeShowMenu();
 }, true);
 // A press inside a frame doesn't reach this page: close when it takes focus.
-window.addEventListener("blur", closeSetMenu);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSetMenu(); });
+window.addEventListener("blur", closeShowMenu);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeShowMenu(); });

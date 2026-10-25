@@ -21,9 +21,9 @@ body {
 .show-controls select { padding: 2px 4px; }
 .show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
 
-/* Set name (click to rename) and its ⋮ menu, from the console. */
+/* Show name (click to rename) and its ⋮ menu, from the console. */
 .brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.set-name {
+.show-name {
   min-width: 0;
   max-width: 22rem;
   overflow: hidden;
@@ -34,8 +34,8 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-.set-name:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
-.set-name-input {
+.show-name:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.show-name-input {
   width: 14rem;
   border-color: var(--accent);
   padding: 1px 4px;
@@ -56,7 +56,7 @@ body {
   min-width: 140px;
 }
 
-/* Console status message, then the set and DMX buttons. */
+/* Console status message, then the show and DMX buttons. */
 .status {
   flex: 1;
   min-width: 0;

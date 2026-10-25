@@ -74,11 +74,11 @@ function scheduleSave() {
 function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  const set = show.serialized();
-  if (!set) return;
-  const data = stage ? { ...set, stage } : set;
+  const data = show.serialized();
+  if (!data) return;
+  const file = stage ? { ...data, stage } : data;
   const tmp = `${SESSION_FILE}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(data)}\n`);
+  fs.writeFileSync(tmp, `${JSON.stringify(file)}\n`);
   fs.renameSync(tmp, SESSION_FILE);
 }
 
@@ -117,24 +117,24 @@ async function onMessage(ws, client, msg) {
   const reply = (extra) => ws.send(JSON.stringify({ type: "reply", id: msg.id, ...extra }));
   switch (msg?.type) {
     case "seed":
-      if (show.seed(msg.set)) {
-        broadcast({ type: "set", set: show.serialized(), live: show.live() }, ws);
+      if (show.seed(msg.show)) {
+        broadcast({ type: "show", show: show.serialized(), live: show.live() }, ws);
         scheduleSave();
       }
       return;
-    case "set":
-      show.replaceSet(msg.set);
-      broadcast({ type: "set", set: show.serialized(), live: show.live() }, ws);
+    case "show":
+      show.replaceShow(msg.show);
+      broadcast({ type: "show", show: show.serialized(), live: show.live() }, ws);
       scheduleSave();
       return;
     case "live":
-      if (!show.hasSet || !msg.live) return;
+      if (!show.hasShow || !msg.live) return;
       show.applyLive(msg.live);
       sendLive(ws);
       scheduleSave();
       return;
     case "levels":
-      if (!show.hasSet || !Array.isArray(msg.cells)) return;
+      if (!show.hasShow || !Array.isArray(msg.cells)) return;
       show.applyLevels(msg.cells);
       broadcast({ type: "levels", cells: msg.cells }, ws);
       scheduleSave();
@@ -144,7 +144,7 @@ async function onMessage(ws, client, msg) {
       sendLive();
       return;
     case "go":
-      if (!show.hasSet) return;
+      if (!show.hasShow) return;
       show.go(performance.now());
       sendLive();
       return;
@@ -157,7 +157,7 @@ async function onMessage(ws, client, msg) {
       sendLive();
       return;
     case "stage":
-      // From a stage page (an edit) or a console (a set file was loaded).
+      // From a stage page (an edit) or a console (a show file was loaded).
       if (!msg.stage || typeof msg.stage !== "object") return;
       stage = msg.stage;
       broadcast({ type: "stage", stage }, ws, "stage");
@@ -230,7 +230,7 @@ wss.on("connection", (ws, req) => {
   clients.set(ws, client);
   ws.send(JSON.stringify(role === "stage"
     ? { type: "hello", stage }
-    : { type: "hello", seq: nextSeq(), clientId: client.id, set: show.serialized(), live: show.live(), outputs: dmx.status() }));
+    : { type: "hello", seq: nextSeq(), clientId: client.id, show: show.serialized(), live: show.live(), outputs: dmx.status() }));
   ws.on("message", (data) => {
     let msg;
     try {
@@ -251,7 +251,9 @@ wss.on("connection", (ws, req) => {
 setInterval(() => {
   const step = show.tick(performance.now());
   if (step) {
-    sendLive();
+    // On to the next set song: consoles need the whole show (the active song changed).
+    if (step.songChanged) broadcast({ type: "show", show: show.serialized(), live: show.live() });
+    else sendLive();
     if (step.arrived != null) scheduleSave();
   }
   dmx.write(show.levels(), show.universes);
@@ -270,7 +272,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   const local = `http://localhost:${PORT}/index.html`;
   console.log("==> UnnaturalLight show server");
   console.log(`    directory : ${ROOT}`);
-  console.log(`    show file : ${path.relative(ROOT, SESSION_FILE)}${show.hasSet ? "" : " (none yet: the first console provides it)"}`);
+  console.log(`    show file : ${path.relative(ROOT, SESSION_FILE)}${show.hasShow ? "" : " (none yet: the first console provides it)"}`);
   console.log(`    DMX       : ${flag("--fake-dmx") ? "fake output (--fake-dmx)" : "Enttec DMX USB Pro via USB"}`);
   console.log(`    this Mac  : ${local}`);
   if (LAN) {

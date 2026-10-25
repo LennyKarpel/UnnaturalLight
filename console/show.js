@@ -12,14 +12,16 @@ import {
   normalizeSongs,
   resolveActiveSong,
 } from "./songs.js";
+import { normalizeSets, resolveActiveEntry, resolveActiveSet, upNextCue } from "./sets.js";
 import { CONSOLE_SESSION_KEY as SESSION_KEY } from "../shared/stage-bus.js";
 import { clamp, clampInt } from "../shared/numbers.js";
 
-const SET_VERSION = 1;
-const SET_APP = "UnnaturalLight";
+const SHOW_VERSION = 1;
+const SHOW_APP = "UnnaturalLight";
 export const DEFAULT_NAV_ORDER = [
+  "show",
   "set",
-  "songs",
+  "run",
   "channels",
   "fixtures",
   "patch",
@@ -34,20 +36,23 @@ export function normalizeNavOrder(order) {
     if (!allowed.has(item) || next.includes(item)) continue;
     next.push(item);
   }
-  for (const page of DEFAULT_NAV_ORDER) {
-    if (!next.includes(page)) next.push(page);
-  }
+  // A tab the saved order doesn't have goes where it is by default: right
+  // after the tab before it there (or first).
+  DEFAULT_NAV_ORDER.forEach((page, i) => {
+    if (next.includes(page)) return;
+    next.splice(i === 0 ? 0 : next.indexOf(DEFAULT_NAV_ORDER[i - 1]) + 1, 0, page);
+  });
   return next;
 }
 
-export function defaultSetName() {
+export function defaultShowName() {
   return "Untitled";
 }
 
 /** @param {unknown} name */
-export function normalizeSetName(name) {
+export function normalizeShowName(name) {
   const text = typeof name === "string" ? name.trim() : "";
-  return text || defaultSetName();
+  return text || defaultShowName();
 }
 
 /** @param {number} index */
@@ -78,9 +83,15 @@ export function normalizeFaderNames(names) {
   return normalizeNames(names, FADER_COUNT, defaultFaderName);
 }
 
+/** Universe count (1…MAX_UNIVERSES). */
+export function normalizeUniverses(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.max(1, Math.min(MAX_UNIVERSES, n)) : 1;
+}
+
 /**
  * @param {{
- *   setName?: string,
+ *   showName?: string,
  *   navOrder?: string[],
  *   master: number,
  *   cross: number,
@@ -90,28 +101,27 @@ export function normalizeFaderNames(names) {
  *   selectedCue?: number,
  *   songs: import("./songs.js").Song[],
  *   activeSongId?: string | null,
+ *   sets?: import("./sets.js").ShowSet[],
+ *   activeSetId?: string | null,
+ *   activeEntryId?: string | null,
  *   faderNames?: string[],
  *   fixtureGroups?: import("./fixtures.js").FixtureGroup[],
  *   fixtures?: import("./fixtures.js").Fixture[],
  *   patch: import("./patch.js").FaderPatch[],
  * }} state
  */
-/** Universe count (1…MAX_UNIVERSES). */
-export function normalizeUniverses(value) {
-  const n = Math.round(Number(value));
-  return Number.isFinite(n) ? Math.max(1, Math.min(MAX_UNIVERSES, n)) : 1;
-}
-
-export function serializeSet(state) {
+export function serializeShow(state) {
   const songs = normalizeSongs(state.songs);
   const active = resolveActiveSong(songs, state.activeSongId);
+  const sets = normalizeSets(state.sets, songs);
+  const activeSet = resolveActiveSet(sets, state.activeSetId);
   const fixtureGroups = normalizeFixtureGroups(state.fixtureGroups);
   return {
-    version: SET_VERSION,
-    app: SET_APP,
-    kind: "set",
+    version: SHOW_VERSION,
+    app: SHOW_APP,
+    kind: "show",
     savedAt: new Date().toISOString(),
-    setName: normalizeSetName(state.setName),
+    showName: normalizeShowName(state.showName),
     navOrder: normalizeNavOrder(state.navOrder),
     master: clamp(state.master, 0, 100),
     cross: clamp(state.cross, 0, 100),
@@ -122,6 +132,9 @@ export function serializeSet(state) {
     selectedCue: state.selectedCue ?? 0,
     songs,
     activeSongId: active.id,
+    sets,
+    activeSetId: activeSet.id,
+    activeEntryId: resolveActiveEntry(activeSet, state.activeEntryId, active.id)?.id ?? null,
     faderNames: normalizeFaderNames(state.faderNames),
     fixtureGroups,
     fixtures: normalizeFixtures(state.fixtures, fixtureGroups),
@@ -130,21 +143,21 @@ export function serializeSet(state) {
 }
 
 /** Stable snapshot for dirty checks (ignores savedAt / selectedCue). */
-export function setSnapshot(state) {
-  const { savedAt: _savedAt, selectedCue: _selectedCue, ...rest } = serializeSet(state);
+export function showSnapshot(state) {
+  const { savedAt: _savedAt, selectedCue: _selectedCue, ...rest } = serializeShow(state);
   return JSON.stringify(rest);
 }
 
 /** @param {object | null} [stage] the stage page's layout, saved in the same file */
-function setToJson(state, stage = null) {
-  const data = serializeSet(state);
+function showToJson(state, stage = null) {
+  const data = serializeShow(state);
   return `${JSON.stringify(stage ? { ...data, stage } : data, null, 2)}\n`;
 }
 
 /**
  * @param {unknown} data
  * @returns {{
- *   setName: string,
+ *   showName: string,
  *   navOrder: string[],
  *   master: number,
  *   cross: number,
@@ -155,24 +168,27 @@ function setToJson(state, stage = null) {
  *   selectedCue: number,
  *   songs: import("./songs.js").Song[],
  *   activeSongId: string,
+ *   sets: import("./sets.js").ShowSet[],
+ *   activeSetId: string,
+ *   activeEntryId: string | null,
  *   faderNames: string[],
  *   fixtureGroups: import("./fixtures.js").FixtureGroup[],
  *   fixtures: import("./fixtures.js").Fixture[],
  *   patch: import("./patch.js").FaderPatch[],
  * }}
  */
-export function parseSet(data) {
+export function parseShow(data) {
   if (!data || typeof data !== "object") {
-    throw new Error("Invalid set file.");
+    throw new Error("Invalid show file.");
   }
 
   const obj = /** @type {Record<string, unknown>} */ (data);
-  // A set file has these; the console's live state (sent to the server) doesn't.
-  if ((obj.app != null && obj.app !== SET_APP) || (obj.kind != null && obj.kind !== "set")) {
-    throw new Error("This file is not an UnnaturalLight set.");
+  // A show file has these; the console's live state (sent to the server) doesn't.
+  if ((obj.app != null && obj.app !== SHOW_APP) || (obj.kind != null && obj.kind !== "show")) {
+    throw new Error("This file is not an UnnaturalLight show.");
   }
-  if (obj.version != null && obj.version !== SET_VERSION) {
-    throw new Error(`Unsupported set version: ${obj.version}`);
+  if (obj.version != null && obj.version !== SHOW_VERSION) {
+    throw new Error(`Unsupported show version: ${obj.version}`);
   }
 
   const patchSource = Array.isArray(obj.patch) ? obj.patch : [];
@@ -181,8 +197,11 @@ export function parseSet(data) {
   const songs = normalizeSongs(obj.songs);
   const active = resolveActiveSong(songs, typeof obj.activeSongId === "string" ? obj.activeSongId : null);
   const cueCount = active.cues.length;
+  const sets = normalizeSets(obj.sets, songs);
+  const activeSet = resolveActiveSet(sets, typeof obj.activeSetId === "string" ? obj.activeSetId : null);
+  const activeEntryId = resolveActiveEntry(activeSet, typeof obj.activeEntryId === "string" ? obj.activeEntryId : null, active.id)?.id ?? null;
 
-  const setName = normalizeSetName(obj.setName);
+  const showName = normalizeShowName(obj.showName);
   const navOrder = normalizeNavOrder(obj.navOrder);
   const faderNames = normalizeFaderNames(obj.faderNames);
   const fixtureGroups = normalizeFixtureGroups(obj.fixtureGroups);
@@ -193,8 +212,8 @@ export function parseSet(data) {
   const toSub = clamp(Number(obj.toSub ?? 100), 0, 100);
   const universes = normalizeUniverses(obj.universes);
   const fromCue = clampInt(Number(obj.fromCue ?? 0), 0, cueCount - 1);
-  // Up next is always the cue after the current one (not saved).
-  const toCue = (fromCue + 1) % cueCount;
+  // Up next follows from the live cue and the set (not saved).
+  const toCue = upNextCue({ songs, sets, activeSetId: activeSet.id, activeEntryId, activeSongId: active.id, fromCue });
   const selectedCue = clampInt(
     Number(obj.selectedCue ?? 0),
     0,
@@ -202,7 +221,7 @@ export function parseSet(data) {
   );
 
   return {
-    setName,
+    showName,
     navOrder,
     master,
     cross,
@@ -214,6 +233,9 @@ export function parseSet(data) {
     selectedCue,
     songs,
     activeSongId: active.id,
+    sets,
+    activeSetId: activeSet.id,
+    activeEntryId,
     faderNames,
     fixtureGroups,
     fixtures,
@@ -221,44 +243,44 @@ export function parseSet(data) {
   };
 }
 
-export function downloadSet(state, filename, stage = null) {
-  const blob = new Blob([setToJson(state, stage)], { type: "application/json" });
+export function downloadShow(state, filename, stage = null) {
+  const blob = new Blob([showToJson(state, stage)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename || defaultFilename(state.setName);
+  a.download = filename || defaultFilename(state.showName);
   document.body.append(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-/** @param {unknown} [setName] */
-function defaultFilename(setName) {
+/** @param {unknown} [showName] */
+function defaultFilename(showName) {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const base = normalizeSetName(setName)
+  const base = normalizeShowName(showName)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-  return `${base || "set"}-${stamp}.json`;
+  return `${base || "show"}-${stamp}.json`;
 }
 
-/** Autosave full set state for refresh restore (no explicit Save needed). */
+/** Autosave full show state for refresh restore (no explicit Save needed). */
 export function saveSession(state) {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeSet(state)));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(serializeShow(state)));
   } catch (err) {
     console.warn("Could not autosave session", err);
   }
 }
 
-/** @returns {ReturnType<typeof parseSet> | null} */
+/** @returns {ReturnType<typeof parseShow> | null} */
 export function loadSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return parseSet(JSON.parse(raw));
+    return parseShow(JSON.parse(raw));
   } catch (err) {
     console.warn("Could not load session", err);
     return null;

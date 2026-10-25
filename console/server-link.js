@@ -4,12 +4,12 @@
  * The server holds the show, runs fades and drives the DMX USB Pro(s); every
  * console (this machine or another one) is a remote view of it:
  *
- *   console → server   edits as they happen: the whole set when its structure
+ *   console → server   edits as they happen: the whole show when its structure
  *                      changes, single fader levels while dragging, the live
- *                      mix (master, subs, crossfade, Current / Next), held
+ *                      mix (master, subs, crossfade, LIVE / selected cue), held
  *                      flash / blackout buttons, GO / pause / stop,
  *                      DMX connect / disconnect, and the stage from a
- *                      loaded set file (stage pages keep it up to date
+ *                      loaded show file (stage pages keep it up to date
  *                      themselves, see ../stage/show-link.js)
  *   server → console   the same, from other consoles, plus fade steps and
  *                      DMX status
@@ -31,16 +31,16 @@ const PENDING_MS = 600;
 
 /**
  * @typedef {{
- *   set: Record<string, any>,
+ *   show: Record<string, any>,
  *   snapshots: Record<string, number | null>,
  *   flashing: Set<number>,
  *   blackedOut: Set<number>,
- * }} LocalView what the console shows now (`set` = currentSetState(), live fields included)
+ * }} LocalView what the console shows now (`show` = currentShowState(), live fields included)
  *
  * @typedef {{
  *   view: () => LocalView,
- *   onHello: (msg: { set: object | null, live: object | null, outputs: object[] }) => void,
- *   onSet: (set: object, live: object) => void,
+ *   onHello: (msg: { show: object | null, live: object | null, outputs: object[] }) => void,
+ *   onShow: (show: object, live: object) => void,
  *   onLive: (live: object) => void,
  *   onLevels: (cells: [string, number, number][]) => void,
  *   onOutputs: (outputs: object[]) => void,
@@ -48,17 +48,17 @@ const PENDING_MS = 600;
  * }} ServerLinkApi
  */
 
-/** Structure of the set: everything but live fields and fader levels. */
-function structureKey(set) {
-  const rest = { ...set };
+/** Structure of the show: everything but live fields and fader levels. */
+function structureKey(show) {
+  const rest = { ...show };
   for (const f of LIVE_FIELDS) delete rest[f];
   return JSON.stringify(rest, (key, value) => (key === "levels" ? undefined : value));
 }
 
 /** cue id → copy of its levels */
-function levelsById(set) {
+function levelsById(show) {
   const map = new Map();
-  for (const song of set.songs) for (const t of song.cues) map.set(t.id, [...t.levels]);
+  for (const song of show.songs) for (const t of song.cues) map.set(t.id, [...t.levels]);
   return map;
 }
 
@@ -91,14 +91,14 @@ export function createServerLink(api) {
     if (connected) socket.send(msg);
   }
 
-  const liveOf = (v) => Object.fromEntries([...LIVE_FIELDS.map((f) => [f, v.set[f]]), ...SNAPSHOT_FIELDS.map((f) => [f, v.snapshots[f]])]);
+  const liveOf = (v) => Object.fromEntries([...LIVE_FIELDS.map((f) => [f, v.show[f]]), ...SNAPSHOT_FIELDS.map((f) => [f, v.snapshots[f]])]);
 
   /** Remember the console's current view as agreed with the server. */
   function agree() {
     const v = api.view();
     agreed = {
-      structure: structureKey(v.set),
-      levels: levelsById(v.set),
+      structure: structureKey(v.show),
+      levels: levelsById(v.show),
       live: liveOf(v),
       holds: holdsKey(v.flashing, v.blackedOut),
     };
@@ -110,14 +110,14 @@ export function createServerLink(api) {
     if (!connected || !agreed) return;
     const v = api.view();
 
-    const structure = structureKey(v.set);
+    const structure = structureKey(v.show);
     if (structure !== agreed.structure) {
-      send({ type: "set", set: v.set });
+      send({ type: "show", show: v.show });
       agreed.structure = structure;
-      agreed.levels = levelsById(v.set);
+      agreed.levels = levelsById(v.show);
     } else {
       const cells = [];
-      for (const song of v.set.songs) {
+      for (const song of v.show.songs) {
         for (const t of song.cues) {
           const was = agreed.levels.get(t.id);
           if (!was) continue;
@@ -133,7 +133,7 @@ export function createServerLink(api) {
     }
 
     const live = {};
-    for (const f of LIVE_FIELDS) if (v.set[f] !== agreed.live[f]) live[f] = v.set[f];
+    for (const f of LIVE_FIELDS) if (v.show[f] !== agreed.live[f]) live[f] = v.show[f];
     for (const f of SNAPSHOT_FIELDS) if (v.snapshots[f] !== agreed.live[f]) live[f] = v.snapshots[f];
     if (Object.keys(live).length) {
       for (const f of Object.keys(live)) {
@@ -164,19 +164,19 @@ export function createServerLink(api) {
         connected = true;
         pending.clear();
         api.onHello(msg);
-        if (msg.set) {
+        if (msg.show) {
           agree();
         } else {
           // Empty server (first run): this console's show becomes the show.
           agree();
-          send({ type: "seed", set: api.view().set });
+          send({ type: "seed", show: api.view().show });
         }
         api.onConnection(true);
         return;
       }
       if (!agreed) return;
-      if (msg.type === "set") {
-        api.onSet(msg.set, filterLive(msg.live ?? {}));
+      if (msg.type === "show") {
+        api.onShow(msg.show, filterLive(msg.live ?? {}));
         agree();
       } else if (msg.type === "live") {
         api.onLive(filterLive(msg.live));
@@ -227,7 +227,7 @@ export function createServerLink(api) {
       flush();
       send({ type });
     },
-    /** Replace the stage kept with the show (from a loaded set file). */
+    /** Replace the stage kept with the show (from a loaded show file). */
     sendStage(stage) {
       send({ type: "stage", stage });
     },

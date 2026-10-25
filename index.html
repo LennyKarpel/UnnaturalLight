@@ -20,19 +20,19 @@
     <header class="bar">
       <div class="brand">
         <h1 class="app-title">UnnaturalLight</h1>
-        <span id="setName" class="set-name" role="button" tabindex="0" title="Click to rename" hidden></span>
-        <button type="button" id="setMenuBtn" class="dots" title="Set options" aria-label="Set options" aria-haspopup="menu" aria-expanded="false" hidden><span></span></button>
+        <span id="showName" class="show-name" role="button" tabindex="0" title="Click to rename" hidden></span>
+        <button type="button" id="showMenuBtn" class="dots" title="Show options" aria-label="Show options" aria-haspopup="menu" aria-expanded="false" hidden><span></span></button>
       </div>
       <span id="status" class="status" data-state="idle"></span>
       <div class="controls">
-        <!-- The console's set and DMX controls (shown once the console is up). -->
+        <!-- The console's show and DMX controls (shown once the console is up). -->
         <span id="showControls" class="show-controls" hidden>
-          <button type="button" id="newSetBtn">New set</button>
-          <button type="button" id="saveBtn">Save set</button>
-          <button type="button" id="loadBtn">Load set</button>
+          <button type="button" id="newShowBtn">New show</button>
+          <button type="button" id="saveBtn">Save show</button>
+          <button type="button" id="loadBtn">Load show</button>
           <input id="loadFile" type="file" accept="application/json,.json" hidden />
           <span class="sep"></span>
-          <select id="universeCount" title="Universes in this set (one DMX USB Pro each)"></select>
+          <select id="universeCount" title="Universes in this show (one DMX USB Pro each)"></select>
           <span id="outputBtns" class="show-controls"></span>
           <span id="serverPill" class="pill" title="Not connected to the show server">Server · offline</span>
           <span class="sep"></span>
@@ -51,7 +51,7 @@
       <iframe id="consoleFrame" src="console/console.html" title="Console" allow="serial"></iframe>
     </main>
 
-    <div id="setMenu" class="menu" role="menu" aria-label="Set actions" hidden>
+    <div id="showMenu" class="menu" role="menu" aria-label="Show actions" hidden>
       <button type="button" class="menu-item" role="menuitem" data-act="rename">Rename</button>
     </div>
 

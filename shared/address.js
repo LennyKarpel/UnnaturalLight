@@ -7,7 +7,7 @@
 
 /** Channels per DMX universe (one Enttec DMX USB Pro each). */
 export const UNIVERSE_SIZE = 512;
-/** Most universes a set can have. */
+/** Most universes a show can have. */
 export const MAX_UNIVERSES = 8;
 export const DMX_CHANNEL_MAX = UNIVERSE_SIZE * MAX_UNIVERSES;
 

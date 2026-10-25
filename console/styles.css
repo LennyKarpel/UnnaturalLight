@@ -26,7 +26,7 @@ body {
   overflow: hidden;
 }
 
-/* Title bar, like the stage's (the set controls are in the page header, ../index.html). */
+/* Title bar, like the stage's (the show controls are in the page header, ../index.html). */
 .header {
   flex: 0 0 auto;
   display: flex;
@@ -682,9 +682,63 @@ body {
 
 .active-song-bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.15rem;
+}
+
+.active-song-bar .quiet {
+  padding: 0.15rem 0.5rem;
+  font-size: var(--text-sm);
+}
+
+/* + Add cue, at the right of the song bar (adds a cue at the end of the song). */
+.active-song-bar #addCueBtn {
+  margin-left: auto;
+}
+
+/* Run page: the active set's running order (click a song to play it). Its
+   scrollbar sits below the songs (in the bottom padding), thin, and only
+   shows while the pointer is over it. */
+.set-strip {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.1rem;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.set-strip:hover {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.set-strip:empty {
+  display: none;
+}
+
+.set-strip-song {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.55rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.set-strip-song.is-next {
+  color: var(--ink);
+  border-style: dashed;
+}
+
+.set-strip-song.is-active {
+  color: var(--select);
+  border-color: color-mix(in srgb, var(--select) 55%, var(--line));
+  background: color-mix(in srgb, var(--select) 12%, var(--panel));
 }
 
 .active-song-label {
@@ -715,7 +769,7 @@ body {
   overscroll-behavior: contain;
 }
 
-#page-set.is-dragging-song {
+#page-show.is-dragging-song {
   overscroll-behavior: none;
 }
 
@@ -789,9 +843,91 @@ body {
   color: var(--select);
 }
 
+/* Set page: the show's songs (left) and the set's running order (right). */
+.set-builder {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .set-builder {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(12rem, 1fr);
+  }
+}
+
+.set-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.set-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.set-column-head h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--text-lg);
+}
+
+.set-column-head input[type="search"] {
+  width: min(14rem, 60%);
+}
+
+.set-source-row {
+  grid-template-columns: minmax(6rem, 1fr) auto auto;
+  cursor: grab;
+}
+
+.set-entry-row {
+  grid-template-columns: auto 1.75rem minmax(6rem, 1fr) auto auto;
+  cursor: grab;
+}
+
+.set-source-row .song-row-name,
+.set-entry-row .song-row-name {
+  cursor: inherit;
+}
+
+.set-source-row .song-row-name:hover,
+.set-entry-row .song-row-name:hover {
+  color: inherit;
+}
+
+.set-entry-number {
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.set-add-btn,
+.set-remove-btn {
+  min-width: 2rem;
+}
+
+.set-drop-area {
+  min-height: 6rem;
+}
+
+.song-scroll.is-drop-target {
+  outline: 2px dashed var(--select);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
 .transport-main {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr);
   gap: 0.75rem;
   align-items: stretch;
 }
@@ -1307,23 +1443,9 @@ body {
   color: var(--accent);
 }
 
-.row-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  justify-content: center;
-}
 
-.row-actions button {
-  width: 2.4rem;
-  height: 2.4rem;
-  padding: 0;
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  line-height: 1;
-}
 
-#page-songs .faders-stage {
+#page-run .faders-stage {
   flex: 0 0 auto;
 }
 
@@ -1339,7 +1461,7 @@ body {
   background: color-mix(in srgb, var(--bg) 55%, var(--panel));
 }
 
-#page-songs.is-dragging-cue {
+#page-run.is-dragging-cue {
   overscroll-behavior: none;
 }
 
@@ -2040,15 +2162,6 @@ input[type="range"] {
     width: 2rem;
     min-width: 2rem;
     min-height: 2rem;
-  }
-
-  .transport-main {
-    grid-template-columns: 1fr;
-  }
-
-  .row-actions {
-    flex-direction: row;
-    justify-content: flex-start;
   }
 }
 

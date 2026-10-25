@@ -70,7 +70,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
 9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh` and click **Connect DMX Pro** in the page header (top bar).
-10. **Save:** everything autosaves on the show server. To keep a file, use **Save set** in the page header: it holds the whole show, console and stage.
+10. **Save:** everything autosaves on the show server. To keep a file, use **Save show** in the page header: it holds the whole show, console and stage.
 
 ---
 
@@ -89,7 +89,7 @@ The page shows the Stage on the left and the Console on the right. The switch at
 - The page remembers your choice, the split and the sides.
 - Cues keep fading and DMX keeps flowing in every view: both run on the show server.
 - Keyboard shortcuts go to whichever side you last clicked in.
-- **The page header** (top bar) holds the console's set controls, in every view: the set's name (click it, or **⋮ → Rename**, to rename it), **New set**, **Save set**, **Load set**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
+- **The page header** (top bar) holds the console's show controls, in every view: the show's name (click it, or **⋮ → Rename**, to rename it), **New show**, **Save show**, **Load show**, the universe count and **Connect DMX Pro**, the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
 
 The console and the stage only open inside this page (going to `console/console.html` or `stage/stage.html` directly brings you here).
 
@@ -283,12 +283,13 @@ The small overlay in the 3D view's top-left corner (the **HUD**) shows the selec
 
 ### Pages
 
-Switch with the tabs along the top (drag them to reorder). The console reopens on the tab you last had open:
+Switch with the tabs along the top. **Drag a tab** left or right to reorder them (a line shows where it will land): the order is saved with the show, so every console showing it has the same tabs, and a show file brings its order back (**New show** starts with the default, Show · Set · Run · Channels · Fixtures · Patch). Each browser reopens on the tab it last had open:
 
 | Page | What it's for |
 |---|---|
-| **Set** | your list of songs: add, rename (click the name), reorder (drag **⋮⋮**; a line shows where it will land), and **⋮** to **Duplicate** (a copy, *“… copy”*, right after it) or **Delete** it; click a song to open it |
-| **Songs** | the cues of the open song, GO, and the faders |
+| **Show** | every song in the show: add, rename (click the name), reorder (drag **⋮⋮**; a line shows where it will land), and **⋮** to **Duplicate** (a copy, *“… copy”*, right after it) or **Delete** it; each song says which sets it's in; click a song to play it |
+| **Set** | build a set (the running order for one event) from the show's songs, and choose which set the Run page runs (see [Sets](#sets)) |
+| **Run** | runs the active set: the song playing and where it is in the set, its cues, GO, and the faders |
 | **Channels** | meters showing every DMX channel's output, and the live cue's faders |
 | **Fixtures** | your lighting fixtures and the DMX channels each one uses |
 | **Patch** | which DMX channels each fader controls |
@@ -297,10 +298,21 @@ Switch with the tabs along the top (drag them to reorder). The console reopens o
 
 - A **song** holds as many **cues** as you like (at least 2). Each cue is one look: a value for every fader.
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
-- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next. **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
+- One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next (after a song's last cue, that's the next song in the set: see [Sets](#sets)). **Pause / Resume** a transition, or use the blend fader to crossfade by hand.
 - Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
-- Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+** to add a new cue at the end.
+- Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+ Add cue** (at the right of the song bar, above the set's running order) to add a new cue at the end.
 - You can have up to 32 songs.
+
+### Sets
+
+The **show** holds every song. A **set** is the running order for one event (*Brooklyn 11/2*): a list of the show's songs. A show can have many sets (up to 32); a new show starts with one, **Set 1**, holding its song.
+
+- **Build a set on the Set page.** Pick the set at the top (**⋮** for **New set**, **Rename**, **Duplicate** or **Delete**). The show's songs are on the left (type in **Find a song** to narrow them). Drag one into the running order on the right (a line shows where it will land), or press its **+** to add it at the end. Drag songs in the running order to reorder them; press **✕**, or drag one back onto the show's songs, to take it out. A song can be in a set more than once (a reprise); the show's list says *in this set ×2*.
+- A set lists the show's songs, not copies: change a song's cues and it changes in every set. Deleting a song from the show takes it out of every set (it asks first).
+- **Run a set.** **Run this set** makes it the **active set**: the Run page runs it from its first song. Clicking a song in the running order runs the set from that song.
+- **On the Run page**, the bar at the top shows the song playing and *song 3 of 12*, with **◀ / ▶** for the previous and next song in the set, and the running order below it (the song playing is highlighted, the next one dashed; click one to play it; a long set scrolls sideways, with a scrollbar under the songs while the pointer is over them).
+- **GO runs on into the next song.** On a song's last cue, UP NEXT is the next set song's first cue (*Ballad · Cue 1*); GO transitions to it and the Run page moves to that song. On the set's last song's last cue, UP NEXT says **End of set** and GO does nothing.
+- **Songs not in the set.** Clicking a song on the Show page plays it even if it isn't in the active set (it shows *Playing · not in set*, and the Run page *Not in Set 1*). Its last cue goes back to its first, as a song on its own does.
 
 ### Faders
 
@@ -385,7 +397,7 @@ The card updates live. ⌥-click something else to trace that; `Esc` or ✕ clos
 
 A DMX **universe** is 512 channels sent down one cable by one interface. For bigger rigs:
 
-1. In the page header, change **1 universe** to the number you need (up to 8). It's saved with the set.
+1. In the page header, change **1 universe** to the number you need (up to 8). It's saved with the show.
 2. Each universe gets its own button, **U1, U2, …**. Plug in one Enttec DMX USB Pro per universe and click its button to connect it; it turns green when connected. Connect them one at a time: each button takes a device not already on another universe, and remembers it (by serial number) from then on.
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
@@ -400,12 +412,12 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's set and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
+**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's show and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
-- **Console** (buttons in the page header): **Save set** downloads the set (songs, cues, patch, fixtures, fader names, universes) as a file; **Load set** opens one; **New set** starts fresh (it asks first if you have unsaved changes). Click the set's name beside the title (or **⋮ → Rename**) to rename it.
-- The set file also holds the **stage** (box size, fixtures, rigs, view settings), so one file is the whole show. Loading a set file that has a stage replaces the stage; one saved without it (the show server was offline) leaves the stage as it is. **New set** keeps the stage.
+- **Console** (buttons in the page header): **Save show** downloads the show (songs, sets, cues, patch, fixtures, fader names, universes, tab order) as a file; **Load show** opens one; **New show** starts fresh (it asks first if you have unsaved changes). Click the show's name beside the title (or **⋮ → Rename**) to rename it.
+- The show file also holds the **stage** (box size, fixtures, rigs, view settings), so one file is the whole show. Loading a show file that has a stage replaces the stage; one saved without it (the show server was offline) leaves the stage as it is. **New show** keeps the stage.
 
 ---
 
@@ -485,6 +497,8 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Cue** | one saved look (a value for every fader) |
 | **Transition** | the fade from one cue to the next that **GO** runs; its length is the next cue's **In** time |
 | **Song** | a list of cues |
+| **Show** | every song (plus fixtures, patch, sets): what **Save show** saves |
+| **Set** | the running order for one event: a list of the show's songs; the Run page runs the active set |
 | **LIVE / UP NEXT** | the cue on stage now / the cue GO will transition to |
 | **Master / submaster** | faders that scale everything / one cue |
 | **Fixture** | a lighting unit; on the console it owns a block of channels |
@@ -502,25 +516,28 @@ The console and the stage are one app: anything both use (and the page header, o
 
 | Path | What's in it |
 |---|---|
-| `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider, and the header with the console's set name, set buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`) |
-| `page/page.js`, `page.css` | The combined page's header, panes and set menu, and its styles |
+| `index.html` | The combined page: console + stage frames, Console / Both / Stage switch, ⇄ swap, divider, and the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`) |
+| `page/page.js`, `page.css` | The combined page's header, panes and show menu, and its styles |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
-| `server/show.js` | The show as the server holds it: set, live mix, timed fades, held flash / blackout |
+| `server/show.js` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
-| `server/data/` | `session.json` (the set, with the stage under `stage`) and `dmx.json` (which device is on which universe); not in git |
+| `server/data/` | `session.json` (the show, with the stage under `stage`) and `dmx.json` (which device is on which universe); not in git |
 | `console/console.html`, `styles.css` | Console page and styles |
-| `console/app.js` | Starts the console and wires its controls; set new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
-| `console/state.js` | The console's state (the set being worked on, the active song's cues, status), shared by its modules |
+| `console/app.js` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
+| `console/state.js` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
 | `console/dom.js` | The console page's elements |
 | `console/live.js` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
 | `console/faders.js` | Fader names and menu, and what's drawn on fader rows (color bars, pan / tilt pads, blackout / flash buttons, fixture outlines) |
-| `console/songs-page.js`, `cues.js` | Songs page: the song list, and the cue rows with their menus |
+| `console/show-page.js` | Show page: the song list |
+| `console/set-bar.js` | Run page set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
+| `console/set-page.js` | Set page: building sets by drag and drop, picking the active set |
+| `console/cues.js` | Run page: the cue rows with their menus |
 | `console/patch-page.js`, `fixtures-page.js` | Patch and Fixtures pages (and the channel / count / group pickers) |
-| `console/nav.js` | Page tabs: set name, tab order, routing |
+| `console/nav.js` | Page tabs: show name, tab order, routing |
 | `console/server-link.js` | Console side of the show-server link |
-| `console/patch.js` | Fader patch; the set's universe count (channel addresses for the current set) |
-| `console/fixtures.js`, `set.js`, `songs.js` | Fixtures, set save / load, songs and cues |
+| `console/patch.js` | Fader patch; the show's universe count (channel addresses for the current show) |
+| `console/fixtures.js`, `show.js`, `songs.js`, `sets.js` | Fixtures, show save / load, songs and cues, sets (and what's UP NEXT across set songs) |
 | `console/stage-link.js` | Console side of the live link with the stage |
 | `stage/stage.html`, `stage.css` | Stage page (with the import map for three.js) and styles |
 | `stage/stage.js` | Starts the stage; keeps up with other stage pages and the show server; ⌥-click traces |
@@ -539,10 +556,10 @@ The console and the stage are one app: anything both use (and the page header, o
 | `shared/trace.js` | The ⌥-click trace card, used by both pages |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B), used by both pages in place of the browser's |
 | `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, and the styles of the shared dialog, color picker and trace card; loaded by the combined page, the console and the stage |
-| `shared/ask.js` | The confirm / name dialog (new set, new song, remove …), used by the console and the page header |
+| `shared/ask.js` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |
 | `shared/server-socket.js` | The WebSocket to the show server (token, reconnecting), used by the console and the stage |
 | `shared/stage-bus.js` | The console ↔ stage live link's channel and message names |
-| `shared/live-fields.js` | Which set fields change while playing, used by the server and the console |
+| `shared/live-fields.js` | Which show fields change while playing, used by the server and the console |
 | `shared/address.js` | Universes and channel addresses (`2/45` ↔ 557) |
 | `shared/attributes.js` | Fixture attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
 | `shared/color.js`, `numbers.js`, `html.js`, `ids.js` | Small helpers: hex ↔ R/G/B, clamping to 0–255 and ranges, escaping text for HTML, new ids |
@@ -567,31 +584,31 @@ There are four links. The **show server** is the one that counts: it holds the s
 
 `console/server-link.js`, over `shared/server-socket.js`.
 
-- **Connecting.** The server answers with `hello`: the set, the live mix (master, submasters, crossfade, Current / Next, fade time, blackout snapshots) and the DMX status. An empty server (first run) takes the first console's set (`seed`).
+- **Connecting.** The server answers with `hello`: the show, the live mix (master, submasters, crossfade, LIVE and the selected cue, whether a transition is running, held flash / blackout faders, blackout snapshots) and the DMX status. An empty server (first run) takes the first console's show (`seed`).
 - **Console → server: only what changed.**
 
   | Message | When |
   |---|---|
-  | `set` | the set's structure changed (the whole set) |
+  | `show` | the show's structure changed (the whole show) |
   | `levels` | single fader cells, while dragging |
   | `live` | live fields (`shared/live-fields.js`) |
   | `hold` | flash / blackout buttons held |
   | `go` / `pause` / `stop` | transport |
-  | `stage` | a set file with a stage was loaded |
+  | `stage` | a show file with a stage was loaded |
   | `dmx-connect` / `dmx-disconnect` / `get-stage` | requests, answered with a `reply` |
 
-- **Server → consoles.** Each edit is passed on to the other consoles. `live` is sent on every fade step, and `dmx` whenever the output status changes. Every message to a console carries `seq`, a number that always increases (the stage link uses it, see 3).
+- **Server → consoles.** Each edit is passed on to the other consoles. `live` is sent on every fade step (and `show`, to every console, when GO arrives on the next set song), and `dmx` whenever the output status changes. Every message to a console carries `seq`, a number that always increases (the stage link uses it, see 3).
 - **No jitter while dragging.** A value just changed on a console wins over the server's broadcasts for 0.6 s.
 - **Dropped connection.** The console retries every second. Held flash / blackout buttons are released. Edits made while disconnected aren't sent: on reconnecting, the console takes the server's show.
 
 #### 2. Stage ↔ show server (WebSocket `/ws?role=stage`)
 
-`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, fixtures) with the show, so it's in the set file and the same on every computer.
+`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, fixtures) with the show, so it's in the show file and the same on every computer.
 
 - **Connecting.** `hello` carries the server's stage. The page sends its own stage instead if the server has none yet, or if the page was edited while it couldn't reach the server.
 - **Edits.** After an edit made on the stage page, it sends the whole stage (`stage`), and the server passes it on to the other stage pages. Values that only followed the console aren't sent; the console already has them.
-- **Set files.** A console's **Save set** asks for the stage (`get-stage`) to put it in the file; **Load set** sends a file's stage to the server, which passes it to the stage pages.
-- **What stage pages hear.** Only `stage` messages: no set, fades or `seq`.
+- **Show files.** A console's **Save show** asks for the stage (`get-stage`) to put it in the file; **Load show** sends a file's stage to the server, which passes it to the stage pages.
+- **What stage pages hear.** Only `stage` messages: no show, fades or `seq`.
 
 #### 3. Console ↔ stage, live (BroadcastChannel `unnaturallight.dmx`)
 
@@ -617,6 +634,87 @@ There are four links. The **show server** is the one that counts: it holds the s
 
 Copies of the page open in the same browser also share the stage through `localStorage` (`unnaturallight.stage`): each save there fires a `storage` event in the other tabs' stages, which take it in. A page keeps its own values for linked channels (those follow the console).
 
+#### Message reference (WebSocket `/ws`)
+
+Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F1); cue and song ids are the ones in the show; channels are numbered across universes (513 = universe 2 channel 1).
+
+**Show server → console**
+
+| `type` | Fields | Sent |
+|---|---|---|
+| `hello` | `seq`, `clientId` (this connection's id on the server), `show` (a [show](#the-show-object), or `null` on an empty server), `live` (a [live object](#the-live-object), or `null`), `outputs` (the [DMX status](#dmx-status)) | once, on connecting |
+| `show` | `seq`, `show`, `live` | another console changed the show's structure, or seeded an empty server; also to every console when GO arrives on the next set song |
+| `live` | `seq`, `live` | every fade step; another console moved a live value; flash / blackout holds changed (also when a console disconnects while holding some) |
+| `levels` | `seq`, `cells`: `[cueId, fader, level]` triples (level 0–255) | another console dragged faders |
+| `dmx` | `seq`, `outputs` | a DMX USB Pro connected, disconnected or failed |
+| `reply` | `id` (the request's), `ok`, `error` (when not ok), `stage` (for `get-stage`: the stage or `null`) | answer to a request (no `seq`) |
+
+**Console → show server**
+
+| `type` | Fields | When |
+|---|---|---|
+| `seed` | `show` | the `hello` had no show: this console's show becomes the show (ignored if the server already has one) |
+| `show` | `show` | the show's structure changed (anything but the live fields and fader levels): the whole show; the server keeps its own live fields |
+| `levels` | `cells`: `[cueId, fader, level]` triples | fader cells changed (sent at most once per tick, only the cells that changed) |
+| `live` | `live`: only the [live fields](#the-live-object) and blackout snapshots that changed | master, submasters, crossfade, LIVE or selected cue moved |
+| `hold` | `flashing`, `blackedOut`: fader indexes this console holds | a flash / blackout button pressed or let go |
+| `go` / `pause` / `stop` | none | GO (fade from the selected cue to UP NEXT); pause / resume the running fade; stop it (a hand move on the crossfade, picking a cue or song, a new or loaded show) |
+| `stage` | `stage` (the [stage object](#other-details)) | a show file with a stage was loaded: the server keeps it and passes it to the stage pages |
+| `get-stage` | `id` | **Save show**: asks for the stage to put in the file |
+| `dmx-connect` / `dmx-disconnect` | `id`, `universe` (1–8) | **Connect DMX Pro** / **Disconnect** |
+
+Requests (those with `id`, a number the console picks) are answered with a `reply` carrying the same `id`. While the console isn't connected they resolve at once with `{ ok: false, error }`.
+
+**Stage page ↔ show server** (`/ws?role=stage`)
+
+| Direction | `type` | Fields | When |
+|---|---|---|---|
+| server → stage | `hello` | `stage` (or `null`) | on connecting |
+| server → stage | `stage` | `stage` | another stage page edited it, or a console loaded a show file with a stage |
+| stage → server | `stage` | `stage` | after an edit on this page; on connecting, if the server has no stage or this page was edited offline |
+
+Stage pages get no `seq`, `show`, `live` or `dmx`.
+
+##### The live object
+
+What changes while playing (`show.live()` in `server/show.js`; the field lists are in `shared/live-fields.js`):
+
+| Field | Meaning |
+|---|---|
+| `master`, `fromSub`, `toSub` | master and the LIVE / UP NEXT submasters, 0–100 |
+| `cross` | crossfade, 0 (all LIVE) – 100 (all UP NEXT) |
+| `fromCue` | the LIVE cue (index in the active song) |
+| `selectedCue` | the selected cue (GO fades from it) |
+| `masterBlackoutSnapshot`, `fromSubBlackoutSnapshot`, `toSubBlackoutSnapshot` | what a blackout button cut (to restore it), or `null` when not blacked out |
+| `fade` | `null`, or `{ paused }` while a transition runs (server → console only) |
+| `flashing`, `blackedOut` | fader indexes held by any console (server → console only) |
+
+UP NEXT isn't sent: each side works it out from LIVE and the set (`upNextCue` in `console/sets.js`). Past a song's last cue it is the index one past the end, meaning the next set song's first cue.
+
+##### The show object
+
+What the console saves and the server holds (`serializeShow` / `parseShow` in `console/show.js`). A saved file adds `version` (1), `app` (`"UnnaturalLight"`), `kind` (`"show"`), `savedAt` and, when there is one, `stage`; a file with another `app` or `kind` is refused.
+
+| Field | Meaning |
+|---|---|
+| `showName` | the show's name |
+| `navOrder` | the console's tab order (`show`, `set`, `run`, `channels`, `fixtures`, `patch`); unknown names are dropped, and a missing tab goes in at its default place (after the tab before it in that list) |
+| `universes` | 1–8 |
+| `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s |
+| `activeSongId` | the song playing |
+| `sets` | `[{ id, name, entries: [{ id, songId }] }]`: each entry points at a song; a song can appear more than once |
+| `activeSetId` | the set the Run page runs |
+| `activeEntryId` | the entry playing in that set, or `null` (a song played from outside it) |
+| `master`, `cross`, `fromSub`, `toSub`, `fromCue`, `selectedCue` | the [live fields](#the-live-object) as last saved |
+| `faderNames` | 256 names |
+| `patch` | 256 lists of `{ channel, max }`: the channels each fader drives, and the level (0–255) a full fader sends |
+| `fixtureGroups` | `[{ id, name }]` |
+| `fixtures` | `[{ id, name, mount, color, channelStart, channelEnd, groupId, roles? }]`: `mount` is `fixed` / `movable`, `color` is `single` / `multi`, `roles` says what each channel does (`dimmer`, `pan`, `tilt`, `red`, `green`, `blue`, `zoom`) |
+
+##### DMX status
+
+`outputs` is one entry per universe: `{ universe, connected, remembered, path, error }`. `remembered` is true when the universe has a device it reconnects to; `path` is the device's serial port, and `error` is the last failure, if any.
+
 #### DMX output
 
 Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved, and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.js`). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
@@ -631,6 +729,6 @@ By default the server listens only on this computer (`127.0.0.1`). With `--lan` 
 
 **Fixture library.** The Open Fixture Library API only accepts requests from its own site and `http://localhost:8080`; from other addresses the stage reads the library's files on GitHub instead (same data; list names from file names; GitHub limits that to about 60 manufacturer lookups an hour, cached).
 
-**Browser storage.** Console set (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. Combined-page layout: `unnaturallight.shell`.
+**Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. Combined-page layout: `unnaturallight.shell`.
 
-**Stage (`stage` in the set file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).
+**Stage (`stage` in the show file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

@@ -82,7 +82,7 @@ export function notifyStage({ local = true } = {}) {
 }
 
 function outputLevels() {
-  // Every universe in the set, end to end (channel 513 = universe 2/1).
+  // Every universe in the show, end to end (channel 513 = universe 2/1).
   const levels = new Array(api.universes() * UNIVERSE_SIZE).fill(0);
   for (const [channel, level] of api.levels()) if (channel <= levels.length) levels[channel - 1] = level;
   return levels;

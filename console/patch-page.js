@@ -40,7 +40,7 @@ import { closeCuePicker, persistAndRefresh } from "./live.js";
 import { closeChannelsCueMenu, closeActionMenu } from "./cues.js";
 
 const CHANNEL_GROUP_SIZE = 32;
-/** Channel-picker groups of 32 across every universe in the set. */
+/** Channel-picker groups of 32 across every universe in the show. */
 const channelGroupCount = () => Math.ceil(channelLimit() / CHANNEL_GROUP_SIZE);
 
 function conflictChannels() {

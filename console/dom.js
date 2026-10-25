@@ -102,12 +102,26 @@ export const goBtn = requireEl("goBtn", HTMLButtonElement);
 export const goNextFade = requireEl("goNextFade", HTMLElement);
 export const fadePauseBtn = requireEl("fadePauseBtn", HTMLButtonElement);
 export const addCueBtn = requireEl("addCueBtn", HTMLButtonElement);
-export const removeCueBtn = requireEl("removeCueBtn", HTMLButtonElement);
 export const addSongBtn = requireEl("addSongBtn", HTMLButtonElement);
 export const songScroll = requireEl("songScroll", HTMLElement);
 export const songList = requireEl("songList", HTMLElement);
 export const songEmpty = requireEl("songEmpty", HTMLElement);
 export const activeSongLabel = requireEl("activeSongLabel", HTMLElement);
+export const activeSetLabel = requireEl("activeSetLabel", HTMLElement);
+export const prevSongBtn = requireEl("prevSongBtn", HTMLButtonElement);
+export const nextSongBtn = requireEl("nextSongBtn", HTMLButtonElement);
+export const setStrip = requireEl("setStrip", HTMLElement);
+export const setSelect = requireEl("setSelect", HTMLSelectElement);
+export const setMenuBtn = requireEl("setMenuBtn", HTMLButtonElement);
+export const runSetBtn = requireEl("runSetBtn", HTMLButtonElement);
+export const setSongSearch = requireEl("setSongSearch", HTMLInputElement);
+export const setSourceScroll = requireEl("setSourceScroll", HTMLElement);
+export const setSourceList = requireEl("setSourceList", HTMLElement);
+export const setEntryScroll = requireEl("setEntryScroll", HTMLElement);
+export const setEntryList = requireEl("setEntryList", HTMLElement);
+export const setEntryEmpty = requireEl("setEntryEmpty", HTMLElement);
+export const setEntryCount = requireEl("setEntryCount", HTMLElement);
+export const pageShow = requireEl("page-show", HTMLElement);
 export const pageSet = requireEl("page-set", HTMLElement);
 export const identityBtn = requireEl("identityBtn", HTMLButtonElement);
 export const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
@@ -117,7 +131,7 @@ export const channelMenuList = requireEl("channelMenuList", HTMLElement);
 export const channelMenuSub = requireEl("channelMenuSub", HTMLElement);
 export const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
 export const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
-export const pageSongs = requireEl("page-songs", HTMLElement);
+export const pageRun = requireEl("page-run", HTMLElement);
 export const pageChannels = requireEl("page-channels", HTMLElement);
 export const pageFixtures = requireEl("page-fixtures", HTMLElement);
 export const pagePatch = requireEl("page-patch", HTMLElement);
@@ -143,8 +157,9 @@ export const fixtureGroupMenuList = requireEl("fixtureGroupMenuList", HTMLElemen
 export const navEl = requireEl("nav", HTMLElement);
 /** @type {Record<string, HTMLElement>} */
 export const pages = {
+  show: pageShow,
   set: pageSet,
-  songs: pageSongs,
+  run: pageRun,
   channels: pageChannels,
   fixtures: pageFixtures,
   patch: pagePatch,

@@ -1,5 +1,5 @@
 // The console page (console.html): starts it up and wires its controls;
-// set new / load / save, universes and DMX outputs, fixtures placed on the
+// show new / load / save, universes and DMX outputs, fixtures placed on the
 // Stage page, the page header's hooks (consoleHeader), and the link to the
 // show server. The pages themselves are in the modules imported below.
 import { startStageLink } from "./stage-link.js";
@@ -32,19 +32,20 @@ import {
 } from "./fixtures.js";
 import {
   defaultFaderName,
-  downloadSet,
+  downloadShow,
   normalizeFaderNames,
   normalizeNavOrder,
-  normalizeSetName,
-  parseSet,
+  normalizeShowName,
+  parseShow,
   normalizeUniverses,
-} from "./set.js";
+} from "./show.js";
 import {
   createCue,
   MAX_CUES,
   normalizeSongs,
   resolveActiveSong,
 } from "./songs.js";
+import { normalizeSets } from "./sets.js";
 import {
   currentCueTitle,
   channelsCueMenuBtn,
@@ -59,7 +60,6 @@ import {
   goBtn,
   fadePauseBtn,
   addCueBtn,
-  removeCueBtn,
   addSongBtn,
   identityBtn,
   clearPatchBtn,
@@ -70,15 +70,16 @@ import {
   meterUniverseSelect,
 } from "./dom.js";
 import {
-  blankSetState,
+  blankShowState,
   getActiveSong,
+  getPlaybackLevels,
   bindActiveSong,
   syncPlaybackPair,
   headerListeners,
   notifyHeader,
   setStatus,
   persistSession,
-  currentSetState,
+  currentShowState,
   markClean,
   isDirty,
   state,
@@ -122,19 +123,19 @@ import {
   showArrivedCue,
   toggleFadePause,
 } from "./live.js";
-import { syncSongUi, renderSongs, addSong } from "./songs-page.js";
+import { syncSongUi, renderShowPage, addSong } from "./show-page.js";
+import { renderSetPage } from "./set-page.js";
 import {
   cueUi,
   closeChannelsCueMenu,
   renderCues,
   wireCurrentCueTitle,
   openChannelsCueMenu,
-  removeCueAt,
 } from "./cues.js";
 import { renderPatchTable } from "./patch-page.js";
 import {
-  syncSetNameUi,
-  applySetName,
+  syncShowNameUi,
+  applyShowName,
   applyNavOrder,
   wireNavReorder,
   routeFromHash,
@@ -336,10 +337,6 @@ addCueBtn.addEventListener("click", async () => {
   persistSession();
 });
 
-removeCueBtn.addEventListener("click", async () => {
-  await removeCueAt(state.selectedCue);
-});
-
 identityBtn.addEventListener("click", () => {
   state.patch = identityPatch();
   persistAndRefresh();
@@ -359,17 +356,17 @@ clearPatchBtn.addEventListener("click", async () => {
 });
 
 /**
- * Replace the whole set. `fromServer`: another console (or the server) changed
+ * Replace the whole show. `fromServer`: another console (or the server) changed
  * it, so leave the fade, blackouts and held buttons alone.
  */
-function applySet(next, { fromServer = false } = {}) {
+function applyShow(next, { fromServer = false } = {}) {
   if (!fromServer) {
     stopTimedFade();
     clearBlackoutSnapshots();
     blackedOutFaders.clear();
     flashingFaders.clear();
   }
-  state.setName = normalizeSetName(next.setName);
+  state.showName = normalizeShowName(next.showName);
   state.navOrder = normalizeNavOrder(next.navOrder);
   state.master = next.master;
   state.cross = next.cross;
@@ -383,6 +380,9 @@ function applySet(next, { fromServer = false } = {}) {
   state.selectedCue = next.selectedCue ?? 0;
   state.songs = normalizeSongs(next.songs);
   state.activeSongId = resolveActiveSong(state.songs, next.activeSongId).id;
+  state.sets = normalizeSets(next.sets, state.songs);
+  state.activeSetId = next.activeSetId;
+  state.activeEntryId = next.activeEntryId;
   bindActiveSong();
   state.faderNames = normalizeFaderNames(next.faderNames);
   state.fixtureGroups = normalizeFixtureGroups(next.fixtureGroups);
@@ -396,7 +396,7 @@ function applySet(next, { fromServer = false } = {}) {
   state.patch = next.patch;
 
   applyNavOrder(state.navOrder);
-  syncSetNameUi();
+  syncShowNameUi();
   syncSongUi();
   syncMasterUi();
   syncSubmasterUi();
@@ -407,7 +407,8 @@ function applySet(next, { fromServer = false } = {}) {
   renderLiveRow();
   renderChannelRow();
   renderSelectedGroup();
-  renderSongs();
+  renderShowPage();
+  renderSetPage();
   renderFixtures();
   renderPatchTable();
   pushToDmx();
@@ -421,35 +422,35 @@ function syncTransportFromState() {
   updateFadePauseButton();
 }
 
-/** Start a blank set called `name` (the page header asks first if there are unsaved changes). */
-function newSet(name) {
-  applySet(blankSetState(name));
+/** Start a blank show called `name` (the page header asks first if there are unsaved changes). */
+function newShow(name) {
+  applyShow(blankShowState(name));
   markClean();
   persistSession();
-  setStatus(`New set · ${state.setName}`, dmx.connected ? "connected" : "idle");
+  setStatus(`New show · ${state.showName}`, dmx.connected ? "connected" : "idle");
 }
 
-/** Download the set, with the stage the show server keeps alongside it. */
-async function saveSet() {
+/** Download the show, with the stage the show server keeps alongside it. */
+async function saveShow() {
   const reply = await state.serverLink.request({ type: "get-stage" });
-  downloadSet(currentSetState(), undefined, reply.ok ? reply.stage : null);
+  downloadShow(currentShowState(), undefined, reply.ok ? reply.stage : null);
   markClean();
-  setStatus(reply.ok ? "Set saved" : "Set saved (without the stage: the show server is offline)", dmx.connected ? "connected" : "idle");
+  setStatus(reply.ok ? "Show saved" : "Show saved (without the stage: the show server is offline)", dmx.connected ? "connected" : "idle");
 }
 
 /**
- * Load a set file's text (the page header asks first if there are unsaved
+ * Load a show file's text (the page header asks first if there are unsaved
  * changes). Its stage, if it has one, replaces the stage.
  */
-function loadSet(text, fileName) {
+function loadShow(text, fileName) {
   try {
     const data = JSON.parse(text);
-    applySet(parseSet(data));
+    applyShow(parseShow(data));
     markClean();
     if (data.stage && typeof data.stage === "object") state.serverLink.sendStage(data.stage);
-    setStatus(`Set loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
+    setStatus(`Show loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load set";
+    const message = err instanceof Error ? err.message : "Failed to load show";
     setStatus(message, "error");
     console.error(err);
   }
@@ -566,14 +567,14 @@ ensureFixtureFormGroupPicker();
 suggestFixtureFormStart();
 wireNavReorder();
 applyNavOrder(state.navOrder);
-syncSetNameUi();
+syncShowNameUi();
 syncSongUi();
 syncTransportFromState();
 renderLiveRow();
 renderChannelRow();
 renderSelectedGroup();
 renderCues();
-renderSongs();
+renderShowPage();
 renderFixtures();
 renderPatchTable();
 renderOutputs();
@@ -708,7 +709,7 @@ document.addEventListener(
 // For the page header (../index.html): what it shows, and the actions it offers.
 const consoleHeader = {
   state: () => ({
-    setName: state.setName,
+    showName: state.showName,
     status: state.status,
     serverLive: state.serverLive,
     serverHost: location.host,
@@ -723,10 +724,10 @@ const consoleHeader = {
     return () => headerListeners.delete(fn);
   },
   isDirty,
-  rename: applySetName,
-  newSet,
-  saveSet,
-  loadSet,
+  rename: applyShowName,
+  newShow,
+  saveShow,
+  loadShow,
   toggleOutput: (u) => void toggleOutput(u),
   setUniverses,
 };
@@ -738,7 +739,7 @@ startStageLink({
   levels: computeChannelLevels,
   serverSeq: () => state.serverLink?.seq ?? 0,
   patch: () => state.patch,
-  live: () => ({ cueLevels: state.cueLevels, fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
+  live: () => ({ cueLevels: getPlaybackLevels(), fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
   fixtures: () => state.fixtures,
   groups: () => state.fixtureGroups,
   faderInfo: () => Array.from({ length: FADER_COUNT }, (_, i) => ({
@@ -746,7 +747,7 @@ startStageLink({
     name: faderName(i),
     live: liveLevel(i),
     from: state.cueLevels[state.fromCue]?.[i] ?? 0,
-    to: state.cueLevels[state.toCue]?.[i] ?? 0,
+    to: getPlaybackLevels()[state.toCue]?.[i] ?? 0,
     patch: state.patch[i],
   })),
   mix: () => ({ master: state.master, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, fromName: cueLabel(state.fromCue), toName: cueLabel(state.toCue) }),
@@ -788,10 +789,10 @@ offlineCover.className = "server-offline";
 offlineCover.innerHTML = "<div><strong>Connecting to the show server…</strong><span>Start it with <code>./server.sh</code> on the machine the DMX USB Pro is plugged into.</span></div>";
 document.body.append(offlineCover);
 
-/** Set fields the server sent that are live values (it sends these separately). */
-function withLive(set, live) {
-  const state = parseSet(set);
-  const current = currentSetState();
+/** Show fields the server sent that are live values (it sends these separately). */
+function withLive(show, live) {
+  const state = parseShow(show);
+  const current = currentShowState();
   // A live value missing here was just changed on this console: keep ours.
   for (const f of LIVE_FIELDS) state[f] = f in live ? live[f] : current[f];
   return state;
@@ -824,22 +825,22 @@ function applyServerLive(live) {
 
 state.serverLink = createServerLink({
   view: () => ({
-    set: currentSetState(),
+    show: currentShowState(),
     snapshots: { masterBlackoutSnapshot: state.masterBlackoutSnapshot, fromSubBlackoutSnapshot: state.fromSubBlackoutSnapshot, toSubBlackoutSnapshot: state.toSubBlackoutSnapshot },
     flashing: flashingFaders,
     blackedOut: blackedOutFaders,
   }),
-  onHello: ({ set, live, outputs: list }) => {
+  onHello: ({ show, live, outputs: list }) => {
     state.outputStatus = list ?? [];
-    if (set) {
-      applySet(withLive(set, live ?? {}), { fromServer: true });
+    if (show) {
+      applyShow(withLive(show, live ?? {}), { fromServer: true });
       applyServerLive(live ?? {});
       markClean();
     }
     renderOutputs();
   },
-  onSet: (set, live) => {
-    applySet(withLive(set, live), { fromServer: true });
+  onShow: (show, live) => {
+    applyShow(withLive(show, live), { fromServer: true });
     applyServerLive(live);
   },
   onLive: applyServerLive,

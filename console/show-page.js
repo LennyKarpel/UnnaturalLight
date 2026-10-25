@@ -1,26 +1,26 @@
-// Songs page: the song list (add, remove, rename, reorder).
+// Show page: every song in the show (add, remove, rename, reorder, play),
+// and the sets each one is in.
 import { defaultSongName, createCue, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.js";
-import { addSongBtn, songScroll, songList, songEmpty, activeSongLabel, pageSet, dropSlot, showDropLine } from "./dom.js";
-import { getActiveSong, bindActiveSong, persistSession, state } from "./state.js";
+import { addSongBtn, songScroll, songList, songEmpty, pageShow, dropSlot, showDropLine } from "./dom.js";
+import { renderSetBar } from "./set-bar.js";
+import { getActiveEntry, getActiveSet, bindActiveSong, persistSession, state } from "./state.js";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.js";
-import { pushToDmx, renderSelectedGroup, syncCrossUi, stopTimedFade } from "./live.js";
+import { pushToDmx, refreshCueSelects, renderSelectedGroup, syncCrossUi, stopTimedFade, updateFadePauseButton } from "./live.js";
 import { renderCues, openActionMenu, closeActionMenu } from "./cues.js";
 
 /** @type {null | (() => void)} */
 export let endInlineSongRename = null;
 
-export function adjustIndexAfterRemove(index, removed, lengthAfter) {
-  if (index > removed) return index - 1;
-  if (index === removed) return Math.min(removed, lengthAfter - 1);
-  return index;
+/** Names of the sets `songId` is in. */
+function setsWithSong(songId) {
+  return state.sets.filter((set) => set.entries.some((entry) => entry.songId === songId)).map((set) => set.name);
 }
 
+/** The active song changed (or its set, or a song's name): update the Run page's set bar and the Show page. */
 export function syncSongUi() {
-  const song = getActiveSong();
-  activeSongLabel.textContent = song.name;
-  activeSongLabel.title = `${song.name} · ${song.cues.length} cues`;
   addSongBtn.disabled = state.songs.length >= MAX_SONGS;
-  if (!pageSet.hidden) renderSongs();
+  renderSetBar();
+  if (!pageShow.hidden) renderShowPage();
 }
 
 function clearSongDropMarks() {
@@ -86,7 +86,7 @@ function startSongDragSession(initialClientY) {
   stopSongDragSession?.();
   songDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  pageSet.classList.add("is-dragging-song");
+  pageShow.classList.add("is-dragging-song");
 
   const onDragOver = (event) => {
     if (!dragSongId) return;
@@ -105,12 +105,12 @@ function startSongDragSession(initialClientY) {
       songDragScrollRaf = null;
     }
     songDragClientY = null;
-    pageSet.classList.remove("is-dragging-song");
+    pageShow.classList.remove("is-dragging-song");
     stopSongDragSession = null;
   };
 }
 
-export function renderSongs() {
+export function renderShowPage() {
   songList.replaceChildren();
   songEmpty.hidden = state.songs.length > 0;
   addSongBtn.disabled = state.songs.length >= MAX_SONGS;
@@ -148,11 +148,12 @@ export function renderSongs() {
     const meta = document.createElement("span");
     meta.className = "song-row-meta";
     const n = song.cues.length;
-    meta.textContent = `${n} cue${n === 1 ? "" : "s"}`;
+    const sets = setsWithSong(song.id);
+    meta.textContent = `${n} cue${n === 1 ? "" : "s"} · ${sets.length ? `in ${sets.join(", ")}` : "in no set"}`;
 
     const badge = document.createElement("span");
     badge.className = "song-row-badge";
-    badge.textContent = song.id === state.activeSongId ? "Playing" : "Play";
+    badge.textContent = song.id !== state.activeSongId ? "Play" : getActiveEntry() ? "Playing" : "Playing · not in set";
 
     const menuBtn = document.createElement("button");
     menuBtn.type = "button";
@@ -272,7 +273,7 @@ songScroll.addEventListener("drop", (event) => {
   const targetId = rows[after ? rows.length - 1 : slot].dataset.songId;
   if (targetId && moveSong(state.songs, fromId, targetId, after)) {
     persistSession();
-    renderSongs();
+    renderShowPage();
     syncSongUi();
   }
 });
@@ -356,11 +357,20 @@ function beginInlineSongRename(id, target) {
   input.addEventListener("pointerdown", (event) => event.stopPropagation());
 }
 
-function setActiveSong(songId) {
+/**
+ * Play a song from its first cue. `entryId`: its place in the active set;
+ * left out, its first place there (or none: played from outside the set).
+ * @param {string} songId
+ * @param {string | null} [entryId]
+ */
+export function setActiveSong(songId, entryId) {
   const song = state.songs.find((item) => item.id === songId);
   if (!song) return;
   stopTimedFade();
   state.activeSongId = song.id;
+  state.activeEntryId = entryId !== undefined
+    ? entryId
+    : (getActiveSet().entries.find((entry) => entry.songId === song.id)?.id ?? null);
   state.fromCue = 0;
   state.toCue = Math.min(1, song.cues.length - 1);
   state.selectedCue = 0;
@@ -386,7 +396,7 @@ export async function addSong() {
   const song = createSong({ name });
   state.songs.push(song);
   setActiveSong(song.id);
-  renderSongs();
+  renderShowPage();
 }
 
 /**
@@ -418,7 +428,7 @@ function duplicateSong(id) {
   });
   state.songs.splice(index + 1, 0, copy);
   persistSession();
-  renderSongs();
+  renderShowPage();
   syncSongUi();
 }
 
@@ -427,9 +437,10 @@ async function deleteSong(id) {
   if (state.songs.length <= 1) return;
   const song = state.songs.find((item) => item.id === id);
   if (!song) return;
+  const sets = setsWithSong(id);
   const ok = await confirmAction({
     title: "Delete song?",
-    message: `Delete “${song.name}” and all of its cues?`,
+    message: `Delete “${song.name}” and all of its cues?${sets.length ? ` It will also be taken out of ${sets.join(", ")}.` : ""}`,
     confirmLabel: "Delete",
   });
   if (!ok) return;
@@ -437,11 +448,25 @@ async function deleteSong(id) {
   if (index < 0) return;
   const wasActive = song.id === state.activeSongId;
   state.songs.splice(index, 1);
+  for (const set of state.sets) set.entries = set.entries.filter((entry) => entry.songId !== id);
   if (wasActive) {
     const next = state.songs[Math.min(index, state.songs.length - 1)];
     setActiveSong(next.id);
   } else {
-    renderSongs();
-    persistSession();
+    renderShowPage();
+    refreshUpNext();
   }
+}
+
+/**
+ * The set changed (or a song left it): UP NEXT may now be another song's
+ * first cue, or nothing. Redraw what shows it, and save.
+ */
+export function refreshUpNext() {
+  bindActiveSong();
+  refreshCueSelects();
+  updateFadePauseButton();
+  renderCues();
+  syncSongUi();
+  pushToDmx();
 }

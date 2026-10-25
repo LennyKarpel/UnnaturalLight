@@ -1,3 +1,5 @@
+// Songs and their cues: limits, In times, creating, checking (as loaded) and
+// reordering them. The show holds every song; sets point at them (sets.js).
 import { FADER_COUNT } from "./patch.js";
 import { newId } from "../shared/ids.js";
 
@@ -250,7 +252,7 @@ export function createCue(opts = {}) {
 export function resolveActiveSong(songs, activeSongId) {
   // Return the song object from `songs` itself, not from a normalized copy:
   // the console edits the returned song's cues in place, and a copy
-  // would make those edits (fader moves, …) miss the saved set.
+  // would make those edits (fader moves, …) miss the saved show.
   const list = Array.isArray(songs) && songs.length > 0 ? songs : normalizeSongs(songs);
   if (activeSongId) {
     const found = list.find((song) => song.id === activeSongId);

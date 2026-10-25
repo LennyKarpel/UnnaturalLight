@@ -688,7 +688,7 @@ function renderFixtureRow(fixture) {
   remove.addEventListener("click", async () => {
     const ok = await confirmAction({
       title: "Remove fixture?",
-      message: `Remove “${fixture.name}” from this set?`,
+      message: `Remove “${fixture.name}” from this show?`,
       confirmLabel: "Remove",
     });
     if (!ok) return;

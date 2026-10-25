@@ -15,9 +15,9 @@ export function setUniverseCount(n) {
 }
 /** Highest channel in use with the current universe count. */
 export const channelLimit = () => universeCount * UNIVERSE_SIZE;
-/** 45 → "45" (one universe) · 557 → "2/45" (several), for the current set. */
+/** 45 → "45" (one universe) · 557 → "2/45" (several), for the current show. */
 export const formatAddress = (channel) => formatIn(channel, universeCount);
-/** "2/45" → 557 · "45" → 45 · invalid / beyond the set's universes → null. */
+/** "2/45" → 557 · "45" → 45 · invalid / beyond the show's universes → null. */
 export const parseAddress = (text) => parseIn(text, universeCount);
 /** Channels shown on the main-page Channels meter row. */
 export const CHANNEL_METER_COUNT = 256;
