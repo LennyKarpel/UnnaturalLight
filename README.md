@@ -559,6 +559,8 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the app on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
 
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.js`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.js`) and reading / saving shows. The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
 | Path | What's in it |
@@ -570,6 +572,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `server/show.js` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/net-dmx.js` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
+| `test/` | `npm test`: unit tests for the shared logic (see above) |
 | `server/data/` | `session.json` (the show, with the stage under `stage`), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
 | `console/styles.css` | Console styles, scoped to its pane (`:where(#consolePane)`; breakpoints are container queries on the pane) |
 | `console/app.js` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
@@ -600,7 +603,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/console-link.js` | Stage side of its link with the console |
 | `stage/show-link.js` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
-| `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease), used by the console and the server |
+| `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B; one, shared by the console and the stage) in place of the browser's |
 | `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, thin scrollbars (`.thin-scroll`), and the styles of the shared dialog, color picker and trace card; loaded by the app page |

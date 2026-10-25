@@ -22,7 +22,7 @@
 import { UNIVERSE_SIZE } from "./patch.js";
 import { createTracePopover, provideTrace } from "../shared/trace.js";
 import { joinLink } from "../shared/console-stage.js";
-import { clampByte } from "../shared/numbers.js";
+import { setChannelLevels } from "../shared/engine.js";
 
 /**
  * @typedef {{
@@ -94,24 +94,8 @@ function send() {
 /** @param {{ channel: number, value: number }[]} values */
 function applySet(values) {
   if (!api) return;
-  const patch = api.patch();
   const L = api.live();
-  const t = L.cross / 100;
-  let touched = false;
-  for (const { channel, value } of values) {
-    for (let i = 0; i < patch.length; i++) {
-      const target = patch[i].find((p) => p.channel === channel);
-      if (!target || target.max <= 0 || L.master <= 0) continue;
-      // Live level the fader needs for this channel to output `value`…
-      const level = clampByte((value * 255) / target.max);
-      // …and the pre-master mix that gives it (see liveLevel in app.js).
-      const mixed = (level * 100) / L.master;
-      if (t < 1 && L.fromSub > 0) L.cueLevels[L.fromCue][i] = clampByte((mixed * 100) / L.fromSub);
-      if (t > 0 && L.toSub > 0) L.cueLevels[L.toCue][i] = clampByte((mixed * 100) / L.toSub);
-      touched = true;
-    }
-  }
-  if (touched) api.afterSet();
+  if (setChannelLevels(api.patch(), L, L.cueLevels, values)) api.afterSet();
 }
 
 /** @param {StageLinkApi} linkApi */
