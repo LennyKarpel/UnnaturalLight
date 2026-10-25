@@ -1,11 +1,12 @@
 /**
- * WebSocket to the show server (../server/server.js), shared by the console
- * (console/server-link.js) and the stage (stage/show-link.js): finds the
- * server's /ws, passes the access token, reconnects when the connection
- * drops and hands on each message as parsed JSON.
+ * The app window's one WebSocket to the show server (../server/server.js),
+ * shared by the console (console/server-link.js) and the stage
+ * (stage/show-link.js): finds the server's /ws, passes the access token,
+ * reconnects when the connection drops and hands each message, as parsed
+ * JSON, to both sides (each ignores the other's types).
  *
  * Other machines open the page with ?token=… (printed by the server);
- * ../index.html keeps it for the tab, and the console and the stage read it.
+ * ../index.html keeps it for the tab, and this reads it.
  */
 
 const RECONNECT_MS = 1000;
@@ -19,41 +20,42 @@ function accessToken() {
   }
 }
 
+/** Every side's handlers. */
+const listeners = [];
+/** @type {WebSocket | null} */
+let ws = null;
+
+function connect() {
+  const url = new URL("/ws", location.href);
+  url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const token = accessToken();
+  if (token) url.searchParams.set("token", token);
+  ws = new WebSocket(url);
+  ws.addEventListener("message", (e) => {
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+    for (const l of listeners) l.onMessage(msg);
+  });
+  ws.addEventListener("close", () => {
+    for (const l of listeners) l.onClose?.();
+    setTimeout(connect, RECONNECT_MS);
+  });
+}
+
 /**
+ * Listen on the connection (opened by the first caller).
  * @param {{
- *   role?: string,
  *   onMessage: (msg: any) => void,
  *   onClose?: () => void,
- * }} opts  role: e.g. "stage" (the server tells stage pages only about the stage);
- *          onClose: the connection dropped (it reconnects by itself)
+ * }} opts  onClose: the connection dropped (it reconnects by itself)
  */
-export function openServerSocket({ role, onMessage, onClose }) {
-  const token = accessToken();
-  /** @type {WebSocket | null} */
-  let ws = null;
-
-  function connect() {
-    const url = new URL("/ws", location.href);
-    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    if (role) url.searchParams.set("role", role);
-    if (token) url.searchParams.set("token", token);
-    ws = new WebSocket(url);
-    ws.addEventListener("message", (e) => {
-      let msg;
-      try {
-        msg = JSON.parse(e.data);
-      } catch {
-        return;
-      }
-      onMessage(msg);
-    });
-    ws.addEventListener("close", () => {
-      onClose?.();
-      setTimeout(connect, RECONNECT_MS);
-    });
-  }
-  connect();
-
+export function openServerSocket({ onMessage, onClose }) {
+  listeners.push({ onMessage, onClose });
+  if (!ws) connect();
   return {
     /** Send a message if the connection is open (dropped otherwise). */
     send(msg) {

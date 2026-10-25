@@ -399,9 +399,13 @@ for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown
 }
 setInterval(requestRender, 500);
 
+/** The stage's pane of the app: while it's hidden (Console view), nothing is drawn; the scene still keeps up. */
+const pane = view.closest("[data-pane]");
+
 renderer.setAnimationLoop(() => {
   const moved = controls.update();
   if (!moved && !needsRender) return;
+  if (pane && getComputedStyle(pane).visibility === "hidden") { needsRender = true; return; }
   needsRender = false;
   renderer.render(scene, camera);
 });

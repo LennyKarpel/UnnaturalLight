@@ -1,7 +1,7 @@
-// The console page (console.html): starts it up and wires its controls;
+// The console (its pane in ../index.html): starts it up and wires its controls;
 // show new / load / save, universes and DMX outputs, fixtures placed on the
-// Stage page, the page header's hooks (consoleHeader), and the link to the
-// show server. The pages themselves are in the modules imported below.
+// stage, the app header's hooks (consoleHeader), and the link to the show
+// server. The console's pages themselves are in the modules imported below.
 import { startStageLink } from "./stage-link.js";
 import { createServerLink } from "./server-link.js";
 import { LIVE_FIELDS } from "../shared/live-fields.js";
@@ -570,7 +570,7 @@ persistSession();
 markClean();
 
 // ---------------------------------------------------------------------
-// Fixtures registered from the Stage page (see stage-link.js)
+// Fixtures registered from the stage (see stage-link.js)
 // ---------------------------------------------------------------------
 // Placing a fixture on the stage registers it here: a console fixture at
 // the next free DMX block, one fader per channel (an unnamed fader already
@@ -760,12 +760,11 @@ const consoleHeader = {
   setUniverses,
 };
 window.consoleHeader = consoleHeader;
-window.parent.onConsoleHeader?.(consoleHeader);
+window.onConsoleHeader?.(consoleHeader);
 
-// Live link to the Stage page: send output levels, apply fader moves made there.
+// Live link to the stage: send output levels, apply fader moves made there.
 startStageLink({
   levels: computeChannelLevels,
-  serverSeq: () => state.serverLink?.seq ?? 0,
   patch: () => state.patch,
   live: () => ({ cueLevels: getPlaybackLevels(), fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
   fixtures: () => state.fixtures,
@@ -816,7 +815,7 @@ startStageLink({
 const offlineCover = document.createElement("div");
 offlineCover.className = "server-offline";
 offlineCover.innerHTML = "<div><strong>Connecting to the show server…</strong><span>Start it with <code>./server.sh</code> on the machine the DMX USB Pro is plugged into.</span></div>";
-document.body.append(offlineCover);
+document.getElementById("consolePane").append(offlineCover);
 
 /** Show fields the server sent that are live values (it sends these separately). */
 function withLive(show, live) {

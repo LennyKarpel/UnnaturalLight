@@ -2,15 +2,14 @@
 //
 //   - serves the console / stage pages (no caching, so a reload always picks up changes)
 //   - holds the show (server/show.js): every console is a remote view of it
-//   - keeps the stage (the 3D layout) with the show, for every stage page
+//   - keeps the stage (the 3D layout) with the show, for every app window
 //   - runs timed fades and sends DMX to the Enttec DMX USB Pro(s) (server/dmx.js)
 //     and to Art-Net / sACN nodes (server/net-dmx.js),
 //     so closing or backgrounding a browser tab never affects the lights
 //   - saves the show to server/data/session.json
 //
-// Consoles talk to it over a WebSocket at /ws (see console/server-link.js),
-// stage pages at /ws?role=stage (see stage/show-link.js; they only hear
-// about the stage).
+// Each app window talks to it over one WebSocket at /ws, shared by its
+// console (console/server-link.js) and its stage (stage/show-link.js).
 //
 // Usage: node server/server.js [port] [--lan] [--fake-dmx] [--no-open]
 //   --lan       listen on the local network too (other machines need the printed token)
@@ -100,23 +99,14 @@ const outputStatus = () => dmx.status().map((s) => ({ ...s, network: netDmx.labe
 
 // --- WebSocket clients -------------------------------------------------------
 
-/** @type {Map<import("ws").WebSocket, { id: string, role: "console" | "stage" }>} */
+/** @type {Map<import("ws").WebSocket, { id: string }>} */
 const clients = new Map();
 
-/**
- * Numbers every message to consoles, always increasing (a clock reading, so
- * also across restarts): a console tells the stage which server message its
- * output reflects, so the stage can drop late copies from a console the
- * browser runs slowly.
- */
-let lastSeq = 0;
-const nextSeq = () => (lastSeq = Math.max(lastSeq + 1, Date.now()));
-
-/** Send to every client of `role` (consoles by default) but `except`. */
-function broadcast(msg, except = null, role = "console") {
-  const text = JSON.stringify(role === "console" ? { ...msg, seq: nextSeq() } : msg);
+/** Send to every client but `except`. */
+function broadcast(msg, except = null) {
+  const text = JSON.stringify(msg);
   for (const [ws, client] of clients) {
-    if (ws !== except && client.role === role && ws.readyState === ws.OPEN) ws.send(text);
+    if (ws !== except && ws.readyState === ws.OPEN) ws.send(text);
   }
 }
 
@@ -166,10 +156,11 @@ async function onMessage(ws, client, msg) {
       sendLive();
       return;
     case "stage":
-      // From a stage page (an edit) or a console (a show file was loaded).
+      // An edit on a stage (the other windows take it), or a show file
+      // loaded in a console (`file`: every window takes it, the sender's too).
       if (!msg.stage || typeof msg.stage !== "object") return;
       stage = msg.stage;
-      broadcast({ type: "stage", stage }, ws, "stage");
+      broadcast({ type: "stage", stage }, msg.file ? null : ws);
       scheduleSave();
       return;
     case "get-stage":
@@ -249,12 +240,9 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", (ws, req) => {
-  const role = new URL(req.url ?? "/", "http://x").searchParams.get("role") === "stage" ? "stage" : "console";
-  const client = { id: crypto.randomUUID(), role };
+  const client = { id: crypto.randomUUID() };
   clients.set(ws, client);
-  ws.send(JSON.stringify(role === "stage"
-    ? { type: "hello", stage }
-    : { type: "hello", seq: nextSeq(), clientId: client.id, show: show.serialized(), live: show.live(), outputs: outputStatus() }));
+  ws.send(JSON.stringify({ type: "hello", clientId: client.id, show: show.serialized(), live: show.live(), outputs: outputStatus(), stage }));
   ws.on("message", (data) => {
     let msg;
     try {

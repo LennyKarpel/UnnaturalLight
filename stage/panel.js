@@ -26,9 +26,12 @@ export function applyCollapsed(section) {
   }
 }
 
-for (const section of document.querySelectorAll("aside > section")) applyCollapsed(section);
+/** The stage's side panel (the console has asides of its own in the same page). */
+const asideEl = document.querySelector("#stagePane aside");
 
-document.querySelector("aside").addEventListener("click", (e) => {
+for (const section of asideEl.querySelectorAll(":scope > section")) applyCollapsed(section);
+
+asideEl.addEventListener("click", (e) => {
   const btn = e.target instanceof Element ? e.target.closest(".collapse-btn") : null;
   if (!btn) return;
   const section = btn.closest("section");
@@ -43,7 +46,6 @@ document.querySelector("aside").addEventListener("click", (e) => {
 // one under Fixtures the list's height (the inspector gets the rest). Sizes
 // are remembered in this browser; double-click a divider to reset it.
 const PANEL_SIZES_KEY = "unnaturallight.stage.panelSizes";
-const asideEl = document.querySelector("aside");
 const panelSizes = (() => {
   try { return JSON.parse(localStorage.getItem(PANEL_SIZES_KEY) ?? "{}") ?? {}; } catch { return {}; }
 })();
@@ -62,7 +64,7 @@ function savePanelSizes() {
 
 for (const key of Object.keys(SIZE_VARS)) applyPanelSize(key);
 
-for (const divider of document.querySelectorAll(".vdivider")) {
+for (const divider of asideEl.querySelectorAll(".vdivider")) {
   const key = divider.dataset.resize;
   // What the divider sizes: the plan canvas, or the Fixtures section.
   const target = document.getElementById(key === "plan" ? "plan" : "fixtures");

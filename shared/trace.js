@@ -3,8 +3,9 @@
 // it, what it controls, and the current values, in a small card next to
 // the pointer.
 //
-// Each page passes a snapshot of what it knows (its own state plus what the
-// other page has sent over the live link); buildTrace() turns that into rows.
+// Each side registers what it knows (provideTrace: the console its levels,
+// faders, mix and fixtures; the stage its fixtures), and the card combines
+// them; buildTrace() turns that into rows.
 // Styles: theme.css.
 
 import { DMX_ATTRS as ATTRS, DMX_LABELS as LABEL } from "./attributes.js";
@@ -259,10 +260,43 @@ function rowHtml(r) {
 }
 
 /**
- * One reusable card. open() shows a trace at a screen point; refresh()
+ * What each side knows, for the card.
+ * @type {{ console: null | (() => Omit<Snapshot, "live" | "stageFixtures">), stage: null | (() => StageFixture[]) }}
+ */
+const sources = { console: null, stage: null };
+
+/** Register a side's part of the card (console/stage-link.js, stage/stage.js). */
+export function provideTrace(source) {
+  Object.assign(sources, source);
+}
+
+/** @returns {Snapshot} */
+function snapshot() {
+  const c = sources.console?.();
+  return {
+    live: !!c,
+    levels: c?.levels ?? null,
+    faders: c?.faders ?? null,
+    mix: c?.mix ?? null,
+    universes: c?.universes ?? 1,
+    consoleFixtures: c?.consoleFixtures ?? [],
+    stageFixtures: sources.stage?.() ?? null,
+  };
+}
+
+/** The app's one card (the console and the stage share it). */
+let popover = null;
+
+/**
+ * The trace card. show() shows a trace at a screen point; refresh()
  * re-renders it from a fresh snapshot (call it whenever values change).
  */
 export function createTracePopover() {
+  popover ??= makePopover();
+  return popover;
+}
+
+function makePopover() {
   const el = document.createElement("div");
   el.className = "trace-pop";
   el.hidden = true;
@@ -270,12 +304,12 @@ export function createTracePopover() {
   el.setAttribute("aria-label", "Signal trace");
   document.body.append(el);
 
-  /** @type {null | { target: TraceTarget, snapshot: () => Snapshot }} */
+  /** @type {TraceTarget | null} */
   let current = null;
 
   function render() {
     if (!current) return;
-    const t = buildTrace(current.snapshot(), current.target);
+    const t = buildTrace(snapshot(), current);
     el.innerHTML = `
       <div class="t-head">
         <div><div class="t-title">${esc(t.title)}</div><div class="t-sub">${esc(t.subtitle)}</div></div>
@@ -296,9 +330,9 @@ export function createTracePopover() {
 
   return {
     get open() { return !el.hidden; },
-    /** @param {TraceTarget} target @param {number} x @param {number} y @param {() => Snapshot} snapshot */
-    show(target, x, y, snapshot) {
-      current = { target, snapshot };
+    /** @param {TraceTarget} target @param {number} x @param {number} y */
+    show(target, x, y) {
+      current = target;
       render();
       el.hidden = false;
       const r = el.getBoundingClientRect();

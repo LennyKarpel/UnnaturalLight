@@ -224,7 +224,7 @@ export function pushToDmx({ persist = true, fromServer = false } = {}) {
   state.serverLink?.sync();
   if (fromServer) refreshOutputSoon();
   else refreshOutput();
-  notifyStage({ local: !fromServer });
+  notifyStage();
   if (persist) persistSession();
 }
 

@@ -33,7 +33,7 @@ import { trace, publishStage } from "./stage.js";
 // console fader patched: the console's output sets the stage, and changing
 // a value here moves that fader (see console-link.js for the rules).
 
-// The console sends a message per fader move (often 120 a second while
+// The console sends its levels on every fader move (often 120 a second while
 // dragging): take its latest values once per frame.
 let consoleLevelsQueued = false;
 function applyConsoleLevelsSoon() {
@@ -300,10 +300,8 @@ function syncOtherChannels(fixture) {
       if (el.type === "range") el.addEventListener("change", () => el.blur());
     });
   }
-  const levels = consoleLink.traceInfo().levels;
-  const live = consoleLink.live;
+  const levels = consoleLink.levels;
   box.querySelectorAll("[data-oc]").forEach((el) => {
-    el.disabled = !live;
     if (el === document.activeElement) return;
     el.value = String(levels?.[Number(el.dataset.oc) - 1] ?? 0);
   });
@@ -345,12 +343,10 @@ export function syncDmxRows(fixture) {
   const withFader = linked.filter(({ channel }) => consoleLink.fadersFor(channel).length).length;
   const owned = fixture.link.owned ? " Registered by the stage: deleting it here removes it from the console." : "";
   status.textContent = fixture.link.register
-    ? (consoleLink.live ? "Registering in the console…" : "Will register in the console when it opens.")
+    ? "Registering in the console…"
     : !linked.length
     ? (fixture.link.start ? "No channels assigned in the layout." : "Not linked: values are set here only.")
-    : !consoleLink.live
-      ? "Console offline: changes stay here. Open the console to sync (its values take over)."
-      : `${withFader} of ${linked.length} channels have a fader: those follow the console, and changes here move the fader.${owned}`;
+    : `${withFader} of ${linked.length} channels have a fader: those follow the console, and changes here move the fader.${owned}`;
 }
 
 // ---------------------------------------------------------------------
@@ -359,8 +355,8 @@ export function syncDmxRows(fixture) {
 // A fixture placed with a console type (or a rig's members, or a copy of a
 // registered fixture) asks the console to create a fixture at the next
 // free DMX block, patch one free fader per channel and name them. It starts
-// at the fixture's current values. Fixtures placed while the console is closed
-// wait (link.register) and register when it opens.
+// at the fixture's current values. A fixture waiting to register (link.register,
+// e.g. from a saved stage) registers once the console has started.
 
 const CONSOLE_TYPE_KEY = "unnaturallight.stage.consoleType";
 const lastConsoleType = () => { try { return localStorage.getItem(CONSOLE_TYPE_KEY) || "movable/multi"; } catch { return "movable/multi"; } };
@@ -408,10 +404,8 @@ export function libraryPickerFor(select, container) {
   return { sync, profile: () => (select.value === LIBRARY ? picker?.profile ?? null : null) };
 }
 
-/** Fixtures asked for but not answered yet (stage id → give-up timer). */
-const registering = new Map();
-/** Every fixture this window has asked the console to register. */
-const asked = new Set();
+/** Fixtures asked for but not answered yet (the console answers right after this update). */
+const registering = new Set();
 /** Fixtures another stage window placed and is registering (its job, not ours). */
 export const othersRegistering = new Set();
 
@@ -435,21 +429,15 @@ export function requestRegistrations() {
       group: rigOf(fixture)?.name ?? null,
       universe: fixture.link.universe ?? null,
     });
-    registering.set(fixture.id, setTimeout(() => registering.delete(fixture.id), 5000));
-    asked.add(fixture.id);
+    registering.add(fixture.id);
   }
   if (requests.length) consoleLink.register(requests);
 }
 
 function onRegistered(results) {
-  // Every stage tab hears every reply: one for a fixture this tab never
-  // asked about belongs to another tab, so it isn't ours to undo (or save).
-  results = results.filter((r) => asked.has(r.stageId));
-  if (!results.length) return;
   const failed = [];
   for (const r of results) {
     const fixture = byId(r.stageId);
-    clearTimeout(registering.get(r.stageId));
     registering.delete(r.stageId);
     if (!fixture || !fixture.link.register) {
       // Deleted (or unlinked) while waiting: undo it in the console.

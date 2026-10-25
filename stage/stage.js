@@ -1,8 +1,8 @@
-// The stage page (stage.html): keeps up with other stage pages and the show
+// The stage (its pane in ../index.html): keeps up with other app windows and the show
 // server, ⌥-click traces, and boot. The rest is in the modules imported below.
-import { STORAGE_KEY, setDmx, linkChannels } from "./stage-model.js";
+import { setDmx, linkChannels } from "./stage-model.js";
 import { createShowLink } from "./show-link.js";
-import { createTracePopover } from "../shared/trace.js";
+import { createTracePopover, provideTrace } from "../shared/trace.js";
 import { state, loadData, serialize, save, restore, byId, ui } from "./state.js";
 import { updateSurfaces, updateBox, resize } from "./view3d.js";
 import { planView, setPlanView } from "./plan.js";
@@ -13,18 +13,17 @@ import { syncBoxInputs } from "./dialogs.js";
 import { consoleLink, consoleFixtureById, othersRegistering } from "./link.js";
 
 // ---------------------------------------------------------------------
-// Other stage pages, and the show server
+// Other app windows, and the show server
 // ---------------------------------------------------------------------
 // The show server keeps the stage with the show (show-link.js), and every
-// stage page saves the whole stage, so without this the last one to save
-// would undo the others' edits. When another page saves (in this browser,
-// or anywhere via the server), take its stage, but keep this page's
-// selection, and for linked channels the values this page heard from the
-// console (the other copy may be a moment older). A save that changes
-// nothing else is ignored, so console moves don't redraw the inspector
-// under your cursor.
+// app window saves its whole stage, so without this the last one to save
+// would undo the others' edits. When another window saves (the server passes
+// it on), take its stage, but keep this window's selection, and for linked
+// channels the values this window heard from the console (the other copy may
+// be a moment older). A save that changes nothing else is ignored, so console
+// moves don't redraw the inspector under your cursor.
 
-/** @param {unknown} data a stage another page saved */
+/** @param {unknown} data a stage another window saved */
 function takeStage(data) {
   const before = JSON.stringify(serialize());
   const mine = new Map(state.fixtures.map((i) => [i.id, i]));
@@ -48,11 +47,6 @@ function takeStage(data) {
   return true;
 }
 
-window.addEventListener("storage", (e) => {
-  if (e.key !== STORAGE_KEY || !e.newValue) return;
-  try { takeStage(JSON.parse(e.newValue)); } catch { /* not a stage */ }
-});
-
 // ---------------------------------------------------------------------
 // Trace: ⌥-click a fixture (3D, plan, list) or a channel badge in the
 // inspector for a card showing what controls it and the current values.
@@ -60,7 +54,7 @@ window.addEventListener("storage", (e) => {
 
 export const trace = createTracePopover();
 
-/** A stage fixture as the trace card (here and in the console) sees it. */
+/** The stage's fixtures as the trace card sees them. */
 function traceLights() {
   return state.fixtures.map((i) => ({
     id: i.id,
@@ -77,22 +71,18 @@ function traceLights() {
   }));
 }
 
-function traceSnapshot() {
-  const { levels, faders, mix, universes } = consoleLink.traceInfo();
-  return { live: consoleLink.live, levels, faders, mix, universes, consoleFixtures: consoleLink.fixtures(), stageFixtures: traceLights() };
-}
+provideTrace({ stage: traceLights });
 
 export function showTrace(target, e) {
-  trace.show(target, e.clientX, e.clientY, traceSnapshot);
+  trace.show(target, e.clientX, e.clientY);
 }
 
-// Tell the console about the stage's fixtures (coalesced; plus a slow heartbeat).
+// Tell the console the stage's channel layouts (coalesced).
 let publishTimer = 0;
 export function publishStage() {
   clearTimeout(publishTimer);
-  publishTimer = setTimeout(() => consoleLink.publishStage(traceLights()), 80);
+  publishTimer = setTimeout(() => consoleLink.publishStage(state.fixtures.map((i) => ({ consoleId: i.link.consoleId, layout: i.link.layout }))), 80);
 }
-setInterval(publishStage, 2000);
 
 // ⌥-click a channel badge in the inspector: trace that DMX channel.
 inspectorEl.addEventListener("click", (e) => {

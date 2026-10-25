@@ -1,127 +1,82 @@
-// Stage side of the live link with the console (see console/stage-link.js),
-// over a BroadcastChannel between tabs of the same site.
+// Stage side of the live link with the console (the other pane of the app;
+// see console/stage-link.js), over the in-page link (../shared/console-stage.js).
 //
 //   console → stage   output levels (0–255 per DMX channel), which fader(s)
 //                     drive each channel, and the console's fixtures
 //   stage → console   "set channel N to V" when a linked value is changed here,
-//                     and the stage's fixtures (for the console's ⌥-click trace)
+//                     and the stage's channel layouts (the console takes
+//                     color roles its fixtures lack)
 //
 // Only channels with a fader patched are synced. A channel is sent only after
 // the console's value for it has been heard, so opening the stage never moves
 // a console fader; and a value just sent is held briefly against the
 // console's older broadcasts so dragging a slider doesn't jitter.
 
-import { MSG, CONSOLE_SESSION_KEY, openStageBus } from "../shared/stage-bus.js";
+import { joinLink } from "../shared/console-stage.js";
 
-/** No message for this long = console offline. */
-const LIVE_MS = 2500;
-/** How long a value sent from the stage wins over the console's broadcasts. */
+/** How long a value sent from the stage wins over the console's updates (e.g. an older one from the show server). */
 const PENDING_MS = 600;
-/**
- * How long the console someone is working in (it marks its messages
- * `local`) wins over other consoles, whose copies of the same change arrive
- * a moment later and would pull the stage back.
- */
-const ACTIVE_MS = 600;
 
 /**
  * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleFixture
  */
 
-function readSavedFixtures() {
-  try {
-    const data = JSON.parse(localStorage.getItem(CONSOLE_SESSION_KEY) ?? "null");
-    const list = Array.isArray(data?.fixtures) ? data.fixtures : [];
-    return list.filter((i) => typeof i?.id === "string" && Number.isInteger(i.channelStart) && Number.isInteger(i.channelEnd));
-  } catch {
-    return [];
-  }
-}
-
 /** @param {{ onLevels: () => void, onStageHello: () => void, onRegistered: (results: any[]) => void }} opts */
 export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
-  const bus = openStageBus();
-  let lastHeard = 0;
   /** @type {number[] | null} */
   let levels = null;
   /** channel → fader numbers (1-based) patched to it */
   let faders = new Map();
   /** @type {ConsoleFixture[]} */
-  let fixtures = readSavedFixtures();
-  /** Per fader: number, name, live level, cue values, patch (for traces). */
-  let faderInfo = null;
-  /** Master / submasters / crossfade and cue names (for traces). */
-  let mix = null;
+  let fixtures = [];
   /** The console set's universe count (channel 513 = universe 2/1). */
   let universes = 1;
   /** channel → the value the console and stage agree on (heard or sent) */
   const synced = new Map();
   /** channel → { value, until }: just sent from the stage */
   const pending = new Map();
-  /** The console last worked in, and until when its messages win. */
-  let activeSource = null;
-  let activeUntil = 0;
-  /**
-   * The newest show-server message any console's output reflected (its
-   * `seq`). A console the browser runs slowly (a background tab) can send
-   * copies that are seconds out of date; they're dropped.
-   */
-  let newestSeq = 0;
 
-  bus?.addEventListener("message", (e) => {
-    const msg = e.data;
-    if (msg?.type === MSG.STAGE_HELLO) { onStageHello(); return; }
-    if (msg?.type === MSG.REGISTERED && Array.isArray(msg.results)) { onRegistered(msg.results); return; }
-    if (msg?.type !== MSG.LEVELS || !Array.isArray(msg.levels)) return;
-    const seq = Number.isFinite(msg.seq) ? msg.seq : 0;
-    if (!msg.local && seq < newestSeq) return;
-    newestSeq = Math.max(newestSeq, seq);
-    lastHeard = Date.now();
-    if (msg.local) {
-      activeSource = msg.source;
-      activeUntil = lastHeard + ACTIVE_MS;
-    } else if (msg.source !== activeSource && lastHeard < activeUntil) {
-      return;
-    }
-    levels = msg.levels;
-    faders = new Map(Array.isArray(msg.faders) ? msg.faders : []);
-    if (Array.isArray(msg.fixtures)) fixtures = msg.fixtures;
-    faderInfo = Array.isArray(msg.faderInfo) ? msg.faderInfo : null;
-    mix = msg.mix ?? null;
-    universes = Number.isInteger(msg.universes) && msg.universes >= 1 ? msg.universes : 1;
-    onLevels();
+  const toConsole = joinLink("stage", {
+    hello: onStageHello,
+    registered: onRegistered,
+    levels(data) {
+      levels = data.levels;
+      faders = new Map(data.faders);
+      fixtures = data.fixtures;
+      universes = data.universes;
+      onLevels();
+    },
   });
-  bus?.postMessage({ type: MSG.HELLO });
+  toConsole((c) => c.hello());
 
   return {
+    /** The console has started (it's in the same page, so from then on it's always there). */
     get live() {
-      return Date.now() - lastHeard < LIVE_MS;
+      return levels != null;
     },
-    /** The console's fixtures (live, or from its saved session). */
+    /** The console's fixtures. */
     fixtures: () => fixtures,
-    /** Universes in the console's set (1 while offline / unknown). */
+    /** Universes in the console's set (1 until it starts). */
     get universes() { return universes; },
     /** Fader numbers patched to a channel ([] = none / unknown). */
     fadersFor: (channel) => faders.get(channel) ?? [],
-    /** What the console last sent, for traces (null while offline). */
-    traceInfo() {
-      return this.live ? { levels, faders: faderInfo, mix, universes } : { levels: null, faders: null, mix: null, universes };
-    },
+    /** The console's output levels (0–255 per channel; null until it starts). */
+    get levels() { return levels; },
     /** Ask the console to create fixtures (+ patch / name free faders) for stage fixtures. */
     register(requests) {
-      bus?.postMessage({ type: MSG.REGISTER, requests });
+      toConsole((c) => c.register(requests));
     },
     /** Ask the console to remove fixtures the stage registered (frees their faders). */
     unregister(consoleIds) {
-      if (consoleIds.length) bus?.postMessage({ type: MSG.UNREGISTER, consoleIds });
+      if (consoleIds.length) toConsole((c) => c.unregister(consoleIds));
     },
-    /** Send the stage's fixtures to the console (for its traces). */
+    /** Send the stage's channel layouts to the console (for color roles its fixtures lack). */
     publishStage(list) {
-      bus?.postMessage({ type: MSG.STAGE, fixtures: list });
+      toConsole((c) => c.layouts(list));
     },
     /** Tell the console which of its fixtures are selected here (it scrolls to and highlights their faders; [] = none). */
     publishSelection(consoleIds) {
-      bus?.postMessage({ type: MSG.STAGE_SELECT, consoleIds });
+      toConsole((c) => c.select(consoleIds));
     },
     /**
      * The console's value for a channel that the stage should take now, or
@@ -140,7 +95,7 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
     },
     /** Send the stage's values for channels that changed here. */
     push(entries) {
-      if (!bus || !this.live) return;
+      if (!this.live) return;
       const values = [];
       for (const { channel, value } of entries) {
         if (!synced.has(channel) || synced.get(channel) === value) continue;
@@ -148,14 +103,14 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
         pending.set(channel, { value, until: Date.now() + PENDING_MS });
         values.push({ channel, value });
       }
-      if (values.length) bus.postMessage({ type: MSG.SET, values });
+      if (values.length) toConsole((c) => c.set(values));
     },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
     setChannel(channel, value) {
-      if (!bus || !this.live) return;
+      if (!this.live) return;
       synced.set(channel, value);
       pending.set(channel, { value, until: Date.now() + PENDING_MS });
-      bus.postMessage({ type: MSG.SET, values: [{ channel, value }] });
+      toConsole((c) => c.set([{ channel, value }]));
     },
   };
 }

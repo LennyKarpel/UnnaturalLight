@@ -1,4 +1,4 @@
-// The console page's elements (console.html).
+// The console's elements (its pane in ../index.html).
 
 /**
  * @template {typeof Element} C
