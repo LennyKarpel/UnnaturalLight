@@ -244,7 +244,7 @@ Working with a rig:
 - All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
 - Click one fixture to adjust just it; **Select whole rig** (inspector or right-click) selects them all again.
 - Dragging any of its fixtures moves the whole rig.
-- The inspector's **Rig** section changes the rig's position, size, number of fixtures, tilt and yaw; the fixtures rearrange live.
+- The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live.
 - In the console, a rig's fixtures are grouped under the rig's name.
 
 ### Flash
@@ -270,6 +270,8 @@ The panel at the bottom right shows the selected fixture:
 - **Color**, **Ranges**, **Zero frame**, and the beam hit readout.
 - **Console link**: which console fixture it's connected to (see [Console and Stage together](#6-console-and-stage-together)).
 - **Rig** settings for rig fixtures.
+
+With several fixtures selected (for example a whole rig) it shows **Dimmer**, **Zoom** and **Color**, which set every selected fixture at once. The sliders start at the selection's average. Zoom is the 0–255 value; each fixture turns it into a beam angle using its own **Ranges**.
 
 The small overlay in the 3D view's top-left corner (the **HUD**) shows the selected fixture's main values at a glance.
 

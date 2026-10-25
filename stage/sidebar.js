@@ -70,10 +70,15 @@ function rigSectionHtml(rig) {
       </div>
       <label>${RIG_TYPES[rig.type].sizeLabel} m</label><input type="number" min="0.5" max="50" step="0.1" data-r="size" />
       <label>Fixtures</label><input type="number" min="2" max="${MAX_FIXTURES}" step="1" data-r="count" />
-      <label>Tilt / Yaw °</label>
-      <div class="xyz">
-        <input type="number" min="-90" max="90" step="5" data-r="tilt" title="tilt: 0 = flat, 90 = upright facing the audience" />
-        <input type="number" step="5" data-r="yaw" title="yaw: turn about the vertical" />
+      <label>Tilt °</label>
+      <div class="slider" title="tilt: 0 = flat, 90 = upright facing the audience">
+        <input type="range" min="-90" max="90" step="1" data-r="tilt" />
+        <input type="number" min="-90" max="90" step="1" data-r="tilt" />
+      </div>
+      <label>Yaw °</label>
+      <div class="slider" title="yaw: turn about the vertical">
+        <input type="range" min="-180" max="180" step="1" data-r="yaw" />
+        <input type="number" min="-180" max="180" step="1" data-r="yaw" />
       </div>
     </div>`;
 }
@@ -91,6 +96,8 @@ export function renderInspector() {
       <div class="fields">
         <label>Dimmer</label>
         <div class="slider"><input type="range" min="0" max="255" step="1" data-multi="dimmer" /><input type="number" min="0" max="255" data-multi="dimmer" /></div>
+        <label>Zoom</label>
+        <div class="slider"><input type="range" min="0" max="255" step="1" data-multi="zoom" title="Beam angle (each fixture's own zoom range)" /><input type="number" min="0" max="255" data-multi="zoom" /></div>
         <label>Color</label>
         <input type="color" data-multi="color" />
       </div>
@@ -218,7 +225,7 @@ function bindInspector() {
       }
       const v = Number(el.value);
       if (el.value === "" || !Number.isFinite(v)) return;
-      for (const fixture of selectedFixtures()) setDmx(fixture, "dimmer", v);
+      for (const fixture of selectedFixtures()) setDmx(fixture, el.dataset.multi, v);
       changed();
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
@@ -236,6 +243,7 @@ function bindInspector() {
       // so the list (with its "outside" marks) is always refreshed.
       changed({ inspector: el.dataset.r !== "name" });
     });
+    if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
   inspectorEl.querySelectorAll("[data-flash]").forEach((el) => {
     el.addEventListener("pointerdown", (e) => { e.preventDefault(); startFlash(); });
@@ -259,8 +267,10 @@ export function syncInspector() {
   const rig = commonRig(sel);
   if (rig) syncRigFields(rig);
   if (sel.length > 1) {
-    const avg = Math.round(sel.reduce((s, i) => s + i.dmx.dimmer, 0) / sel.length);
-    inspectorEl.querySelectorAll('[data-multi="dimmer"]').forEach((el) => { if (el !== document.activeElement) el.value = String(avg); });
+    for (const attr of ["dimmer", "zoom"]) {
+      const avg = Math.round(sel.reduce((s, i) => s + i.dmx[attr], 0) / sel.length);
+      inspectorEl.querySelectorAll(`[data-multi="${attr}"]`).forEach((el) => { if (el !== document.activeElement) el.value = String(avg); });
+    }
     const colorEl = inspectorEl.querySelector('[data-multi="color"]');
     if (colorEl && colorEl !== document.activeElement) colorEl.value = sel[0].color;
     return;

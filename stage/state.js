@@ -202,7 +202,7 @@ export function setRigField(rig, k, raw) {
   if (k === "count") setRigCount(rig, v);
   else if (k === "size") rig.size = clamp(v, 0.5, 50);
   else if (k === "tilt") rig.tilt = clamp(v, -90, 90);
-  else if (k === "yaw") rig.yaw = v;
+  else if (k === "yaw") rig.yaw = ((v + 180) % 360 + 360) % 360 - 180; // −180…180
   else if (k === "x" || k === "y" || k === "z") rig[k] = v;
   syncRig(rig);
 }
