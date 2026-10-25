@@ -759,10 +759,16 @@ body {
 }
 
 .song-row-name {
+  justify-self: start; /* only the text renames; the rest of the row plays the song */
   margin: 0;
   font-family: var(--display);
   font-size: var(--text-lg);
   font-weight: 700;
+  cursor: text;
+}
+
+.song-row-name:hover {
+  color: var(--accent);
 }
 
 .song-row-meta {
