@@ -1,7 +1,7 @@
 // The console (its pane in ../index.html): starts it up and wires its controls;
 // show new / load / save, universes and DMX outputs, fixtures placed on the
 // stage, the app header's hooks (consoleHeader), and the link to the show
-// server. The console's pages themselves are in the modules imported below.
+// server. The console's tabs themselves are in the modules imported below.
 import { startStageLink } from "./stage-link.js";
 import { createServerLink } from "./server-link.js";
 import { LIVE_FIELDS } from "../shared/live-fields.js";
@@ -64,7 +64,7 @@ import {
   addSongBtn,
   identityBtn,
   clearPatchBtn,
-  pageChannels,
+  tabChannels,
   fixtureForm,
   fixtureNameInput,
   addFixtureGroupBtn,
@@ -126,8 +126,8 @@ import {
   showArrivedCue,
   toggleFadePause,
 } from "./live.js";
-import { syncSongUi, renderShowPage, addSong } from "./show-page.js";
-import { renderSetPage } from "./set-page.js";
+import { syncSongUi, renderShowTab, addSong } from "./show-tab.js";
+import { renderSetTab } from "./set-tab.js";
 import {
   cueUi,
   closeChannelsCueMenu,
@@ -135,7 +135,7 @@ import {
   wireCurrentCueTitle,
   openChannelsCueMenu,
 } from "./cues.js";
-import { renderPatchTable } from "./patch-page.js";
+import { renderPatchTable } from "./patch-tab.js";
 import {
   syncShowNameUi,
   applyShowName,
@@ -156,7 +156,7 @@ import {
   suggestFixtureFormStart,
   renderFixtures,
   addFixtureGroup,
-} from "./fixtures-page.js";
+} from "./fixtures-tab.js";
 
 // ---------------------------------------------------------------------
 // Universes: count, outputs (DMX USB Pro / Art-Net / sACN), Channels-tab meter universe
@@ -248,7 +248,7 @@ meterUniverseSelect.addEventListener("change", () => {
   state.meterUniverse = Number(meterUniverseSelect.value) || 1;
   renderChannelRow();
 });
-pageChannels.querySelector(".page-intro")?.append(meterUniverseSelect);
+tabChannels.querySelector(".tab-intro")?.append(meterUniverseSelect);
 
 function syncMeterUniverse() {
   meterUniverseSelect.hidden = state.universes < 2;
@@ -394,8 +394,8 @@ function applyShow(next, { fromServer = false } = {}) {
   renderLiveRow();
   renderChannelRow();
   renderSelectedGroup();
-  renderShowPage();
-  renderSetPage();
+  renderShowTab();
+  renderSetTab();
   renderFixtures();
   renderPatchTable();
   pushToDmx();
@@ -561,7 +561,7 @@ renderLiveRow();
 renderChannelRow();
 renderSelectedGroup();
 renderCues();
-renderShowPage();
+renderShowTab();
 renderFixtures();
 renderPatchTable();
 renderOutputs();

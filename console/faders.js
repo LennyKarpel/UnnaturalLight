@@ -8,7 +8,7 @@ import { COLOR_ROLES, MIXED_ROLES, colorFromLevels, emitterHex, levelsFromColor 
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { formatChannelRange } from "./fixtures.js";
 import { defaultFaderName } from "./show.js";
-import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, pagePatch, placePopup } from "./dom.js";
+import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, tabPatch, placePopup } from "./dom.js";
 import { getNextSetSong, getPlaybackLevels, persistSession, state } from "./state.js";
 import {
   liveUi,
@@ -23,16 +23,16 @@ import {
   renderSelectedGroup,
   refreshSelectedGroup,
 } from "./live.js";
-import { endInlineSongRename } from "./show-page.js";
+import { endInlineSongRename } from "./show-tab.js";
 import { cueUi, closeChannelsCueMenu, renderCues, endInlineRename, closeActionMenu } from "./cues.js";
 import {
   closeChannelPicker,
   closeCountPicker,
   closeFixtureGroupPicker,
   renderPatchTable,
-} from "./patch-page.js";
-import { showPage } from "./nav.js";
-import { endInlineFixtureRename } from "./fixtures-page.js";
+} from "./patch-tab.js";
+import { showTab } from "./nav.js";
+import { endInlineFixtureRename } from "./fixtures-tab.js";
 
 /**
  * The cue at `index` in the active song; the index past its last cue is the
@@ -345,7 +345,7 @@ function openFaderNameMenu(anchor, index, clientX, clientY) {
   }).then(async (action) => {
     if (action === "rename") {
       const onPatch =
-        !pagePatch.hidden &&
+        !tabPatch.hidden &&
         Boolean(patchTableEl.querySelector(`.patch-card[data-fader="${index}"] .patch-fader-name`));
       await renameFader(index, { preferInline: onPatch });
     }
@@ -360,7 +360,7 @@ function showFaderInPatch(index) {
   if (location.hash.replace("#", "") !== "patch") {
     location.hash = "patch";
   } else {
-    showPage("patch");
+    showTab("patch");
   }
 
   requestAnimationFrame(() => {
@@ -432,7 +432,7 @@ export function refreshLiveRow() {
 // ---------------------------------------------------------------------
 // Color bars: side-by-side faders driving one fixture's color emitters
 // (red, green and blue, plus any white / amber / lime / cyan / indigo / UV) get a
-// color bar under them. In a cue (and the Channels-page strip) clicking it
+// color bar under them. In a cue (and the Channels-tab strip) clicking it
 // opens a color picker that mixes the color onto them (shared/color.js);
 // on the Live strip it just shows the mix going out.
 // ---------------------------------------------------------------------

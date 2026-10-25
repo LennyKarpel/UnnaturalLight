@@ -1,4 +1,4 @@
-// Cue rows on the Run page: drawing, reordering, renaming, cue menus.
+// Cue rows on the Run tab: drawing, reordering, renaming, cue menus.
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
 import { MAX_CUES, MIN_CUES, createCue, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.js";
 import {
@@ -9,7 +9,7 @@ import {
   channelsCueMenuList,
   actionMenu,
   actionMenuList,
-  pageRun,
+  tabRun,
   dropSlot,
   placePopup,
   showDropLine,
@@ -40,7 +40,7 @@ import {
   pickCue,
   renderSelectedGroup,
 } from "./live.js";
-import { closeChannelPicker, closeCountPicker, closeFixtureGroupPicker } from "./patch-page.js";
+import { closeChannelPicker, closeCountPicker, closeFixtureGroupPicker } from "./patch-tab.js";
 
 /** @type {{ valueEls: HTMLElement[], patchLabelEls: HTMLElement[], sliders: HTMLInputElement[] }[]} */
 export let cueUi = [];
@@ -102,7 +102,7 @@ function startCueDragSession(initialClientY) {
   stopCueDragSession?.();
   cueDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  pageRun.classList.add("is-dragging-cue");
+  tabRun.classList.add("is-dragging-cue");
 
   const onDragOver = (event) => {
     if (!dragCueId) return;
@@ -121,7 +121,7 @@ function startCueDragSession(initialClientY) {
       cueDragScrollRaf = null;
     }
     cueDragClientY = null;
-    pageRun.classList.remove("is-dragging-cue");
+    tabRun.classList.remove("is-dragging-cue");
     stopCueDragSession = null;
   };
 }

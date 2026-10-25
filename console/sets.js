@@ -1,6 +1,6 @@
 // Sets: the show's running orders, one per event. A set lists songs from the
 // show (an entry points at a song, so a song can be in many sets, or twice in
-// one); the Run page runs the active set.
+// one); the Run tab runs the active set.
 import { newId } from "../shared/ids.js";
 import { resolveActiveSong } from "./songs.js";
 

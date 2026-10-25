@@ -1,9 +1,9 @@
-// Set page: build a set (a running order for one event) from the show's
+// Set tab: build a set (a running order for one event) from the show's
 // songs — drag them in, reorder, take them out — and pick which set the
-// Run page runs.
+// Run tab runs.
 import { createEntry, createSet, defaultSetName, MAX_SET_ENTRIES, MAX_SETS, moveEntry, normalizeSetName } from "./sets.js";
 import {
-  pageSet,
+  tabSet,
   setSelect,
   setMenuBtn,
   runSetBtn,
@@ -20,9 +20,9 @@ import {
 import { getActiveEntry, persistSession, state } from "./state.js";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.js";
 import { openActionMenu, closeActionMenu } from "./cues.js";
-import { refreshUpNext, setActiveSong } from "./show-page.js";
+import { refreshUpNext, setActiveSong } from "./show-tab.js";
 
-/** The set shown here (not necessarily the one the Run page runs). */
+/** The set shown here (not necessarily the one the Run tab runs). */
 let editSetId = state.activeSetId;
 
 /**
@@ -38,15 +38,15 @@ function editSet() {
   return set;
 }
 
-/** The set changed: save, and if it's the one running, update UP NEXT. (The Show page redraws when it's opened.) */
+/** The set changed: save, and if it's the one running, update UP NEXT. (The Show tab redraws when it's opened.) */
 function setChanged() {
   if (editSet().id === state.activeSetId) refreshUpNext();
   else persistSession();
-  renderSetPage();
+  renderSetTab();
 }
 
-export function renderSetPage() {
-  if (pageSet.hidden) return;
+export function renderSetTab() {
+  if (tabSet.hidden) return;
   const set = editSet();
   const running = set.id === state.activeSetId;
 
@@ -56,7 +56,7 @@ export function renderSetPage() {
   setSelect.value = set.id;
   runSetBtn.disabled = running;
   runSetBtn.textContent = running ? "Running" : "Run this set";
-  runSetBtn.title = running ? "The Run page runs this set" : "Run this set on the Run page, from its first song";
+  runSetBtn.title = running ? "The Run tab runs this set" : "Run this set on the Run tab, from its first song";
 
   renderSourceList(set);
   renderEntryList(set, running);
@@ -272,10 +272,10 @@ function playEntry(entryId) {
   if (!entry) return;
   state.activeSetId = set.id;
   setActiveSong(entry.songId, entry.id);
-  renderSetPage();
+  renderSetTab();
 }
 
-/** Make the set shown here the one the Run page runs, from its first song. */
+/** Make the set shown here the one the Run tab runs, from its first song. */
 function runSet() {
   const set = editSet();
   if (set.entries.length) {
@@ -283,7 +283,7 @@ function runSet() {
   } else {
     state.activeSetId = set.id;
     refreshUpNext();
-    renderSetPage();
+    renderSetTab();
   }
 }
 
@@ -295,7 +295,7 @@ async function newSet() {
   state.sets.push(set);
   editSetId = set.id;
   persistSession();
-  renderSetPage();
+  renderSetTab();
 }
 
 async function renameSet() {
@@ -316,7 +316,7 @@ function duplicateSet() {
   state.sets.splice(state.sets.indexOf(set) + 1, 0, copy);
   editSetId = copy.id;
   persistSession();
-  renderSetPage();
+  renderSetTab();
 }
 
 async function deleteSet() {
@@ -325,7 +325,7 @@ async function deleteSet() {
   const running = set.id === state.activeSetId;
   const ok = await confirmAction({
     title: "Delete set?",
-    message: `Delete “${set.name}”? Its songs stay in the show.${running ? " The Run page will run the first remaining set." : ""}`,
+    message: `Delete “${set.name}”? Its songs stay in the show.${running ? " The Run tab will run the first remaining set." : ""}`,
     confirmLabel: "Delete",
   });
   if (!ok) return;
@@ -337,12 +337,12 @@ async function deleteSet() {
   } else {
     persistSession();
   }
-  renderSetPage();
+  renderSetTab();
 }
 
 setSelect.addEventListener("change", () => {
   editSetId = setSelect.value;
-  renderSetPage();
+  renderSetTab();
 });
 
 setSongSearch.addEventListener("input", () => renderSourceList(editSet()));

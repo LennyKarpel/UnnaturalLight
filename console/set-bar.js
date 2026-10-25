@@ -1,8 +1,8 @@
-// Run page set bar: the song playing, where it is in the active set
+// Run tab set bar: the song playing, where it is in the active set
 // ("song 3 of 12", ◀ / ▶) and the set's running order (click a song to play it).
 import { activeSongLabel, activeSetLabel, prevSongBtn, nextSongBtn, setStrip } from "./dom.js";
 import { getActiveEntry, getActiveSet, getActiveSong, state } from "./state.js";
-import { setActiveSong } from "./show-page.js";
+import { setActiveSong } from "./show-tab.js";
 
 /** The bar: the song playing, where it is in the active set, and the set's running order. */
 export function renderSetBar() {
@@ -40,7 +40,7 @@ export function renderSetBar() {
   setStrip.querySelector(".is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
-/** Run page ◀ / ▶: the previous / next song in the active set. @param {-1 | 1} step */
+/** Run tab ◀ / ▶: the previous / next song in the active set. @param {-1 | 1} step */
 function stepSetSong(step) {
   const set = getActiveSet();
   const entry = getActiveEntry();

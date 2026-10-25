@@ -39,9 +39,9 @@ export function normalizeNavOrder(order) {
   }
   // A tab the saved order doesn't have goes where it is by default: right
   // after the tab before it there (or first).
-  DEFAULT_NAV_ORDER.forEach((page, i) => {
-    if (next.includes(page)) return;
-    next.splice(i === 0 ? 0 : next.indexOf(DEFAULT_NAV_ORDER[i - 1]) + 1, 0, page);
+  DEFAULT_NAV_ORDER.forEach((tab, i) => {
+    if (next.includes(tab)) return;
+    next.splice(i === 0 ? 0 : next.indexOf(DEFAULT_NAV_ORDER[i - 1]) + 1, 0, tab);
   });
   return next;
 }

@@ -1,7 +1,7 @@
-// Show page: every song in the show (add, remove, rename, reorder, play),
+// Show tab: every song in the show (add, remove, rename, reorder, play),
 // and the sets each one is in.
 import { defaultSongName, createCue, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.js";
-import { addSongBtn, songScroll, songList, songEmpty, pageShow, dropSlot, showDropLine } from "./dom.js";
+import { addSongBtn, songScroll, songList, songEmpty, tabShow, dropSlot, showDropLine } from "./dom.js";
 import { renderSetBar } from "./set-bar.js";
 import { getActiveEntry, getActiveSet, bindActiveSong, persistSession, state } from "./state.js";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.js";
@@ -16,11 +16,11 @@ function setsWithSong(songId) {
   return state.sets.filter((set) => set.entries.some((entry) => entry.songId === songId)).map((set) => set.name);
 }
 
-/** The active song changed (or its set, or a song's name): update the Run page's set bar and the Show page. */
+/** The active song changed (or its set, or a song's name): update the Run tab's set bar and the Show tab. */
 export function syncSongUi() {
   addSongBtn.disabled = state.songs.length >= MAX_SONGS;
   renderSetBar();
-  if (!pageShow.hidden) renderShowPage();
+  if (!tabShow.hidden) renderShowTab();
 }
 
 function clearSongDropMarks() {
@@ -86,7 +86,7 @@ function startSongDragSession(initialClientY) {
   stopSongDragSession?.();
   songDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
-  pageShow.classList.add("is-dragging-song");
+  tabShow.classList.add("is-dragging-song");
 
   const onDragOver = (event) => {
     if (!dragSongId) return;
@@ -105,12 +105,12 @@ function startSongDragSession(initialClientY) {
       songDragScrollRaf = null;
     }
     songDragClientY = null;
-    pageShow.classList.remove("is-dragging-song");
+    tabShow.classList.remove("is-dragging-song");
     stopSongDragSession = null;
   };
 }
 
-export function renderShowPage() {
+export function renderShowTab() {
   songList.replaceChildren();
   songEmpty.hidden = state.songs.length > 0;
   addSongBtn.disabled = state.songs.length >= MAX_SONGS;
@@ -273,7 +273,7 @@ songScroll.addEventListener("drop", (event) => {
   const targetId = rows[after ? rows.length - 1 : slot].dataset.songId;
   if (targetId && moveSong(state.songs, fromId, targetId, after)) {
     persistSession();
-    renderShowPage();
+    renderShowTab();
     syncSongUi();
   }
 });
@@ -396,7 +396,7 @@ export async function addSong() {
   const song = createSong({ name });
   state.songs.push(song);
   setActiveSong(song.id);
-  renderShowPage();
+  renderShowTab();
 }
 
 /**
@@ -428,7 +428,7 @@ function duplicateSong(id) {
   });
   state.songs.splice(index + 1, 0, copy);
   persistSession();
-  renderShowPage();
+  renderShowTab();
   syncSongUi();
 }
 
@@ -453,7 +453,7 @@ async function deleteSong(id) {
     const next = state.songs[Math.min(index, state.songs.length - 1)];
     setActiveSong(next.id);
   } else {
-    renderShowPage();
+    renderShowTab();
     refreshUpNext();
   }
 }

@@ -1,4 +1,4 @@
-// Fixtures page: the add-fixture form, fixture groups and the fixture list.
+// Fixtures tab: the add-fixture form, fixture groups and the fixture list.
 import {
   createFixtureGroup,
   findRangeConflict,
@@ -15,7 +15,7 @@ import {
   normalizeMount,
 } from "./fixtures.js";
 import {
-  pageFixtures,
+  tabFixtures,
   fixtureNameInput,
   fixtureStartPicker,
   fixtureCountPicker,
@@ -35,7 +35,7 @@ import {
   makeChannelPickerButton,
   makeCountPickerButton,
   makeFixtureGroupPickerButton,
-} from "./patch-page.js";
+} from "./patch-tab.js";
 
 /** @type {number} */
 export let fixtureFormStart = 1;
@@ -421,7 +421,7 @@ function startFixtureDragSession(initialClientY) {
   fixtureDragClientY =
     typeof initialClientY === "number" ? initialClientY : null;
   fixtureDragHover = null;
-  pageFixtures.classList.add("is-dragging-fixture");
+  tabFixtures.classList.add("is-dragging-fixture");
 
   const onDragOver = (event) => {
     if (!dragFixtureId) return;
@@ -441,7 +441,7 @@ function startFixtureDragSession(initialClientY) {
       fixtureDragScrollRaf = null;
     }
     fixtureDragClientY = null;
-    pageFixtures.classList.remove("is-dragging-fixture");
+    tabFixtures.classList.remove("is-dragging-fixture");
     stopFixtureDragSession = null;
   };
 }

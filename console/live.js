@@ -64,14 +64,14 @@ import {
   refreshFaderPatchLabels,
   syncSlidersFromState,
 } from "./faders.js";
-import { syncSongUi, setActiveSong } from "./show-page.js";
+import { syncSongUi, setActiveSong } from "./show-tab.js";
 import { cueUi, closeChannelsCueMenu, renderCues, closeActionMenu } from "./cues.js";
 import {
   updateConflictBanner,
   closeChannelPicker,
   closeCountPicker,
   closeFixtureGroupPicker,
-} from "./patch-page.js";
+} from "./patch-tab.js";
 
 /**
  * Each universe's outputs from the show server (index 0 = universe 1): a DMX
@@ -485,7 +485,7 @@ export function renderSelectedGroup() {
       setSelectedFader(i);
       state.cueLevels[state.selectedCue][i] = Number(slider.value);
       value.textContent = String(state.cueLevels[state.selectedCue][i]);
-      // Keep the Run page UI in sync if that cue is rendered
+      // Keep the Run tab UI in sync if that cue is rendered
       if (cueUi[state.selectedCue]) {
         cueUi[state.selectedCue].sliders[i].value = String(state.cueLevels[state.selectedCue][i]);
         cueUi[state.selectedCue].valueEls[i].textContent = String(state.cueLevels[state.selectedCue][i]);

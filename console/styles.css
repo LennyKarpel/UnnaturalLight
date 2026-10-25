@@ -179,7 +179,7 @@
     cursor: grabbing;
   }
 
-  .page {
+  .tab-panel {
     flex: 1 1 auto;
     min-height: 0;
     display: none;
@@ -187,15 +187,15 @@
     overflow: hidden;
   }
 
-  .page.is-active {
+  .tab-panel.is-active {
     display: flex;
   }
 
-  .page[hidden] {
+  .tab-panel[hidden] {
     display: none !important;
   }
 
-  .page-intro {
+  .tab-intro {
     flex: 0 0 auto;
     display: flex;
     flex-wrap: wrap;
@@ -205,13 +205,13 @@
     margin-bottom: 1rem;
   }
 
-  .page-intro h2 {
+  .tab-intro h2 {
     margin: 0;
     font-family: var(--display);
     font-size: var(--text-2xl);
   }
 
-  .page-intro p {
+  .tab-intro p {
     margin: 0.35rem 0 0;
     color: var(--muted);
     max-width: 36rem;
@@ -236,7 +236,7 @@
     border-radius: 6px;
   }
 
-  #page-fixtures .fixture-conflicts {
+  #tab-fixtures .fixture-conflicts {
     flex: 0 0 auto;
   }
 
@@ -331,7 +331,7 @@
     padding-bottom: 0.5rem;
   }
 
-  #page-fixtures.is-dragging-fixture {
+  #tab-fixtures.is-dragging-fixture {
     overscroll-behavior: none;
   }
 
@@ -743,7 +743,7 @@
     color: var(--select);
   }
 
-  .page-intro-hint {
+  .tab-intro-hint {
     margin: 0.2rem 0 0;
     color: var(--muted);
     font-size: var(--text-base);
@@ -756,7 +756,7 @@
     overscroll-behavior: contain;
   }
 
-  #page-show.is-dragging-song {
+  #tab-show.is-dragging-song {
     overscroll-behavior: none;
   }
 
@@ -830,7 +830,7 @@
     color: var(--select);
   }
 
-  /* Set page: the show's songs (left) and the set's running order (right). */
+  /* Set tab: the show's songs (left) and the set's running order (right). */
   .set-builder {
     flex: 1 1 auto;
     min-height: 0;
@@ -939,7 +939,7 @@
     opacity: 0.45;
   }
 
-  /* Drop line when reordering by drag (cues, songs, fixtures, page tabs): a
+  /* Drop line when reordering by drag (cues, songs, fixtures, tabs): a
      line centered on the gap before (is-drop-before) or after (is-drop-after)
      the item, so both marks for one spot look the same. --drop-gap is the
      list's gap (set with the list); the 2.5px is half the line plus the item's 1px border. */
@@ -976,7 +976,7 @@
     bottom: calc(var(--drop-gap) / -2 - 2.5px);
   }
 
-  /* Page tabs (left to right): a vertical line (tabs have no side borders). */
+  /* Tabs (left to right): a vertical line (tabs have no side borders). */
   .nav-link.is-drop-before::before,
   .nav-link.is-drop-after::after {
     top: 20%;
@@ -1420,7 +1420,7 @@
 
 
 
-  #page-run .faders-stage {
+  #tab-run .faders-stage {
     flex: 0 0 auto;
   }
 
@@ -1437,7 +1437,7 @@
     background: color-mix(in srgb, var(--bg) 55%, var(--panel));
   }
 
-  #page-run.is-dragging-cue {
+  #tab-run.is-dragging-cue {
     overscroll-behavior: none;
   }
 
@@ -1686,7 +1686,7 @@
     border-radius: 6px;
   }
 
-  .channel-page {
+  .channels-tab-row {
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;

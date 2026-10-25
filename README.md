@@ -63,7 +63,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 2. **Place a fixture.** Click **+ Place fixture** (or press `A`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
-3. **See it in the console.** The console now has a fixture for it on its *Fixtures* page, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the fixture's current values.
+3. **See it in the console.** The console now has a fixture for it on its *Fixtures* tab, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the fixture's current values.
 4. **Move a fader** in the console's **Cue 1**: the fixture on the stage changes with it (brightness, direction, color, beam width).
 5. **Or adjust the fixture on the stage:** select it and use `+` / `−` (dimmer), the arrow keys (pan / tilt), `[` / `]` (zoom), or the sliders in the inspector. Its faders in the console follow.
 6. **Point it somewhere:** press `T` and click a spot on the floor; the fixture swings to aim at it.
@@ -292,14 +292,14 @@ The small overlay in the 3D view's top-left corner (the **HUD**) shows the selec
 
 ## 5. The Console
 
-### Pages
+### Tabs
 
 Switch with the tabs along the top. **Drag a tab** left or right to reorder them (a line shows where it will land): the order is saved with the show, so every console showing it has the same tabs, and a show file brings its order back (**New show** starts with the default, Show · Set · Run · Channels · Fixtures · Patch). Each browser reopens on the tab it last had open:
 
-| Page | What it's for |
+| Tab | What it's for |
 |---|---|
 | **Show** | every song in the show: add, rename (click the name), reorder (drag **⋮⋮**; a line shows where it will land), and **⋮** to **Duplicate** (a copy, *“… copy”*, right after it) or **Delete** it; each song says which sets it's in; click a song to play it |
-| **Set** | build a set (the running order for one event) from the show's songs, and choose which set the Run page runs (see [Sets](#sets)) |
+| **Set** | build a set (the running order for one event) from the show's songs, and choose which set the Run tab runs (see [Sets](#sets)) |
 | **Run** | runs the active set: the song playing and where it is in the set, its cues, GO, and the faders |
 | **Channels** | meters showing every DMX channel's output, and the live cue's faders |
 | **Fixtures** | your lighting fixtures and the DMX channels each one uses |
@@ -318,24 +318,24 @@ Switch with the tabs along the top. **Drag a tab** left or right to reorder them
 
 The **show** holds every song. A **set** is the running order for one event (*Brooklyn 11/2*): a list of the show's songs. A show can have many sets (up to 32); a new show starts with one, **Set 1**, holding its song.
 
-- **Build a set on the Set page.** Pick the set at the top (**⋮** for **New set**, **Rename**, **Duplicate** or **Delete**). The show's songs are on the left (type in **Find a song** to narrow them). Drag one into the running order on the right (a line shows where it will land), or press its **+** to add it at the end. Drag songs in the running order to reorder them; press **✕**, or drag one back onto the show's songs, to take it out. A song can be in a set more than once (a reprise); the show's list says *in this set ×2*.
+- **Build a set on the Set tab.** Pick the set at the top (**⋮** for **New set**, **Rename**, **Duplicate** or **Delete**). The show's songs are on the left (type in **Find a song** to narrow them). Drag one into the running order on the right (a line shows where it will land), or press its **+** to add it at the end. Drag songs in the running order to reorder them; press **✕**, or drag one back onto the show's songs, to take it out. A song can be in a set more than once (a reprise); the show's list says *in this set ×2*.
 - A set lists the show's songs, not copies: change a song's cues and it changes in every set. Deleting a song from the show takes it out of every set (it asks first).
-- **Run a set.** **Run this set** makes it the **active set**: the Run page runs it from its first song. Clicking a song in the running order runs the set from that song.
-- **On the Run page**, the bar at the top shows the song playing and *song 3 of 12*, with **◀ / ▶** for the previous and next song in the set, and the running order as a list to the left of GO (the song playing is highlighted, the next one dashed; click one to play it; a long set scrolls, with a scrollbar while the pointer is over the list).
-- **GO runs on into the next song.** On a song's last cue, UP NEXT is the next set song's first cue (*Ballad · Cue 1*); GO transitions to it and the Run page moves to that song. On the set's last song's last cue, UP NEXT says **End of set** and GO does nothing.
-- **Songs not in the set.** Clicking a song on the Show page plays it even if it isn't in the active set (it shows *Playing · not in set*, and the Run page *Not in Set 1*). Its last cue goes back to its first, as a song on its own does.
+- **Run a set.** **Run this set** makes it the **active set**: the Run tab runs it from its first song. Clicking a song in the running order runs the set from that song.
+- **On the Run tab**, the bar at the top shows the song playing and *song 3 of 12*, with **◀ / ▶** for the previous and next song in the set, and the running order as a list to the left of GO (the song playing is highlighted, the next one dashed; click one to play it; a long set scrolls, with a scrollbar while the pointer is over the list).
+- **GO runs on into the next song.** On a song's last cue, UP NEXT is the next set song's first cue (*Ballad · Cue 1*); GO transitions to it and the Run tab moves to that song. On the set's last song's last cue, UP NEXT says **End of set** and GO does nothing.
+- **Songs not in the set.** Clicking a song on the Show tab plays it even if it isn't in the active set (it shows *Playing · not in set*, and the Run tab *Not in Set 1*). Its last cue goes back to its first, as a song on its own does.
 
 ### Faders
 
-- There are **256 faders**, F1–F256. Each row of faders scrolls sideways (trackpad or ⇧ + mouse wheel over any row, or the one scrollbar along the bottom of the cue area, shown while the pointer is over the cues); the Live strip and every cue row scroll together, so everything stays lined up. The console uses the full width of its window (or its side of the divider), so a wider window shows more faders at once, and more channel meters per row on the Channels page.
+- There are **256 faders**, F1–F256. Each row of faders scrolls sideways (trackpad or ⇧ + mouse wheel over any row, or the one scrollbar along the bottom of the cue area, shown while the pointer is over the cues); the Live strip and every cue row scroll together, so everything stays lined up. The console uses the full width of its window (or its side of the divider), so a wider window shows more faders at once, and more channel meters per row on the Channels tab.
 - The **Live** row shows what each fader is actually putting out after the submasters, the blend and the Master.
 - A fader only does something once it's **patched** to a channel; unpatched faders are grayed out.
-- **Rename** a fader by right-clicking it (or on the Patch page). Fixtures placed on the stage name their faders automatically.
+- **Rename** a fader by right-clicking it (or on the Patch tab). Fixtures placed on the stage name their faders automatically.
 - **Blackout / flash (dimmer faders):** each fader that controls a fixture's dimmer has two small buttons under it, next to any color bar. Hold **B** to black that fixture out (output 0); hold **F** to flash it at full **and white** (its red, green and blue — and any deep red, white, amber, lime, cyan or indigo channel — go to full too; UV doesn't; pan, tilt and zoom stay where they are). Both last only while held. They change only what's sent out — the fader and your cues aren't touched — and the stage shows the result. (Fixtures placed from the stage are recognized automatically; for your own, name the fader ending in *Dim*, *Dimmer* or *Intensity*.)
-- **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labeled with the fixture's name (neighboring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-page strip, and update when you change the patch.
+- **Fixture outlines:** each run of side-by-side faders that controls one fixture has a colored line around it, labeled with the fixture's name (neighboring fixtures get different colors), and a little space after it so fixtures stand apart. They appear on the Live strip, every cue and the Channels-tab strip, and update when you change the patch.
 - **Color fader strips:** each fader in a color bar's group has a thin strip along its bottom in the color it controls (red, amber, lime, indigo, …), so you can tell the emitters apart at a glance.
-- **Color bars:** when faders side by side control the **color channels** of the same fixture — red, green and blue, plus any deep red, white, amber, lime, cyan, indigo or UV — a color bar appears under them showing their mix. In a cue (or the Channels-page strip), **click the bar** to pick a color: all of them are set at once (you can still fine-tune each one), mixed as described in [Mixing onto extra emitters](#mixing-onto-extra-emitters). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*), and any extras *W / A / L / C / I / UV* (or *White / Amber / Lime / Cyan / Indigo*).
-- **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-page strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Fixtures placed from the stage are recognized automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
+- **Color bars:** when faders side by side control the **color channels** of the same fixture — red, green and blue, plus any deep red, white, amber, lime, cyan, indigo or UV — a color bar appears under them showing their mix. In a cue (or the Channels-tab strip), **click the bar** to pick a color: all of them are set at once (you can still fine-tune each one), mixed as described in [Mixing onto extra emitters](#mixing-onto-extra-emitters). The color picker is the same one the stage uses (see [The color picker](#the-color-picker)); its second row, **In use**, shows the colors on the console's color bars. On the Live strip the bar just shows the color going out. This works for fixtures placed from the stage (including library fixtures); for fixtures you add yourself, name the faders ending in *R / G / B* (or *Red / Green / Blue*), and any extras *W / A / L / C / I / UV* (or *White / Amber / Lime / Cyan / Indigo*).
+- **Pan / tilt pad:** when a fixture has both a **pan** and a **tilt** fader, a small **✥** pad appears under them in each cue (and on the Channels-tab strip). **Hold the mouse button on it and move the mouse:** left / right changes pan, up / down changes tilt. Hold **⇧** for fine moves. The pointer is hidden while you hold, so you can keep moving without running off the pad; let go to stop. (Fixtures placed from the stage are recognized automatically; for your own fixtures, name the faders ending in *Pan* and *Tilt*.)
 
 ### Master and submasters
 
@@ -344,11 +344,11 @@ The **show** holds every song. A **set** is the running order for one event (*Br
 
 ### Fixtures
 
-The Fixtures page lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Fixtures placed on the stage add themselves here; you can also add your own.
+The Fixtures tab lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Fixtures placed on the stage add themselves here; you can also add your own.
 
 ### Patch
 
-The Patch page connects **faders to DMX channels**. A fader can drive several channels, each with a **max** (the level the channel gets when the fader is full). **1:1** patches fader 1 to channel 1, fader 2 to channel 2, and so on. When two faders drive the same channel, the higher one wins ("HTP").
+The Patch tab connects **faders to DMX channels**. A fader can drive several channels, each with a **max** (the level the channel gets when the fader is full). **1:1** patches fader 1 to channel 1, fader 2 to channel 2, and so on. When two faders drive the same channel, the higher one wins ("HTP").
 
 ### Connecting to your fixtures
 
@@ -396,8 +396,8 @@ In the stage inspector's **Console link** section you can instead link a fixture
 | ⌥-click | Shows |
 |---|---|
 | a **fader** (console) | its cue values, Master → its live level → the channels it feeds → the console and stage fixtures on them |
-| a **channel** (console Channels-page meter, or a channel badge in the stage inspector) | the faders feeding it (and which one wins) → what it drives |
-| a **fixture** (console Fixtures page) | each of its channels, its value, what it does on the stage, and the fader driving it |
+| a **channel** (console Channels-tab meter, or a channel badge in the stage inspector) | the faders feeding it (and which one wins) → what it drives |
+| a **fixture** (console Fixtures tab) | each of its channels, its value, what it does on the stage, and the fader driving it |
 | a **fixture** (stage) | each of its values ← its channel ← its fader |
 
 The card updates live. ⌥-click something else to trace that; `Esc` or ✕ closes it. ⌥-click never changes anything.
@@ -415,7 +415,7 @@ With several universes, channel numbers are shown and typed as **universe/channe
 
 - When placing a fixture (or rig) on the stage, choose which **Universe** it goes in, or *First with room*.
 - A fixture always fits inside one universe.
-- On the Channels page, a switch picks which universe the meters show.
+- On the Channels tab, a switch picks which universe the meters show.
 - You can't reduce the number of universes while something is using the ones that would go; move or remove it first.
 - Universes can also go out over the network as Art-Net or sACN; see [Network DMX (Art-Net / sACN)](#network-dmx-art-net--sacn).
 
@@ -545,7 +545,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Transition** | the fade from one cue to the next that **GO** runs; its length is the next cue's **In** time |
 | **Song** | a list of cues |
 | **Show** | every song (plus fixtures, patch, sets): what **Save show** saves |
-| **Set** | the running order for one event: a list of the show's songs; the Run page runs the active set |
+| **Set** | the running order for one event: a list of the show's songs; the Run tab runs the active set |
 | **LIVE / UP NEXT** | the cue on stage now / the cue GO will transition to |
 | **Master / submaster** | faders that scale everything / one cue |
 | **Fixture** | a lighting unit; on the console it owns a block of channels |
@@ -557,7 +557,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 ## 12. For developers
 
-Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the pages on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
+Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the app on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -566,7 +566,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`), and the import map for three.js |
 | `page/page.js`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
-| `server/server.js` | Show server: serves the pages, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
+| `server/server.js` | Show server: serves the app, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
 | `server/show.js` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/net-dmx.js` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
@@ -577,19 +577,19 @@ The console and the stage are one app: anything both use (and the page header, o
 | `console/dom.js` | The console's elements (in its pane of `index.html`) |
 | `console/live.js` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
 | `console/faders.js` | Fader names and menu, and what's drawn on fader rows (color bars, pan / tilt pads, blackout / flash buttons, fixture outlines) |
-| `console/show-page.js` | Show page: the song list |
-| `console/set-bar.js` | Run page set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
-| `console/set-page.js` | Set page: building sets by drag and drop, picking the active set |
-| `console/cues.js` | Run page: the cue rows with their menus |
-| `console/patch-page.js`, `fixtures-page.js` | Patch and Fixtures pages (and the channel / count / group pickers) |
-| `console/nav.js` | Page tabs: show name, tab order, routing |
+| `console/show-tab.js` | Show tab: the song list |
+| `console/set-bar.js` | Run tab set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
+| `console/set-tab.js` | Set tab: building sets by drag and drop, picking the active set |
+| `console/cues.js` | Run tab: the cue rows with their menus |
+| `console/patch-tab.js`, `fixtures-tab.js` | Patch and Fixtures tabs (and the channel / count / group pickers) |
+| `console/nav.js` | Tabs: show name, tab order, routing |
 | `console/server-link.js` | Console side of the show-server link |
 | `console/patch.js` | Fader patch; the show's universe count (channel addresses for the current show) |
 | `console/fixtures.js`, `show.js`, `songs.js`, `sets.js` | Fixtures, show save / load, songs and cues, sets (and what's UP NEXT across set songs) |
 | `console/stage-link.js` | Console side of its link with the stage |
 | `stage/stage.css` | Stage styles, scoped to its pane (`:where(#stagePane)`; breakpoints are container queries on the pane) |
 | `stage/stage.js` | Starts the stage; keeps up with other app windows and the show server; ⌥-click traces |
-| `stage/state.js` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the page is in the middle of (placing, aiming) |
+| `stage/state.js` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
 | `stage/view3d.js`, `plan.js` | The 3D view and the plan view, with their mouse handling |
 | `stage/sidebar.js` | Fixture list, inspector and key strip |
 | `stage/panel.js` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
@@ -736,7 +736,7 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 | `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s |
 | `activeSongId` | the song playing |
 | `sets` | `[{ id, name, entries: [{ id, songId }] }]`: each entry points at a song; a song can appear more than once |
-| `activeSetId` | the set the Run page runs |
+| `activeSetId` | the set the Run tab runs |
 | `activeEntryId` | the entry playing in that set, or `null` (a song played from outside it) |
 | `master`, `cross`, `fromSub`, `toSub`, `fromCue`, `selectedCue` | the [live fields](#the-live-object) as last saved |
 | `faderNames` | 256 names |
@@ -762,6 +762,6 @@ By default the server listens only on this computer (`127.0.0.1`). With `--lan` 
 
 **Fixture library.** The Open Fixture Library API only accepts requests from its own site and `http://localhost:8080`; from other addresses the stage reads the library's files on GitHub instead (same data; list names from file names; GitHub limits that to about 60 manufacturer lookups an hour, cached).
 
-**Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. Combined-page layout: `unnaturallight.shell`.
+**Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. App layout: `unnaturallight.shell`. Console tab last open: `unnaturallight.console.tab`.
 
 **Stage (`stage` in the show file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

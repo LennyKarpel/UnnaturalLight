@@ -1,5 +1,5 @@
-// Patch page: which channels each fader drives, and the channel, count
-// and group pickers (also used by the Fixtures page).
+// Patch tab: which channels each fader drives, and the channel, count
+// and group pickers (also used by the Fixtures tab).
 import {
   FADER_COUNT,
   makeTarget,

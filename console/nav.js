@@ -1,13 +1,13 @@
-// Page tabs: the show name, tab order (drag to reorder) and routing.
+// Tabs: the show name, tab order (drag to reorder) and routing.
 import { DEFAULT_NAV_ORDER, normalizeNavOrder, normalizeShowName } from "./show.js";
-import { navEl, pages, getNavLinks } from "./dom.js";
+import { navEl, tabs, getNavLinks } from "./dom.js";
 import { notifyHeader, persistSession, state } from "./state.js";
 import { abortInlineEdits } from "./faders.js";
 import { refreshChannelRow, renderSelectedGroup } from "./live.js";
-import { renderShowPage } from "./show-page.js";
-import { renderSetPage } from "./set-page.js";
-import { renderPatchTable } from "./patch-page.js";
-import { renderFixtures } from "./fixtures-page.js";
+import { renderShowTab } from "./show-tab.js";
+import { renderSetTab } from "./set-tab.js";
+import { renderPatchTable } from "./patch-tab.js";
+import { renderFixtures } from "./fixtures-tab.js";
 
 export function syncShowNameUi() {
   state.showName = normalizeShowName(state.showName);
@@ -25,17 +25,17 @@ export function applyShowName(name) {
 
 function readNavOrderFromDom() {
   return normalizeNavOrder(
-    getNavLinks().map((link) => link.dataset.page).filter(Boolean),
+    getNavLinks().map((link) => link.dataset.tab).filter(Boolean),
   );
 }
 
 export function applyNavOrder(order = state.navOrder) {
   state.navOrder = normalizeNavOrder(order);
-  const byPage = new Map(
-    getNavLinks().map((link) => [link.dataset.page, link]),
+  const byTab = new Map(
+    getNavLinks().map((link) => [link.dataset.tab, link]),
   );
-  for (const page of state.navOrder) {
-    const link = byPage.get(page);
+  for (const tab of state.navOrder) {
+    const link = byTab.get(tab);
     if (link) navEl.append(link);
   }
 }
@@ -57,7 +57,7 @@ function clearNavDropMarks() {
  * @param {string} to
  * @param {boolean} after
  */
-function moveNavPage(from, to, after) {
+function moveNavTab(from, to, after) {
   if (!from || !to || from === to) return false;
   const order = readNavOrderFromDom();
   const fromIndex = order.indexOf(from);
@@ -75,30 +75,30 @@ function moveNavPage(from, to, after) {
 
 export function wireNavReorder() {
   /** @type {string | null} */
-  let dragPage = null;
+  let dragTab = null;
   let didReorder = false;
 
   for (const link of getNavLinks()) {
     link.addEventListener("dragstart", (event) => {
-      dragPage = link.dataset.page ?? null;
+      dragTab = link.dataset.tab ?? null;
       didReorder = false;
-      if (!dragPage || !event.dataTransfer) return;
+      if (!dragTab || !event.dataTransfer) return;
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", dragPage);
+      event.dataTransfer.setData("text/plain", dragTab);
       link.classList.add("is-dragging");
     });
 
     link.addEventListener("dragend", () => {
       link.classList.remove("is-dragging");
       clearNavDropMarks();
-      dragPage = null;
+      dragTab = null;
       window.setTimeout(() => {
         didReorder = false;
       }, 50);
     });
 
     link.addEventListener("dragover", (event) => {
-      if (!dragPage || dragPage === link.dataset.page) return;
+      if (!dragTab || dragTab === link.dataset.tab) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
       const after = navDropAfter(link, event);
@@ -120,12 +120,12 @@ export function wireNavReorder() {
 
     link.addEventListener("drop", (event) => {
       event.preventDefault();
-      const from = dragPage ?? event.dataTransfer?.getData("text/plain");
-      const to = link.dataset.page;
+      const from = dragTab ?? event.dataTransfer?.getData("text/plain");
+      const to = link.dataset.tab;
       const after = navDropAfter(link, event);
       clearNavDropMarks();
       if (!from || !to) return;
-      if (!moveNavPage(from, to, after)) return;
+      if (!moveNavTab(from, to, after)) return;
       didReorder = true;
       persistSession();
     });
@@ -139,28 +139,28 @@ export function wireNavReorder() {
 
 // The open tab is remembered in this browser, so a refresh comes back to it
 // (the page around the console reloads it without its #tab).
-const PAGE_KEY = "unnaturallight.console.page";
+const TAB_KEY = "unnaturallight.console.tab";
 
-export function showPage(name) {
-  const page = pages[name] ? name : "run";
+export function showTab(name) {
+  const tab = tabs[name] ? name : "run";
   abortInlineEdits();
-  try { localStorage.setItem(PAGE_KEY, page); } catch { /* storage unavailable */ }
+  try { localStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ }
 
-  for (const [key, el] of Object.entries(pages)) {
-    const active = key === page;
+  for (const [key, el] of Object.entries(tabs)) {
+    const active = key === tab;
     el.hidden = !active;
     el.classList.toggle("is-active", active);
   }
 
   for (const link of getNavLinks()) {
-    link.classList.toggle("is-active", link.dataset.page === page);
+    link.classList.toggle("is-active", link.dataset.tab === tab);
   }
 
-  if (page === "patch") renderPatchTable();
-  if (page === "fixtures") renderFixtures();
-  if (page === "show") renderShowPage();
-  if (page === "set") renderSetPage();
-  if (page === "channels") {
+  if (tab === "patch") renderPatchTable();
+  if (tab === "fixtures") renderFixtures();
+  if (tab === "show") renderShowTab();
+  if (tab === "set") renderSetTab();
+  if (tab === "channels") {
     refreshChannelRow();
     renderSelectedGroup();
   }
@@ -168,11 +168,11 @@ export function showPage(name) {
 
 /** Show the tab in the address (#show, #set, #patch, …), else the one last open. */
 export function routeFromHash() {
-  let page = location.hash.replace("#", "");
-  if (!DEFAULT_NAV_ORDER.includes(page)) {
-    try { page = localStorage.getItem(PAGE_KEY) ?? ""; } catch { page = ""; }
-    if (!DEFAULT_NAV_ORDER.includes(page)) page = "run";
-    history.replaceState(null, "", `#${page}`);
+  let tab = location.hash.replace("#", "");
+  if (!DEFAULT_NAV_ORDER.includes(tab)) {
+    try { tab = localStorage.getItem(TAB_KEY) ?? ""; } catch { tab = ""; }
+    if (!DEFAULT_NAV_ORDER.includes(tab)) tab = "run";
+    history.replaceState(null, "", `#${tab}`);
   }
-  showPage(page);
+  showTab(tab);
 }

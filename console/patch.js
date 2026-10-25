@@ -19,7 +19,7 @@ export const channelLimit = () => universeCount * UNIVERSE_SIZE;
 export const formatAddress = (channel) => formatIn(channel, universeCount);
 /** "2/45" → 557 · "45" → 45 · invalid / beyond the show's universes → null. */
 export const parseAddress = (text) => parseIn(text, universeCount);
-/** Channels shown on the main-page Channels meter row. */
+/** Channels shown on the Channels-tab meter row. */
 export const CHANNEL_METER_COUNT = 256;
 
 /**

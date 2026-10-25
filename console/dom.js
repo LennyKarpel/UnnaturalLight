@@ -121,8 +121,8 @@ export const setEntryScroll = requireEl("setEntryScroll", HTMLElement);
 export const setEntryList = requireEl("setEntryList", HTMLElement);
 export const setEntryEmpty = requireEl("setEntryEmpty", HTMLElement);
 export const setEntryCount = requireEl("setEntryCount", HTMLElement);
-export const pageShow = requireEl("page-show", HTMLElement);
-export const pageSet = requireEl("page-set", HTMLElement);
+export const tabShow = requireEl("tab-show", HTMLElement);
+export const tabSet = requireEl("tab-set", HTMLElement);
 export const identityBtn = requireEl("identityBtn", HTMLButtonElement);
 export const clearPatchBtn = requireEl("clearPatchBtn", HTMLButtonElement);
 export const channelMenu = requireEl("channelMenu", HTMLElement);
@@ -131,10 +131,10 @@ export const channelMenuList = requireEl("channelMenuList", HTMLElement);
 export const channelMenuSub = requireEl("channelMenuSub", HTMLElement);
 export const channelMenuSubList = requireEl("channelMenuSubList", HTMLElement);
 export const channelMenuSubLabel = requireEl("channelMenuSubLabel", HTMLElement);
-export const pageRun = requireEl("page-run", HTMLElement);
-export const pageChannels = requireEl("page-channels", HTMLElement);
-export const pageFixtures = requireEl("page-fixtures", HTMLElement);
-export const pagePatch = requireEl("page-patch", HTMLElement);
+export const tabRun = requireEl("tab-run", HTMLElement);
+export const tabChannels = requireEl("tab-channels", HTMLElement);
+export const tabFixtures = requireEl("tab-fixtures", HTMLElement);
+export const tabPatch = requireEl("tab-patch", HTMLElement);
 export const fixtureForm = requireEl("fixtureForm", HTMLFormElement);
 export const fixtureNameInput = requireEl("fixtureNameInput", HTMLInputElement);
 export const fixtureStartPicker = requireEl("fixtureStartPicker", HTMLElement);
@@ -156,13 +156,13 @@ export const fixtureGroupMenu = requireEl("fixtureGroupMenu", HTMLElement);
 export const fixtureGroupMenuList = requireEl("fixtureGroupMenuList", HTMLElement);
 export const navEl = requireEl("nav", HTMLElement);
 /** @type {Record<string, HTMLElement>} */
-export const pages = {
-  show: pageShow,
-  set: pageSet,
-  run: pageRun,
-  channels: pageChannels,
-  fixtures: pageFixtures,
-  patch: pagePatch,
+export const tabs = {
+  show: tabShow,
+  set: tabSet,
+  run: tabRun,
+  channels: tabChannels,
+  fixtures: tabFixtures,
+  patch: tabPatch,
 };
 
 export function getNavLinks() {

@@ -203,20 +203,20 @@
           <h1 class="app-title"><span>Console</span></h1>
         </header>
 
-        <nav id="nav" class="nav" aria-label="Pages">
-          <a href="#show" data-page="show" class="nav-link" draggable="true">Show</a>
-          <a href="#set" data-page="set" class="nav-link" draggable="true">Set</a>
-          <a href="#run" data-page="run" class="nav-link is-active" draggable="true">Run</a>
-          <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
-          <a href="#fixtures" data-page="fixtures" class="nav-link" draggable="true">Fixtures</a>
-          <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
+        <nav id="nav" class="nav" aria-label="Tabs">
+          <a href="#show" data-tab="show" class="nav-link" draggable="true">Show</a>
+          <a href="#set" data-tab="set" class="nav-link" draggable="true">Set</a>
+          <a href="#run" data-tab="run" class="nav-link is-active" draggable="true">Run</a>
+          <a href="#channels" data-tab="channels" class="nav-link" draggable="true">Channels</a>
+          <a href="#fixtures" data-tab="fixtures" class="nav-link" draggable="true">Fixtures</a>
+          <a href="#patch" data-tab="patch" class="nav-link" draggable="true">Patch</a>
         </nav>
 
-        <section id="page-show" class="page" hidden>
-          <div class="page-intro">
+        <section id="tab-show" class="tab-panel" hidden>
+          <div class="tab-intro">
             <div>
               <h2>Show</h2>
-              <p class="page-intro-hint">Every song in the show · click to play · drag to reorder</p>
+              <p class="tab-intro-hint">Every song in the show · click to play · drag to reorder</p>
             </div>
             <div class="patch-actions">
               <button id="addSongBtn" type="button" class="quiet">+ Song</button>
@@ -228,11 +228,11 @@
           </div>
         </section>
 
-        <section id="page-set" class="page" hidden>
-          <div class="page-intro">
+        <section id="tab-set" class="tab-panel" hidden>
+          <div class="tab-intro">
             <div>
               <h2>Set</h2>
-              <p class="page-intro-hint">Drag songs from the show into the set · drag to reorder · the Run page runs the active set</p>
+              <p class="tab-intro-hint">Drag songs from the show into the set · drag to reorder · the Run tab runs the active set</p>
             </div>
             <div class="patch-actions">
               <select id="setSelect" aria-label="Set to edit"></select>
@@ -263,7 +263,7 @@
           </div>
         </section>
 
-        <section id="page-run" class="page is-active">
+        <section id="tab-run" class="tab-panel is-active">
           <div class="faders-stage">
             <div class="faders-stage-main">
               <section class="transport">
@@ -351,14 +351,14 @@
           </div>
         </section>
 
-        <section id="page-channels" class="page" hidden>
-          <div class="page-intro">
+        <section id="tab-channels" class="tab-panel" hidden>
+          <div class="tab-intro">
             <div>
               <h2>Channels</h2>
             </div>
           </div>
 
-          <section class="fader-row channel-row channel-page" aria-label="DMX channel levels">
+          <section class="fader-row channel-row channels-tab-row" aria-label="DMX channel levels">
             <div id="channelLevels" class="faders channel-faders"></div>
           </section>
 
@@ -384,8 +384,8 @@
           </section>
         </section>
 
-        <section id="page-fixtures" class="page" hidden>
-          <div class="page-intro">
+        <section id="tab-fixtures" class="tab-panel" hidden>
+          <div class="tab-intro">
             <div>
               <h2>Fixtures</h2>
             </div>
@@ -442,8 +442,8 @@
           </div>
         </section>
 
-        <section id="page-patch" class="page" hidden>
-          <div class="page-intro">
+        <section id="tab-patch" class="tab-panel" hidden>
+          <div class="tab-intro">
             <div>
               <h2>Patch</h2>
               <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all cues.</p>

@@ -71,7 +71,7 @@ const bootSongs = normalizeSongs(boot.songs);
 const bootGroups = normalizeFixtureGroups(boot.fixtureGroups);
 const bootSets = normalizeSets(boot.sets, bootSongs);
 
-/** The console's working show and the UI state its pages share. */
+/** The console's working show and the UI state its tabs share. */
 export const state = {
   /** Link to the show server (created once the page is set up, at the end of app.js). */
   /** @type {ReturnType<typeof createServerLink> | null} */
@@ -88,7 +88,7 @@ export const state = {
   songs: bootSongs,
   /** @type {string} */
   activeSongId: resolveActiveSong(bootSongs, boot.activeSongId).id,
-  /** The show's sets; the Run page runs the active one. */
+  /** The show's sets; the Run tab runs the active one. */
   /** @type {import("./sets.js").ShowSet[]} */
   sets: bootSets,
   /** @type {string} */
