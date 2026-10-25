@@ -9,8 +9,8 @@
  *                      mix (master, subs, crossfade, LIVE / selected cue), held
  *                      flash / blackout buttons, GO / pause / stop,
  *                      DMX connect / disconnect, and the stage from a
- *                      loaded show file (stage pages keep it up to date
- *                      themselves, see ../stage/show-link.js)
+ *                      loaded show file (the stage keeps it up to date
+ *                      itself, see ../stage/show-link.js)
  *   server → console   the same, from other consoles, plus fade steps and
  *                      DMX status
  *
@@ -72,8 +72,6 @@ export function createServerLink(api) {
   /** field / "cueId:fader" → until (ms): changed here, not yet confirmed */
   const pending = new Map();
   let nextRequest = 1;
-  /** The newest server message heard (its `seq`), for the stage link. */
-  let seq = 0;
   /** request id → resolve */
   const replies = new Map();
 
@@ -157,7 +155,6 @@ export function createServerLink(api) {
 
   const socket = openServerSocket({
     onMessage(msg) {
-      if (Number.isFinite(msg.seq)) seq = Math.max(seq, msg.seq);
       if (msg.type === "hello") {
         connected = true;
         pending.clear();
@@ -208,10 +205,6 @@ export function createServerLink(api) {
     get connected() {
       return connected;
     },
-    /** The newest server message heard (0 = none yet). */
-    get seq() {
-      return seq;
-    },
     /** The console changed: send what's different (once per tick). */
     sync() {
       if (queued) return;
@@ -227,7 +220,7 @@ export function createServerLink(api) {
     },
     /** Replace the stage kept with the show (from a loaded show file). */
     sendStage(stage) {
-      send({ type: "stage", stage });
+      send({ type: "stage", stage, file: true });
     },
     /** Ask the server something; resolves with its reply ({ ok, error? }). */
     request(msg) {

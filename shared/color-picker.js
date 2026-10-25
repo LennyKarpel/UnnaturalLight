@@ -1,6 +1,6 @@
 /**
  * Color picker shared by the console and the stage, used in place of the
- * browser's own for every <input type="color"> on the page (console color
+ * browser's own for every <input type="color"> in the app (console color
  * bars; stage keys bar and inspector). Clicking one opens a popover by it:
  *
  *   wheel     hue around the edge, saturation toward the center, at full
@@ -49,10 +49,23 @@ function hsFromRgb(r, g, b) {
 }
 
 /**
- * @param {{ usedLabel: string, usedColors: () => string[] }} api
+ * The second swatch row for color inputs inside each part of the app:
+ * [{ scope, usedLabel, usedColors }].
+ */
+const providers = [];
+
+/**
+ * Use the picker for the color inputs inside `scope` (one popover for the
+ * whole app, made on the first call).
+ * @param {{ scope: Element, usedLabel: string, usedColors: () => string[] }} api
  *   the second swatch row: its heading and colors (hex), e.g. the stage's fixtures
  */
 export function installColorPicker(api) {
+  providers.push(api);
+  if (providers.length === 1) createPicker();
+}
+
+function createPicker() {
   const dlg = document.createElement("dialog");
   dlg.className = "color-pop";
   dlg.innerHTML = `
@@ -77,7 +90,6 @@ export function installColorPicker(api) {
   const dot = /** @type {HTMLElement} */ (dlg.querySelector(".color-wheel-dot"));
   const usedRow = /** @type {HTMLElement} */ (dlg.querySelector("[data-used]"));
   const usedHead = /** @type {HTMLElement} */ (dlg.querySelector(".color-used-head"));
-  usedHead.textContent = api.usedLabel;
   const rgbFields = /** @type {HTMLInputElement[]} */ ([...dlg.querySelectorAll("[data-c]")]);
   const hexField = /** @type {HTMLInputElement} */ (dlg.querySelector("[data-hex-field]"));
 
@@ -113,6 +125,8 @@ export function installColorPicker(api) {
   }
 
   function renderUsedColors() {
+    const api = providers.find((p) => p.scope.contains(anchor)) ?? providers[0];
+    usedHead.textContent = api.usedLabel;
     const preset = new Set(SWATCHES.map(([, hex]) => hex));
     const colors = [...new Set(api.usedColors().map((c) => c.toLowerCase()))]
       .filter((c) => /^#[0-9a-f]{6}$/.test(c) && !preset.has(c))

@@ -1,6 +1,7 @@
 // Keyboard: shortcuts and the key strip's buttons.
 import { setZeroHere, setDmx, setColorHex, homeFixture } from "./stage-model.js";
 import { installColorPicker } from "../shared/color-picker.js";
+import { activePane } from "../shared/panes.js";
 import { state, selectedFixtures, ui } from "./state.js";
 import { NUDGE_KEYS, canNudge } from "./sidebar.js";
 import {
@@ -33,7 +34,7 @@ keysColor.addEventListener("input", () => {
 keysColor.addEventListener("change", () => keysColor.blur());
 
 // Every color input (keys bar, inspector) opens the shared color picker.
-installColorPicker({ usedLabel: "On stage", usedColors: () => state.fixtures.map((i) => i.color) });
+installColorPicker({ scope: document.getElementById("stagePane"), usedLabel: "On stage", usedColors: () => state.fixtures.map((i) => i.color) });
 
 // Keys bar under the 3D view: each key is a button that does what the key
 // does (it sends the same key press). Hold to repeat; ⇧-click for steps of 10.
@@ -60,6 +61,8 @@ document.querySelectorAll(".keys [data-key]").forEach((btn) => {
 });
 
 window.addEventListener("keydown", (e) => {
+  // Keys are the stage's only while you're working on it (not in the console).
+  if (activePane() !== "stage") return;
   const t = e.target;
   const typing = t instanceof HTMLElement && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type !== "range" && t.type !== "color"));
   if (typing) {
@@ -123,4 +126,6 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("keyup", (e) => { if (e.code === "KeyF") stopFlash(); });
+// Leaving the stage (clicking in the console) ends a held flash.
+window.addEventListener("pointerdown", () => { if (activePane() !== "stage") stopFlash(); });
 window.addEventListener("blur", stopFlash);

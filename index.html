@@ -6,8 +6,8 @@
     <title>UnnaturalLight</title>
     <script>
       // From another computer this page is opened with ?token=… (printed by the
-      // server). Keep it for this tab before the frames load: the console and
-      // the stage read it from here (same key as shared/server-socket.js).
+      // server). Keep it for this tab before the app starts (same key as
+      // shared/server-socket.js).
       try {
         const token = new URLSearchParams(location.search).get("token");
         if (token) sessionStorage.setItem("unnaturallight.token", token);
@@ -15,6 +15,16 @@
     </script>
     <link rel="stylesheet" href="shared/theme.css" />
     <link rel="stylesheet" href="page/page.css" />
+    <link rel="stylesheet" href="console/styles.css" />
+    <link rel="stylesheet" href="stage/stage.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
   </head>
   <body>
     <header class="bar">
@@ -45,10 +55,480 @@
         </div>
       </div>
     </header>
+    <!-- One app, two panes: the stage (stage/) and the console (console/). Both
+         are always there; Console / Both / Stage only changes which are shown. -->
     <main class="panes" id="panes">
-      <iframe id="stageFrame" src="stage/stage.html" title="Stage"></iframe>
+      <div class="pane" id="stagePane" data-pane="stage" aria-label="Stage">
+      <div class="app">
+        <header>
+          <h1 class="app-title"><span>Stage</span></h1>
+          <div class="group" title="Performance area size in meters">
+            <label>Box W</label><input id="boxW" type="number" min="1" max="100" step="0.5" />
+            <label>D</label><input id="boxD" type="number" min="1" max="100" step="0.5" />
+            <label>H</label><input id="boxH" type="number" min="1" max="50" step="0.5" />
+            <label>m</label>
+          </div>
+          <div class="spacer"></div>
+          <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (A)">+ Place fixture</button>
+          <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
+          <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
+        </header>
+
+        <div class="view" id="view">
+          <div class="hud" id="hud" hidden></div>
+          <div class="banner" id="banner" hidden>Click a surface (inside) · ⌥-click a wall (outside) · click the ground off the box · or click the plan · Esc cancels</div>
+          <!-- The keys here are buttons: click = press the key (hold to repeat, ⇧-click = ×10). -->
+          <div class="keys">
+            <span><button type="button" class="kbd" data-key="=" data-code="Equal" data-repeat title="Dimmer up (hold to repeat · ⇧-click ×10)">+</button><button type="button" class="kbd" data-key="-" data-code="Minus" data-repeat title="Dimmer down (hold to repeat · ⇧-click ×10)">−</button> dimmer</span>
+            <span><button type="button" class="kbd" data-key="ArrowLeft" data-code="ArrowLeft" data-repeat title="Pan left (hold to repeat · ⇧-click ×10)">←</button><button type="button" class="kbd" data-key="ArrowRight" data-code="ArrowRight" data-repeat title="Pan right (hold to repeat · ⇧-click ×10)">→</button> pan</span>
+            <span><button type="button" class="kbd" data-key="ArrowUp" data-code="ArrowUp" data-repeat title="Tilt up (hold to repeat · ⇧-click ×10)">↑</button><button type="button" class="kbd" data-key="ArrowDown" data-code="ArrowDown" data-repeat title="Tilt down (hold to repeat · ⇧-click ×10)">↓</button> tilt</span>
+            <span><button type="button" class="kbd" data-key="[" data-code="BracketLeft" data-repeat title="Zoom narrower (hold to repeat · ⇧-click ×10)">[</button><button type="button" class="kbd" data-key="]" data-code="BracketRight" data-repeat title="Zoom wider (hold to repeat · ⇧-click ×10)">]</button> zoom</span>
+            <span><label class="keys-color" title="Color of the selected fixture(s)"><input type="color" id="keysColor" disabled /> color</label></span>
+            <span>0–255 · <kbd>⇧</kbd> ×10</span>
+            <span><button type="button" class="kbd" data-key="Tab" data-code="Tab" title="Select the next fixture">Tab</button> next</span>
+            <span><button type="button" class="kbd" data-key="a" data-code="KeyA" title="Place a fixture">A</button> place</span>
+            <span>right-click a fixture for more</span>
+            <span><button type="button" class="kbd" data-key="Backspace" data-code="Backspace" title="Delete the selected fixture(s)">⌫</button> delete · <button type="button" class="kbd" data-key="z" data-code="KeyZ" data-meta title="Undo the last delete">⌘Z</button> undo</span>
+          </div>
+        </div>
+
+        <aside>
+          <section id="planSection">
+            <h2>
+              <span class="h2-title">Plan<button type="button" class="collapse-btn"></button></span>
+              <span class="seg" role="group" aria-label="Plan view">
+                <button type="button" data-plan-view="top" title="From above, audience at the bottom">Top</button>
+                <button type="button" data-plan-view="front" title="From the audience, looking upstage">Front</button>
+                <button type="button" data-plan-view="sr" title="From stage right, audience on the right">SR</button>
+                <button type="button" data-plan-view="sl" title="From stage left, audience on the left">SL</button>
+              </span>
+            </h2>
+            <canvas id="plan"></canvas>
+            <p class="hint">Drag fixtures to move them (in Front / SR / SL this changes height too). Shift-click to select several; keys act on every selected fixture.</p>
+          </section>
+          <div class="vdivider" data-resize="plan" title="Drag to resize · double-click to reset"><span class="grip"></span></div>
+          <section id="fixtures">
+            <h2><span class="h2-title">Fixtures<button type="button" class="collapse-btn"></button></span> <span id="count"></span></h2>
+            <div class="list thin-scroll" id="list"></div>
+          </section>
+          <div class="vdivider" data-resize="fixtures" title="Drag to resize · double-click to reset"><span class="grip"></span></div>
+          <section id="inspector"></section>
+        </aside>
+      </div>
+
+      <div class="menu ctx-menu" id="ctxMenu" role="menu" hidden></div>
+
+      <dialog id="placeDlg" class="dlg">
+        <header class="dlg-head">
+          <h2>Place a fixture</h2>
+          <button id="placeClose" type="button" aria-label="Close">✕</button>
+        </header>
+        <section>
+          <form id="placeForm">
+            <div class="fields">
+              <label for="placeType">Console type</label>
+              <select id="placeType"></select>
+            </div>
+            <div class="fields" data-universe-row hidden>
+              <label for="placeUniverse">Universe</label>
+              <select id="placeUniverse"></select>
+            </div>
+            <div class="lib" id="placeLib" hidden></div>
+            <p class="hint warn" id="placeLibMsg"></p>
+            <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the stage fixture. "Stage only" doesn't touch the console.</p>
+            <div class="buttons">
+              <button class="primary" type="submit">Place…</button>
+            </div>
+          </form>
+        </section>
+      </dialog>
+
+      <dialog id="rigDlg" class="dlg">
+        <header class="dlg-head">
+          <h2>Place a rig</h2>
+          <button id="rigClose" type="button" aria-label="Close">✕</button>
+        </header>
+        <section>
+          <div class="fields">
+            <label for="rigType">Type</label>
+            <select id="rigType"></select>
+            <label for="rigSize" id="rigSizeLabel">Size (m)</label>
+            <input id="rigSize" type="number" min="0.5" max="50" step="0.5" value="4" />
+            <label for="rigCount">Fixtures</label>
+            <input id="rigCount" type="number" min="2" max="32" step="1" value="8" />
+            <label for="rigTilt">Tilt °</label>
+            <input id="rigTilt" type="number" min="-90" max="90" step="5" value="0" />
+            <label for="rigYaw">Yaw °</label>
+            <input id="rigYaw" type="number" step="5" value="0" />
+            <label for="rigConsoleType">Console type</label>
+            <select id="rigConsoleType" title="Each fixture in the rig gets a console fixture of this type (grouped under the rig's name)"></select>
+          </div>
+          <div class="fields" data-universe-row hidden>
+            <label for="rigUniverse">Universe</label>
+            <select id="rigUniverse"></select>
+          </div>
+          <div class="lib" id="rigLib" hidden></div>
+          <p class="hint" id="rigHelp"></p>
+          <p class="hint" id="rigRoom"></p>
+          <div class="buttons">
+            <button id="rigPlace" class="primary" type="button">Place…</button>
+          </div>
+        </section>
+      </dialog>
+
+      <dialog id="settings" class="dlg">
+        <header class="dlg-head">
+          <h2>View settings</h2>
+          <button id="settingsClose" type="button" aria-label="Close">✕</button>
+        </header>
+        <section>
+          <h3>Transparent sides</h3>
+          <p class="hint">Ticked sides are see-through, so you can see fixtures placed beyond them. Light from beams still shows on them. The floor is always solid.</p>
+          <div class="checks" id="surfaceRows"></div>
+          <div class="buttons">
+            <button type="button" data-all="transparent">All transparent</button>
+            <button type="button" data-all="solid">All solid</button>
+          </div>
+        </section>
+      </dialog>
+
+  
+      </div>
       <div class="divider" id="divider" role="separator" aria-orientation="vertical" title="Drag to resize · double-click for 50 / 50"><span class="grip"></span></div>
-      <iframe id="consoleFrame" src="console/console.html" title="Console" allow="serial"></iframe>
+      <div class="pane" id="consolePane" data-pane="console" aria-label="Console">
+      <div class="app">
+        <!-- The show name, show buttons, DMX outputs and status are in the header of
+             the page around the console (../index.html). -->
+        <header class="header">
+          <h1 class="app-title"><span>Console</span></h1>
+        </header>
+
+        <nav id="nav" class="nav" aria-label="Pages">
+          <a href="#show" data-page="show" class="nav-link" draggable="true">Show</a>
+          <a href="#set" data-page="set" class="nav-link" draggable="true">Set</a>
+          <a href="#run" data-page="run" class="nav-link is-active" draggable="true">Run</a>
+          <a href="#channels" data-page="channels" class="nav-link" draggable="true">Channels</a>
+          <a href="#fixtures" data-page="fixtures" class="nav-link" draggable="true">Fixtures</a>
+          <a href="#patch" data-page="patch" class="nav-link" draggable="true">Patch</a>
+        </nav>
+
+        <section id="page-show" class="page" hidden>
+          <div class="page-intro">
+            <div>
+              <h2>Show</h2>
+              <p class="page-intro-hint">Every song in the show · click to play · drag to reorder</p>
+            </div>
+            <div class="patch-actions">
+              <button id="addSongBtn" type="button" class="quiet">+ Song</button>
+            </div>
+          </div>
+          <div id="songScroll" class="song-scroll">
+            <div id="songEmpty" class="fixture-empty" hidden>No songs yet.</div>
+            <div id="songList" class="song-list" role="list" aria-label="Songs"></div>
+          </div>
+        </section>
+
+        <section id="page-set" class="page" hidden>
+          <div class="page-intro">
+            <div>
+              <h2>Set</h2>
+              <p class="page-intro-hint">Drag songs from the show into the set · drag to reorder · the Run page runs the active set</p>
+            </div>
+            <div class="patch-actions">
+              <select id="setSelect" aria-label="Set to edit"></select>
+              <button id="setMenuBtn" type="button" class="cue-menu-btn" title="Set options" aria-label="Set options" aria-haspopup="menu" aria-expanded="false"><span class="cue-menu-dots" aria-hidden="true"></span></button>
+              <button id="runSetBtn" type="button" class="quiet">Run this set</button>
+            </div>
+          </div>
+          <div class="set-builder">
+            <section class="set-column" aria-labelledby="setSourceTitle">
+              <div class="set-column-head">
+                <h3 id="setSourceTitle">Show</h3>
+                <input id="setSongSearch" type="search" placeholder="Find a song" aria-label="Find a song" autocomplete="off" />
+              </div>
+              <div id="setSourceScroll" class="song-scroll">
+                <div id="setSourceList" class="song-list" role="list" aria-label="Songs in the show"></div>
+              </div>
+            </section>
+            <section class="set-column" aria-labelledby="setEntryTitle">
+              <div class="set-column-head">
+                <h3 id="setEntryTitle">Running order</h3>
+                <span id="setEntryCount" class="song-row-meta"></span>
+              </div>
+              <div id="setEntryScroll" class="song-scroll set-drop-area">
+                <div id="setEntryEmpty" class="fixture-empty" hidden>Drag songs here from the show (or press + on one).</div>
+                <div id="setEntryList" class="song-list" role="list" aria-label="Running order"></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="page-run" class="page is-active">
+          <div class="faders-stage">
+            <div class="faders-stage-main">
+              <section class="transport">
+                <div class="active-song-bar">
+                  <button id="prevSongBtn" type="button" class="quiet" title="Previous song in the set" aria-label="Previous song">◀</button>
+                  <span id="activeSongLabel" class="active-song-name">Song 1</span>
+                  <button id="nextSongBtn" type="button" class="quiet" title="Next song in the set" aria-label="Next song">▶</button>
+                  <span id="activeSetLabel" class="active-song-label"></span>
+                  <button id="addCueBtn" type="button" class="quiet" title="Add a cue at the end of the song">+ Add cue</button>
+                </div>
+                <div class="transport-main">
+                  <div id="setStrip" class="set-strip thin-scroll" role="list" aria-label="Running order"></div>
+                  <div class="crossfade go-transport">
+                    <div class="crossfade-head">
+                      <div class="cross-from-label go-slot">
+                        <span class="go-slot-label" title="The cue on stage now">Live</span>
+                        <span id="crossFromLabel" class="go-slot-name">A</span>
+                      </div>
+                      <div class="crossfade-title go-title">
+                        <div class="go-row">
+                          <button id="prevCueBtn" type="button" class="go-step" title="Previous cue (make it live now)" aria-label="Previous cue">◀</button>
+                          <button id="goBtn" type="button" class="go-btn" title="GO — fade to the next cue">
+                            GO
+                          </button>
+                          <button id="nextCueBtn" type="button" class="go-step" title="Next cue (make it live now, no fade)" aria-label="Next cue">▶</button>
+                        </div>
+                        <output id="crossValue" class="go-progress">0%</output>
+                      </div>
+                      <div class="cross-to-label go-slot">
+                        <span class="go-slot-label" title="The cue GO fades to">Up next</span>
+                        <span id="crossToLabel" class="go-slot-name">B</span>
+                        <span id="goNextFade" class="go-next-fade">4s</span>
+                      </div>
+                    </div>
+                    <input id="crossfader" type="range" min="0" max="100" value="0" aria-label="Blend Live to Up next" />
+                    <div class="timed-crossfade">
+                      <button id="fadePauseBtn" type="button" disabled>Pause</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="fader-row live-row" aria-label="Live fader levels">
+                <div class="fader-row-head">
+                  <h3>Live</h3>
+                  <span class="fader-row-hint">Fader levels after submasters + blend + master</span>
+                </div>
+                <div id="liveFaders" class="faders live-faders"></div>
+              </section>
+            </div>
+
+            <aside class="submasters" aria-label="Cue submasters">
+              <div class="submasters-title">Submaster</div>
+              <div class="submasters-sliders">
+                <div class="submaster submaster-from">
+                  <label for="fromSub">
+                    <span id="fromSubLabel" class="submaster-name">A</span>
+                    <output id="fromSubValue" for="fromSub">100%</output>
+                  </label>
+                  <input id="fromSub" type="range" min="0" max="100" value="100" aria-label="Live cue submaster" />
+                </div>
+                <div class="submaster submaster-to">
+                  <label for="toSub">
+                    <span id="toSubLabel" class="submaster-name">B</span>
+                    <output id="toSubValue" for="toSub">100%</output>
+                  </label>
+                  <input id="toSub" type="range" min="0" max="100" value="100" aria-label="Up next cue submaster" />
+                </div>
+              </div>
+            </aside>
+
+            <aside class="master" aria-label="Master">
+              <label for="master">
+                <span>Master</span>
+                <output id="masterValue" for="master">100%</output>
+              </label>
+              <input id="master" type="range" min="0" max="100" value="100" />
+            </aside>
+          </div>
+
+          <div id="cuesScroll" class="cues-scroll thin-scroll">
+            <main id="cues" class="cues" aria-label="Cues"></main>
+            <!-- One sideways scrollbar for every cue row (and the Live strip): see app.js. -->
+            <div id="cuesHScroll" class="cues-hscroll" aria-hidden="true"><div></div></div>
+          </div>
+        </section>
+
+        <section id="page-channels" class="page" hidden>
+          <div class="page-intro">
+            <div>
+              <h2>Channels</h2>
+            </div>
+          </div>
+
+          <section class="fader-row channel-row channel-page" aria-label="DMX channel levels">
+            <div id="channelLevels" class="faders channel-faders"></div>
+          </section>
+
+          <section class="selected-group" aria-label="Live cue">
+            <div class="selected-group-head">
+              <div>
+                <h3 id="currentCueTitle">A</h3>
+                <p class="selected-group-hint">Live cue faders · click name to rename</p>
+              </div>
+              <button
+                id="channelsCueMenuBtn"
+                type="button"
+                class="cue-menu-btn"
+                title="Cue options"
+                aria-label="Cue options"
+                aria-haspopup="menu"
+                aria-expanded="false"
+              >
+                <span class="cue-menu-dots" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div id="selectedGroupFaders" class="faders selected-group-faders thin-scroll"></div>
+          </section>
+        </section>
+
+        <section id="page-fixtures" class="page" hidden>
+          <div class="page-intro">
+            <div>
+              <h2>Fixtures</h2>
+            </div>
+            <div class="patch-actions">
+              <button id="addFixtureGroupBtn" type="button" class="quiet">+ Group</button>
+            </div>
+          </div>
+
+          <form id="fixtureForm" class="fixture-form" autocomplete="off">
+            <label class="fixture-field">
+              Name
+              <input
+                id="fixtureNameInput"
+                type="text"
+                maxlength="40"
+                placeholder="e.g. Wash 1"
+                required
+                spellcheck="false"
+              />
+            </label>
+            <label class="fixture-field fixture-field-ch">
+              Start
+              <span id="fixtureStartPicker" class="channel-picker-host"></span>
+            </label>
+            <label class="fixture-field fixture-field-ch">
+              Channels
+              <span id="fixtureCountPicker" class="channel-picker-host"></span>
+            </label>
+            <label class="fixture-field fixture-field-ch">
+              Qty
+              <span id="fixtureQtyPicker" class="channel-picker-host"></span>
+            </label>
+            <label class="fixture-field">
+              Group
+              <span id="fixtureFormGroupPicker" class="channel-picker-host"></span>
+            </label>
+            <fieldset class="fixture-fieldset">
+              <legend>Mount</legend>
+              <label><input type="radio" name="fixtureMount" value="fixed" checked /> Fixed</label>
+              <label><input type="radio" name="fixtureMount" value="movable" /> Movable</label>
+            </fieldset>
+            <fieldset class="fixture-fieldset">
+              <legend>Color</legend>
+              <label><input type="radio" name="fixtureColor" value="single" checked /> Single</label>
+              <label><input type="radio" name="fixtureColor" value="multi" /> Multi</label>
+            </fieldset>
+            <button id="addFixtureBtn" type="submit">+ Fixture</button>
+          </form>
+
+          <div id="fixtureConflicts" class="fixture-conflicts" hidden></div>
+          <div id="fixtureScroll" class="fixture-scroll">
+            <div id="fixtureEmpty" class="fixture-empty" hidden>No fixtures registered yet.</div>
+            <div id="fixtureList" class="fixture-list" role="list" aria-label="Registered fixtures"></div>
+          </div>
+        </section>
+
+        <section id="page-patch" class="page" hidden>
+          <div class="page-intro">
+            <div>
+              <h2>Patch</h2>
+              <p>Wire each fader to one or more DMX channels. Each channel has its own <strong>max</strong> slider — when the fader is at full, that channel reaches its max (not necessarily 255). Patch is shared across all cues.</p>
+            </div>
+            <div class="patch-actions">
+              <button id="identityBtn" type="button">1:1 (Fader → Ch)</button>
+              <button id="clearPatchBtn" type="button">Unpatch all</button>
+            </div>
+          </div>
+
+          <div id="patchConflicts" class="patch-conflicts" hidden></div>
+          <div id="patchTable" class="patch-table" role="table" aria-label="Fader to DMX patch"></div>
+        </section>
+      </div>
+
+      <div id="cuePicker" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel cue-picker-panel">
+          <div class="popup-menu-bar">
+            <span class="popup-menu-label">Cues</span>
+          </div>
+          <div id="cuePickerList" class="popup-menu-list" role="menu" aria-label="Cues"></div>
+        </div>
+      </div>
+
+      <div id="actionMenu" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel small-menu-panel">
+          <div id="actionMenuList" class="popup-menu-list" role="menu" aria-label="Actions"></div>
+        </div>
+      </div>
+
+      <div id="channelsCueMenu" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel small-menu-panel">
+          <div id="channelsCueMenuList" class="popup-menu-list" role="menu" aria-label="Cue options"></div>
+        </div>
+      </div>
+
+      <div id="faderNameMenu" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel small-menu-panel">
+          <div id="faderNameMenuList" class="popup-menu-list" role="menu" aria-label="Fader actions"></div>
+        </div>
+      </div>
+
+      <div id="countMenu" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel count-menu-panel">
+          <div class="popup-menu-bar">
+            <span class="popup-menu-label">Channels</span>
+          </div>
+          <div id="countMenuList" class="popup-menu-list" role="menu" aria-label="Channel count"></div>
+        </div>
+      </div>
+
+      <div id="fixtureGroupMenu" class="popup-menu" hidden>
+        <div class="menu popup-menu-panel fixture-group-menu-panel">
+          <div class="popup-menu-bar">
+            <span class="popup-menu-label">Group</span>
+          </div>
+          <div id="fixtureGroupMenuList" class="popup-menu-list" role="menu" aria-label="Fixture groups"></div>
+        </div>
+      </div>
+
+      <div id="channelMenu" class="popup-menu popup-menu-flyout" hidden>
+        <div class="menu popup-menu-panel" id="channelMenuRoot">
+          <div class="popup-menu-bar">
+            <span class="popup-menu-label">Ranges</span>
+          </div>
+          <input
+            id="channelMenuFilter"
+            class="popup-menu-filter"
+            type="search"
+            placeholder="Jump to channel…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div id="channelMenuList" class="popup-menu-list" role="menu" aria-label="Channel groups"></div>
+        </div>
+        <div class="menu popup-menu-panel popup-menu-submenu" id="channelMenuSub" hidden>
+          <div class="popup-menu-bar">
+            <span id="channelMenuSubLabel" class="popup-menu-label">Channels</span>
+          </div>
+          <div id="channelMenuSubList" class="popup-menu-list" role="menu" aria-label="Channels in group"></div>
+        </div>
+      </div>
+
+  
+      </div>
     </main>
 
     <div id="showMenu" class="menu" role="menu" aria-label="Show actions" hidden>
@@ -57,5 +537,7 @@
     <div id="outputMenu" class="menu output-menu" role="menu" aria-label="DMX output" hidden></div>
 
     <script type="module" src="page/page.js"></script>
+    <script type="module" src="console/app.js"></script>
+    <script type="module" src="stage/stage.js"></script>
   </body>
 </html>

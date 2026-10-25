@@ -38,7 +38,7 @@ export const state = {
   rigs: [],
 };
 
-/** What the stage page is in the middle of, shared by its modules. */
+/** What the stage is in the middle of, shared by its modules. */
 export const ui = {
   placing: false,
   /** While placing a rig: its settings from the Place rig dialog (else null). */
@@ -63,9 +63,9 @@ let saveTimer = 0;
 let shareQueued = false;
 /**
  * Save the stage in this browser and (`share`: an edit made here) on the
- * show server, for the other stage pages and the set file. Values that only
+ * show server, for other app windows and the set file. Values that only
  * followed the console aren't shared: the console has them, and every open
- * stage page would otherwise send the whole stage many times a second.
+ * app window would otherwise send the whole stage many times a second.
  */
 export function save({ share = true } = {}) {
   shareQueued ||= share;

@@ -816,6 +816,7 @@ export function refreshColorBars() {
 
 // Color bars open the shared color picker (also used by the stage).
 installColorPicker({
+  scope: document.getElementById("consolePane"),
   usedLabel: "In use",
   usedColors: () => [...document.querySelectorAll(".rgb-bar")].map((bar) => bar.style.getPropertyValue("--rgb")),
 });

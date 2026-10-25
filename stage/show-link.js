@@ -4,12 +4,13 @@
  * follows the show to any browser or computer.
  *
  *   stage → server   the whole stage after each edit made here
- *   server → stage   the stage when this page connects, and after edits in
- *                    other stage pages (or a set file loaded in a console)
+ *   server → stage   the stage when this window connects, and after edits
+ *                    in other app windows (or a set file loaded in a console)
  *
- * The server only tells stage pages (/ws?role=stage) about the stage. If the
- * server has no stage yet, or this page was edited while the server was
- * unreachable, this page's stage is sent on connecting instead.
+ * It shares the window's connection with the console
+ * (../shared/server-socket.js), and the server's hello carries the stage. If
+ * the server has no stage yet, or this stage was edited while the server was
+ * unreachable, this stage is sent on connecting instead.
  */
 
 import { openServerSocket } from "../shared/server-socket.js";
@@ -26,7 +27,6 @@ export function createShowLink(api) {
   let unsent = false;
 
   const socket = openServerSocket({
-    role: "stage",
     onMessage(msg) {
       if (msg.type === "hello") {
         connected = true;

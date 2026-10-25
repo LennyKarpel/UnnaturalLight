@@ -1,14 +1,16 @@
-// Combined page: the console and the stage run in their own frames
-// (still linked live). This page lays them out and shows the console's
-// show and DMX controls in its header (bottom of this script).
+// The app page: lays out its two panes, the stage and the console (both
+// always there; Console / Both / Stage only changes which are shown), and
+// shows the console's show and DMX controls in its header (bottom of this
+// script).
 
 import { ask } from "../shared/ask.js";
+import { setActivePane } from "../shared/panes.js";
 
 const KEY = "unnaturallight.shell";
 const MIN = 20; // % each side keeps in Both view
 const panes = document.getElementById("panes");
-const stage = document.getElementById("stageFrame");
-const consoleFrame = document.getElementById("consoleFrame");
+const stage = document.getElementById("stagePane");
+const consolePane = document.getElementById("consolePane");
 const divider = document.getElementById("divider");
 const swapBtn = document.getElementById("swapBtn");
 
@@ -17,17 +19,18 @@ let prefs = { mode: "both", split: 50, swapped: false };
 try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") }; } catch { /* storage unavailable */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ } };
 
-function place(frame, left, width, z, shown = true) {
-  frame.style.left = `${left}%`;
-  frame.style.width = `${width}%`;
-  frame.style.zIndex = String(z);
-  frame.style.visibility = shown ? "visible" : "hidden";
+function place(pane, left, width, z, shown = true) {
+  pane.style.left = `${left}%`;
+  pane.style.width = `${width}%`;
+  pane.style.zIndex = String(z);
+  pane.style.visibility = shown ? "visible" : "hidden";
+  pane.inert = !shown || z < 2;
 }
 
 function layout() {
   const { mode, split } = prefs;
   if (mode === "both") {
-    const [left, right] = prefs.swapped ? [consoleFrame, stage] : [stage, consoleFrame];
+    const [left, right] = prefs.swapped ? [consolePane, stage] : [stage, consolePane];
     place(left, 0, split, 2);
     place(right, split, 100 - split, 2);
     divider.style.left = `${split}%`;
@@ -35,13 +38,15 @@ function layout() {
   } else if (mode === "stage") {
     // Console stays full-size and rendered underneath, so its fades keep running.
     place(stage, 0, 100, 2);
-    place(consoleFrame, 0, 100, 1);
+    place(consolePane, 0, 100, 1);
     divider.hidden = true;
   } else {
-    place(consoleFrame, 0, 100, 2);
+    place(consolePane, 0, 100, 2);
     place(stage, 0, 100, 1, false);
     divider.hidden = true;
   }
+  // Only one pane shown: keys go to it.
+  if (mode !== "both") setActivePane(mode);
   document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   swapBtn.disabled = mode !== "both";
   swapBtn.title = prefs.swapped ? "Swap sides: stage left, console right" : "Swap sides: console left, stage right";
@@ -60,7 +65,6 @@ document.querySelectorAll("[data-mode]").forEach((b) => {
     prefs.mode = b.dataset.mode;
     save();
     layout();
-    (prefs.mode === "console" ? consoleFrame : stage).focus();
   });
 });
 
@@ -80,6 +84,8 @@ divider.addEventListener("pointercancel", endDrag);
 divider.addEventListener("dblclick", () => { prefs.split = 50; save(); layout(); });
 
 layout();
+// Both shown: keys go to the stage until you click in the console.
+if (prefs.mode === "both") setActivePane("stage");
 
 // ---------------------------------------------------------------
 // Show name, show buttons, DMX outputs and status: the console's
@@ -94,7 +100,7 @@ const universeCount = $("universeCount");
 const outputBtns = $("outputBtns");
 const serverPill = $("serverPill");
 const loadFile = $("loadFile");
-/** The console's header API, once its frame has started. */
+/** The console's header API, once it has started. */
 let header = null;
 let unsubscribe = null;
 let outputsKey = "";
@@ -262,7 +268,7 @@ function closeOutputMenu() {
   for (const b of outputBtns.querySelectorAll("[aria-expanded]")) b.setAttribute("aria-expanded", "false");
 }
 
-// console/app.js calls this when it starts (also after it reloads).
+// console/app.js calls this when it starts.
 window.onConsoleHeader = (api) => {
   unsubscribe?.();
   header = api;
@@ -271,7 +277,7 @@ window.onConsoleHeader = (api) => {
   $("showControls").hidden = false;
   unsubscribe = api.subscribe(render);
 };
-if (consoleFrame.contentWindow?.consoleHeader) window.onConsoleHeader(consoleFrame.contentWindow.consoleHeader);
+if (window.consoleHeader) window.onConsoleHeader(window.consoleHeader);
 
 universeCount.addEventListener("change", () => header?.setUniverses(Number(universeCount.value)));
 
@@ -350,6 +356,4 @@ document.addEventListener("pointerdown", (e) => {
   if (!showMenu.hidden && !showMenu.contains(e.target) && !showMenuBtn.contains(e.target)) closeShowMenu();
   if (!outputMenu.hidden && !outputMenu.contains(e.target) && !outputBtns.contains(e.target)) closeOutputMenu();
 }, true);
-// A press inside a frame doesn't reach this page: close when it takes focus.
-window.addEventListener("blur", () => { closeShowMenu(); closeOutputMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeShowMenu(); closeOutputMenu(); } });

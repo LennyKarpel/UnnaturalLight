@@ -13,7 +13,8 @@ import {
   resolveActiveSong,
 } from "./songs.js";
 import { normalizeSets, resolveActiveEntry, resolveActiveSet, upNextCue } from "./sets.js";
-import { CONSOLE_SESSION_KEY as SESSION_KEY } from "../shared/stage-bus.js";
+/** Where the console keeps its session in this browser. */
+const SESSION_KEY = "unnaturallight.session";
 import { clamp, clampInt } from "../shared/numbers.js";
 
 const SHOW_VERSION = 1;
@@ -148,7 +149,7 @@ export function showSnapshot(state) {
   return JSON.stringify(rest);
 }
 
-/** @param {object | null} [stage] the stage page's layout, saved in the same file */
+/** @param {object | null} [stage] the stage's layout, saved in the same file */
 function showToJson(state, stage = null) {
   const data = serializeShow(state);
   return `${JSON.stringify(stage ? { ...data, stage } : data, null, 2)}\n`;

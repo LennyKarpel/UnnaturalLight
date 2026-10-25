@@ -1,4 +1,4 @@
-/* The combined page (../index.html): its header and the stage / console panes. */
+/* The app page (../index.html): its header and the stage / console panes. */
 
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
@@ -50,14 +50,16 @@ body {
   box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
   margin: 5px 0;
 }
-.menu {
+/* The header's own menus (show ⋮, DMX output): children of <body>, so these
+   rules don't reach the console's and the stage's menus in the panes. */
+body > .menu {
   position: fixed;
   z-index: 10;
   min-width: 140px;
 }
 .output-menu { min-width: 260px; max-height: calc(100vh - var(--bar) - 16px); overflow-y: auto; }
 .menu-label { padding: 4px 8px 2px; color: var(--muted); font-size: var(--text-xs); }
-.menu-item:disabled { color: var(--muted); cursor: default; background: none; }
+body > .menu .menu-item:disabled { color: var(--muted); cursor: default; background: none; }
 
 /* Console status message, then the show and DMX buttons. */
 .status {
@@ -75,17 +77,21 @@ body {
 .sep { width: 1px; height: 18px; background: var(--track); }
 
 .controls { display: flex; align-items: center; gap: 8px; flex: none; }
-/* Panes: stage on the left, console on the right (⇄ swaps them). Frames are absolutely
-   placed so a hidden console stays rendered (its fades and DMX output
-   keep running) underneath the stage in Stage view. */
+/* Panes: stage on the left, console on the right (⇄ swaps them). Both are
+   always there: absolutely placed, so a hidden pane stays laid out and live
+   underneath the other. Each is a container, so its own styles' breakpoints
+   follow the pane's width (console/styles.css, stage/stage.css). */
 .panes { position: relative; height: calc(100% - var(--bar)); }
-.panes iframe {
+.pane {
   position: absolute;
   top: 0;
   height: 100%;
-  border: 0;
+  overflow: hidden;
+  container-type: inline-size;
   background: var(--bg);
 }
+/* The stage's narrow layout stacks its sidebar under the view and scrolls. */
+#stagePane { overflow-y: auto; }
 .divider {
   position: absolute;
   top: 0;
@@ -121,5 +127,4 @@ body {
   pointer-events: none;
 }
 .divider:hover .grip, body.dragging .divider .grip { border-color: var(--accent); }
-body.dragging iframe { pointer-events: none; }
 body.dragging { cursor: col-resize; user-select: none; }
