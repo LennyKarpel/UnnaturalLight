@@ -115,10 +115,10 @@ function rigSectionHtml(rig) {
     </div>`;
 }
 
-/** A DMX value row: its name, slider, number and note, in a box like a console fader. */
-function dmxLineHtml(a) {
+/** A DMX value row: its name, slider, number and note, in a box like a console fader. `style` is for its block's grid. */
+function dmxLineHtml(a, style = "") {
   return `
-      <div class="dmx-line" data-dl="${a}">
+      <div class="dmx-line" data-dl="${a}"${style}>
         <label>${DMX_LABELS[a]}</label>${a === "dimmer" ? `
         <span class="dim-btns"><button type="button" class="dim-btn dim-blackout" data-hold="blackout" title="Blackout: dimmer at 0 while held">B</button><button type="button" class="dim-btn dim-flash" data-hold="flash" title="Flash: full and white while held">F</button></span>` : ""}
         <div ${COLOR_ROLES.includes(a) ? `class="dmx-row has-emitter" style="--emitter: ${emitterHex(a)}"` : `class="dmx-row"`}>
@@ -139,24 +139,27 @@ function dmxRowsHtml(attrs) {
   const isColor = (a) => COLOR_ROLES.includes(a);
   const firstColor = attrs.findIndex(isColor);
   const lastColor = attrs.findLastIndex(isColor);
-  const lines = [];
-  attrs.forEach((a, i) => {
-    if (a === "tilt" && attrs[i - 1] === "pan") return;
-    const html = a === "pan" && attrs[i + 1] === "tilt" ? `
-      <div class="pt-block">
+  /** The lines for attrs[from, to); `rowed` puts each in its own grid row (for the color bar to span). */
+  const linesHtml = (from, to, rowed = false) => {
+    let html = "";
+    let rows = 0;
+    for (let i = from; i < to; i++) {
+      const a = attrs[i];
+      if (a === "tilt" && attrs[i - 1] === "pan") continue;
+      const style = rowed ? ` style="grid-row: ${++rows}"` : "";
+      html += a === "pan" && attrs[i + 1] === "tilt" ? `
+      <div class="pt-block"${style}>
         <div data-pt title="Hold and move the mouse: left / right = pan, up / down = tilt (⇧ = fine)">✥</div>${dmxLineHtml("pan")}${dmxLineHtml("tilt")}
-      </div>` : dmxLineHtml(a);
-    lines.push({ html, color: i >= firstColor && i <= lastColor && firstColor >= 0 });
-  });
-  const colorLines = lines.filter((l) => l.color);
-  if (!colorLines.length) return lines.map((l) => l.html).join("");
-  // Each color line gets its own grid row, so the bar can span them all.
-  const block = `
+      </div>` : dmxLineHtml(a, style);
+    }
+    return { html, rows };
+  };
+  if (firstColor < 0) return linesHtml(0, attrs.length).html;
+  const colors = linesHtml(firstColor, lastColor + 1, true);
+  return `${linesHtml(0, firstColor).html}
       <div class="color-block">
-        <label class="rgb-bar" data-rgb style="grid-row: 1 / ${colorLines.length + 1}" title="Click to pick a color (mixed onto the color channels it's linked with; red / green / blue when none)"><input type="color" data-k="color" aria-label="Color" /></label>${colorLines.map((l, k) => l.html.replace(/^(\s*<div class="[^"]*")/, `$1 style="grid-row: ${k + 1}"`)).join("")}
-      </div>`;
-  const at = lines.indexOf(colorLines[0]);
-  return [...lines.slice(0, at).map((l) => l.html), block, ...lines.slice(at + colorLines.length).map((l) => l.html)].join("");
+        <label class="rgb-bar" data-rgb style="grid-row: 1 / ${colors.rows + 1}" title="Click to pick a color (mixed onto the color channels it's linked with; red / green / blue when none)"><input type="color" data-k="color" aria-label="Color" /></label>${colors.html}
+      </div>${linesHtml(lastColor + 1, attrs.length).html}`;
 }
 
 /** Rebuild the inspector for the current selection (none, one, or several). */

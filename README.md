@@ -173,7 +173,7 @@ The fixture is named after the model (e.g. *MAC Aura 1*) and uses the fixture's 
 
 ### Moving fixtures
 
-- **Drag** a fixture in the 3D view to slide it around at its height; **⇧-drag** to raise or lower it.
+- **Drag** a fixture in the 3D view to slide it around at its height; hold **⇧** (Shift) to raise or lower it instead. You can press or let go of ⇧ partway through a drag to switch.
 - **Drag** it in the plan; in the Front / SR / SL views dragging also changes its height.
 - Hold `⌥` while dragging for fine steps (1 cm instead of 10 cm).
 - Or type exact numbers in the inspector's **Position** (x / height / z, in meters).

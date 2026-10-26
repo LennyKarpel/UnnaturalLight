@@ -450,6 +450,14 @@ function dragPlane(fixture, vertical) {
   return new THREE.Plane().setFromNormalAndCoplanarPoint(n.normalize(), p);
 }
 
+/** Start dragging `fixture` along its drag plane from the current ray: the plane, and where on it the fixture sits relative to the pointer. */
+function dragFrom(fixture, vertical) {
+  const plane = dragPlane(fixture, vertical);
+  const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+  const offset = hit ? new THREE.Vector3(fixture.x, fixture.y, fixture.z).sub(hit) : new THREE.Vector3();
+  return { vertical, plane, offset };
+}
+
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 export const PLACE_OFFSET = 0.3;
 
@@ -528,10 +536,7 @@ view.addEventListener("pointerdown", (e) => {
   const id = pickFixture(e);
   if (!id) return;
   const fixture = byId(id);
-  const plane = dragPlane(fixture, e.shiftKey);
-  const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-  const offset = hit ? new THREE.Vector3(fixture.x, fixture.y, fixture.z).sub(hit) : new THREE.Vector3();
-  drag3d = { id, shift: e.shiftKey, active: false, plane, offset };
+  drag3d = { id, shift: e.shiftKey, active: false, ...dragFrom(fixture, e.shiftKey) };
   controls.enabled = false;
   renderer.domElement.setPointerCapture(e.pointerId);
 }, true);
@@ -552,12 +557,15 @@ view.addEventListener("pointermove", (e) => {
   }
   const fixture = byId(drag3d.id);
   if (!fixture) return;
-  const hit = rayFromEvent(e).intersectPlane(drag3d.plane, new THREE.Vector3());
+  rayFromEvent(e);
+  // ⇧ pressed or let go mid-drag: switch between sliding and raising / lowering, from where it is now.
+  if (e.shiftKey !== drag3d.vertical) Object.assign(drag3d, dragFrom(fixture, e.shiftKey));
+  const hit = raycaster.ray.intersectPlane(drag3d.plane, new THREE.Vector3());
   if (!hit) return;
   hit.add(drag3d.offset);
   const snap = e.altKey ? 0.01 : 0.1;
   const s = (v) => round(Math.round(v / snap) * snap);
-  if (drag3d.shift) {
+  if (drag3d.vertical) {
     moveFixture(fixture, fixture.x, clamp(s(hit.y), 0, 50), fixture.z);
   } else {
     // Keep the camera from flinging it off to the horizon at grazing angles.
