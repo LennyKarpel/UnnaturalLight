@@ -149,7 +149,7 @@ Each view shows every fixture's beam direction, the dot where its beam lands, an
 
    A marker follows the pointer in 3D: **cyan** = inside the box, **amber** = outside. `Esc` cancels.
 
-A new fixture starts pointing at the center of the stage floor. You can have up to 32 fixtures.
+A new fixture starts at full dimmer and white, pointing at the center of the stage floor. You can have up to 32 fixtures.
 
 ### Real fixtures from the fixture library
 
@@ -248,7 +248,7 @@ A **rig** is a group of fixtures in a fixed arrangement that you place and move 
 | **Line** | evenly along a bar | all the same way (down, when flat) |
 
 1. Click **+ Place rig**. Choose the type, its **size** (diameter, side or length), how many **fixtures**, **tilt** (0 = flat / hanging, 90 = upright facing the audience; for a line, −90 points it at the audience), **yaw** (rotation), and the **console type** (generic or from the fixture library) and universe.
-2. Click **Place…**, then click where the rig's center goes.
+2. Click **Place…**, then click where the rig's center goes. Every fixture in it starts at full dimmer and white.
 
 Working with a rig:
 

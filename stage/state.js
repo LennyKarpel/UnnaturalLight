@@ -8,7 +8,6 @@ import {
   serializeStage,
   DEFAULT_TRANSPARENT,
   RIG_TYPES,
-  PALETTE,
   applyRig,
   rigLowestY,
   normalizeRig,
@@ -17,7 +16,7 @@ import {
   applyFixture,
 } from "./stage-model.js";
 import { clamp, numberFrom } from "../shared/numbers.js";
-import { COLOR_ROLES, rgbFromHex } from "../shared/color.js";
+import { COLOR_ROLES } from "../shared/color.js";
 import { PLACE_OFFSET } from "./view3d.js";
 import { renderInspector } from "./sidebar.js";
 import { changed, setBanner, setPlacing } from "./actions.js";
@@ -154,9 +153,8 @@ export function addRigAt(cfg, x, y, z) {
   // Keep an upright / tilted rig above the floor.
   const low = rigLowestY(rig);
   if (low < PLACE_OFFSET) rig.y = round(rig.y + PLACE_OFFSET - low, 2);
-  const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
   const like = {
-    dmx: { dimmer: 191, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    dmx: { dimmer: 255, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
   };
   const members = Array.from({ length: rig.count }, (_, k) => makeRigMember(rig, k, like));

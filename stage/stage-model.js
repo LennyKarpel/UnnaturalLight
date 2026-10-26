@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { normalizeProfile } from "./fixture-library.js";
 import { clamp, clampByte, numberFrom } from "../shared/numbers.js";
-import { COLOR_ROLES, colorFromLevels, levelsFromColor, rgbFromHex } from "../shared/color.js";
+import { COLOR_ROLES, colorFromLevels, levelsFromColor } from "../shared/color.js";
 import { newId } from "../shared/ids.js";
 import { DMX_ATTRS, DMX_SHORT } from "../shared/attributes.js";
 
@@ -23,7 +23,6 @@ export const STORAGE_KEY = "unnaturallight.stage";
 export const MAX_FIXTURES = 32;
 export const DEG = Math.PI / 180;
 export const FORWARD = new THREE.Vector3(0, 0, -1);
-export const PALETTE = ["#ffd9a0", "#a0d8ff", "#ff9fb2", "#b6ffa0", "#d5a0ff", "#ffe066", "#7fffe0", "#ffb070"];
 
 /** @typedef {{ yaw: number, pitch: number, roll: number }} Frame */
 /** @typedef {(typeof DMX_ATTRS)[number]} DmxAttr */
@@ -273,16 +272,15 @@ export function axisHits(fixture, box) {
   return hits;
 }
 
-/** `n` is the fixture's index, used for its default name and color. */
+/** `n` is the fixture's index, used for its default name. Starts at full, white. */
 export function createFixture(x, y, z, n, box) {
-  const [red, green, blue] = rgbFromHex(PALETTE[n % PALETTE.length]);
   /** @type {Fixture} */
   const fixture = {
     id: newId("fixture"),
     name: `Fixture ${n + 1}`,
     x: round(x), y: round(y), z: round(z),
     base: { yaw: 0, pitch: 0, roll: 0 },
-    dmx: { ...Object.fromEntries(DMX_ATTRS.map((a) => [a, 0])), dimmer: 191, pan: DMX_CENTER, tilt: DMX_CENTER, red, green, blue, zoom: zoomFromBeam(24, 5, 60) },
+    dmx: { ...Object.fromEntries(DMX_ATTRS.map((a) => [a, 0])), dimmer: 255, pan: DMX_CENTER, tilt: DMX_CENTER, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
     link: { consoleId: null, start: null, layout: [] },
     rigId: null, rigIndex: 0,

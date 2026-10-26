@@ -2059,6 +2059,19 @@
       grid-template-columns: 1fr;
     }
 
+    /* Narrow: transport, then submaster + master, then the Live strip. */
+    .faders-stage-main {
+      display: contents;
+    }
+
+    .faders-stage .transport {
+      margin-bottom: 0;
+    }
+
+    .faders-stage .live-row {
+      order: 1;
+    }
+
     .master,
     .submasters {
       width: auto;
@@ -2088,6 +2101,7 @@
       flex-direction: row;
       gap: 0.5rem;
       flex: 0 0 auto;
+      width: auto;
     }
 
     .submaster {
