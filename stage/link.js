@@ -335,9 +335,16 @@ export function syncDmxRows(fixture) {
   });
   inspectorEl.querySelectorAll("[data-note]").forEach((el) => {
     const a = el.dataset.note;
-    const unit = { dimmer: `${Math.round(fixture.intensity * 100)}%`, pan: `${fixture.pan}°`, tilt: `${fixture.tilt}°`, zoom: `${fixture.beam}°` }[a] ?? "";
+    const unit = { dimmer: `${Math.round(fixture.intensity * 100)}%`, pan: `${fixture.pan.toFixed(1)}°`, tilt: `${fixture.tilt.toFixed(1)}°`, zoom: `${fixture.beam}°` }[a] ?? "";
     el.innerHTML = `<span>${unit}</span><span class="chans">${(chans.get(a) ?? []).map(chanChip).join("")}</span>`;
   });
+  // The outline around the values: the fixture's name, in its console outline's color.
+  const box = inspectorEl.querySelector("[data-outline]");
+  if (box) {
+    const consoleFixture = consoleLink.fixtures().find((f) => f.id === fixture.link.consoleId);
+    box.dataset.name = fixture.name;
+    box.style.setProperty("--outline", consoleFixture?.outline ?? "var(--accent)");
+  }
   syncOtherChannels(fixture);
   const status = inspectorEl.querySelector("#linkStatus");
   if (!status) return;

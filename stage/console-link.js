@@ -18,7 +18,7 @@ import { joinLink } from "../shared/console-stage.js";
 const PENDING_MS = 600;
 
 /**
- * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }} ConsoleFixture
+ * @typedef {{ id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null, outline: string | null }} ConsoleFixture
  */
 
 /** @param {{ onLevels: () => void, onStageHello: () => void, onRegistered: (results: any[]) => void }} opts */

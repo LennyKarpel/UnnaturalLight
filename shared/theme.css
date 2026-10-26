@@ -120,6 +120,83 @@ input[type="range"] {
 /* Scroll areas (cue rows, cue list, running order, stage sidebar lists): a
    thin scrollbar, shown only while the pointer is over the area. Give the
    area padding on the scrolling side so the bar sits beside the content. */
+/* A line around one fixture's faders (console) or values (stage inspector),
+   with its name on the line; --outline = its color, --outline-bg = what's behind the name. */
+.fixture-outline {
+  position: relative;
+  border: 1.5px solid var(--outline, var(--accent));
+  border-radius: 5px;
+}
+
+.fixture-outline::before {
+  content: attr(data-name);
+  position: absolute;
+  top: -0.55rem;
+  left: 4px;
+  max-width: calc(100% - 8px);
+  padding: 0 3px;
+  font-size: var(--text-2xs);
+  line-height: 1rem;
+  color: var(--outline, var(--accent));
+  background: var(--outline-bg, var(--bg));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A fixture's color (--rgb), under its color faders / values; click to pick one. */
+.rgb-bar {
+  position: relative;
+  display: block;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--rgb, #000);
+  cursor: pointer;
+}
+
+.rgb-bar input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+
+.rgb-bar:hover:not([data-live]) {
+  border-color: var(--accent);
+}
+
+/* Pan / tilt pad (shared/pan-tilt-pad.js): hold and move the mouse. */
+.pt-pad {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid #3a4252;
+  background: #1c212b;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.pt-pad:hover,
+.pt-pad.is-held {
+  color: var(--ink);
+  border-color: var(--accent, #5fb7d6);
+}
+
+.pt-pad.is-disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 .thin-scroll {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;

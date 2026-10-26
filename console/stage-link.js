@@ -31,6 +31,7 @@ import { setChannelLevels } from "../shared/engine.js";
  *   live: () => { cueLevels: number[][], fromCue: number, toCue: number, fromSub: number, toSub: number, cross: number, master: number },
  *   fixtures: () => { id: string, name: string, mount: string, color: string, channelStart: number, channelEnd: number, groupId: string | null }[],
  *   groups: () => { id: string, name: string }[],
+ *   outlines: () => Map<string, string>,
  *   faderInfo: () => { num: number, name: string, live: number, from: number, to: number, patch: { channel: number, max: number }[] }[],
  *   mix: () => { master: number, fromSub: number, toSub: number, cross: number, fromName: string, toName: string },
  *   universes: () => number,
@@ -82,9 +83,12 @@ function send() {
   const data = {
     levels,
     faders: [...faders.entries()],
-    fixtures: api.fixtures().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
-      id, name, mount, color, channelStart, channelEnd, groupId,
-    })),
+    fixtures: (() => {
+      const outlines = api.outlines();
+      return api.fixtures().map(({ id, name, mount, color, channelStart, channelEnd, groupId }) => ({
+        id, name, mount, color, channelStart, channelEnd, groupId, outline: outlines.get(id) ?? null,
+      }));
+    })(),
     groups: api.groups().map(({ id, name }) => ({ id, name })),
     universes: api.universes(),
   };

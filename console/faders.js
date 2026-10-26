@@ -3,6 +3,7 @@
 // flash buttons, fixture outlines).
 import { liveLevel as mixLevel } from "../shared/engine.js";
 import { installColorPicker } from "../shared/color-picker.js";
+import { bindPanTiltPad } from "../shared/pan-tilt-pad.js";
 import { ask } from "../shared/ask.js";
 import { COLOR_ROLES, MIXED_ROLES, colorFromLevels, emitterHex, levelsFromColor } from "../shared/color.js";
 import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.js";
@@ -526,8 +527,20 @@ function fixtureRuns() {
   return runs;
 }
 
+/** The console's pane: the page also holds the stage, which uses some of the same classes (.rgb-bar, .fixture-outline). */
+const consolePane = document.getElementById("consolePane");
+
 /** Outline colors, alternated so neighboring fixtures look different. */
 const OUTLINE_COLORS = ["#e2a13a", "#5fb7d6", "#9cc76b", "#d68ab4", "#c9b458", "#8a9be0"];
+
+/** Each fixture's outline color (fixture id → color), as drawn around its faders. */
+export function fixtureOutlineColors() {
+  const colors = new Map();
+  fixtureRuns().forEach((run, k) => {
+    if (!colors.has(run.fixture.id)) colors.set(run.fixture.id, OUTLINE_COLORS[k % OUTLINE_COLORS.length]);
+  });
+  return colors;
+}
 
 /**
  * Grid columns for a fader block: a narrow spacer column follows each
@@ -578,7 +591,7 @@ function addFixtureOutlines(grid, { col, template } = faderColumns()) {
  */
 export function revealFixtures(ids) {
   revealedFixtureIds = ids;
-  for (const box of document.querySelectorAll(".fixture-outline")) {
+  for (const box of consolePane.querySelectorAll(".fixture-outline")) {
     box.classList.toggle("is-revealed", ids.includes(box.dataset.fixtureId));
   }
   const runs = fixtureRuns().filter((run) => ids.includes(run.fixture.id));
@@ -694,61 +707,29 @@ export function refreshDimmerButtons() {
   }
 }
 
-/** DMX steps per pixel of mouse movement on a pan / tilt pad (⇧ = fine). */
-const PAD_SPEED = 0.5;
-const PAD_SPEED_FINE = 0.1;
-
 /**
- * A pad under a pan / tilt pair: hold the mouse button on it and move the
- * mouse: left / right = pan, up / down = tilt. The pointer is locked while
- * held, so it can't run off the pad.
+ * A pad under a pan / tilt pair (shared/pan-tilt-pad.js): hold and move the
+ * mouse to change the cue's pan / tilt.
  */
 function addPanTiltPad(grid, { pan, tilt }, row, col) {
   const pad = document.createElement("div");
-  pad.className = "pt-pad";
   pad.textContent = "✥";
   pad.style.gridColumn = tilt === pan + 1 ? `${col[pan]} / ${col[tilt] + 1}` : String(col[pan]);
   pad.title = `Hold and move the mouse: left / right = ${faderName(pan)}, up / down = ${faderName(tilt)} (⇧ = fine)`;
-  let held = null;
-  const move = (e) => {
-    const levels = state.cueLevels[row];
-    if (!held || !levels) return;
-    const speed = e.shiftKey ? PAD_SPEED_FINE : PAD_SPEED;
-    held.pan = Math.max(0, Math.min(255, held.pan + e.movementX * speed));
-    held.tilt = Math.max(0, Math.min(255, held.tilt - e.movementY * speed));
-    const p = Math.round(held.pan);
-    const t = Math.round(held.tilt);
-    if (p === levels[pan] && t === levels[tilt]) return;
-    levels[pan] = p;
-    levels[tilt] = t;
-    syncSlidersFromState();
-    pushToDmx({ persist: false });
-  };
-  const release = () => {
-    if (!held) return;
-    held = null;
-    pad.classList.remove("is-held");
-    pad.removeEventListener("pointermove", move);
-    if (document.pointerLockElement === pad) document.exitPointerLock();
-    pushToDmx();
-  };
-  pad.addEventListener("pointerdown", (e) => {
-    const levels = state.cueLevels[row];
-    if (e.button !== 0 || e.altKey || !levels) return;
-    e.preventDefault();
-    e.stopPropagation();
-    held = { pan: levels[pan], tilt: levels[tilt] };
-    pad.classList.add("is-held");
-    pad.setPointerCapture(e.pointerId);
-    pad.addEventListener("pointermove", move);
-    try {
-      pad.requestPointerLock()?.catch?.(() => {});
-    } catch {
-      // No pointer lock: pointer capture still tracks the drag.
-    }
+  bindPanTiltPad(pad, {
+    get: () => {
+      const levels = state.cueLevels[row];
+      return levels ? { pan: levels[pan], tilt: levels[tilt] } : null;
+    },
+    set: (p, t) => {
+      const levels = state.cueLevels[row];
+      levels[pan] = p;
+      levels[tilt] = t;
+      syncSlidersFromState();
+      pushToDmx({ persist: false });
+    },
+    done: () => pushToDmx(),
   });
-  pad.addEventListener("click", (e) => e.stopPropagation());
-  for (const type of ["pointerup", "pointercancel"]) pad.addEventListener(type, release);
   grid.append(pad);
 }
 
@@ -799,7 +780,7 @@ export function addColorBars(grid, row) {
 
 /** Show each bar's current color (cue values, or live output). */
 export function refreshColorBars() {
-  for (const bar of document.querySelectorAll(".rgb-bar")) {
+  for (const bar of consolePane.querySelectorAll(".rgb-bar")) {
     const cue = bar.dataset.live ? null : state.cueLevels[Number(bar.dataset.row)] ?? [];
     const levels = {};
     for (const item of bar.dataset.faders.split(",")) {
@@ -816,9 +797,9 @@ export function refreshColorBars() {
 
 // Color bars open the shared color picker (also used by the stage).
 installColorPicker({
-  scope: document.getElementById("consolePane"),
+  scope: consolePane,
   usedLabel: "In use",
-  usedColors: () => [...document.querySelectorAll(".rgb-bar")].map((bar) => bar.style.getPropertyValue("--rgb")),
+  usedColors: () => [...consolePane.querySelectorAll(".rgb-bar")].map((bar) => bar.style.getPropertyValue("--rgb")),
 });
 
 /** Color group layout the fader rows were last drawn with (redraw when it changes). */

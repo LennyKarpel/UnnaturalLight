@@ -14,6 +14,7 @@ import { clamp, numberFrom } from "../shared/numbers.js";
 import { applyCollapsed } from "./panel.js";
 import { DMX_LABELS, DMX_SHORT } from "../shared/attributes.js";
 import { escapeHtml } from "../shared/html.js";
+import { bindPanTiltPad } from "../shared/pan-tilt-pad.js";
 import { COLOR_ROLES, emitterHex } from "../shared/color.js";
 import { state, selectedFixtures, rigOf, commonRig, setRigField } from "./state.js";
 import {
@@ -108,6 +109,39 @@ function rigSectionHtml(rig) {
     </div>`;
 }
 
+/** A DMX value row: its name, slider, number and note, in a box like a console fader. */
+function dmxLineHtml(a) {
+  return `
+      <div class="dmx-line" data-dl="${a}">
+        <label>${DMX_LABELS[a]}</label>
+        <div ${COLOR_ROLES.includes(a) ? `class="dmx-row has-emitter" style="--emitter: ${emitterHex(a)}"` : `class="dmx-row"`}>
+          <input type="range" min="0" max="255" step="1" data-d="${a}" />
+          <input type="number" min="0" max="255" step="1" data-d="${a}" />
+          <span class="dmx-note" data-note="${a}"></span>
+        </div>
+      </div>`;
+}
+
+/**
+ * The inspector's DMX rows. Pan and tilt share one block, with the pan / tilt
+ * pad standing upright across both, beside their sliders. Under the color
+ * rows is the fixture's color, like the console's color bar.
+ */
+function dmxRowsHtml(attrs) {
+  const lastColor = attrs.findLastIndex((a) => COLOR_ROLES.includes(a));
+  return attrs.map((a, i) => {
+    if (i === lastColor) return `${dmxLineHtml(a)}
+      <label>Color</label>
+      <div class="dmx-row"><label class="rgb-bar" data-rgb title="Click to pick a color (mixed onto the color channels it's linked with; red / green / blue when none)"><input type="color" data-k="color" aria-label="Color" /></label></div>`;
+    if (a === "tilt" && attrs[i - 1] === "pan") return "";
+    if (a === "pan" && attrs[i + 1] === "tilt") return `
+      <div class="pt-block">
+        <div data-pt>✥</div>${dmxLineHtml("pan")}${dmxLineHtml("tilt")}
+      </div>`;
+    return dmxLineHtml(a);
+  }).join("");
+}
+
 /** Rebuild the inspector for the current selection (none, one, or several). */
 export function renderInspector() {
   const sel = selectedFixtures();
@@ -156,15 +190,8 @@ export function renderInspector() {
       <label></label><div class="hint" style="margin:0">x · height · z (m)${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
 
       <div class="subhead">DMX values · 0–255</div>
-      ${inspectorAttrs(sel[0]).map((a) => `
-      <label data-dl="${a}">${DMX_LABELS[a]}</label>
-      <div data-dl="${a}" ${COLOR_ROLES.includes(a) ? `class="dmx-row has-emitter" style="--emitter: ${emitterHex(a)}"` : `class="dmx-row"`}>
-        <input type="range" min="0" max="255" step="1" data-d="${a}" />
-        <input type="number" min="0" max="255" step="1" data-d="${a}" />
-        <span class="dmx-note" data-note="${a}"></span>
-      </div>`).join("")}
-      <label>Color</label>
-      <input type="color" data-k="color" title="Mixed onto the color channels it's linked with (red / green / blue when none)" />
+      <div class="fixture-outline dmx-box" data-outline>${dmxRowsHtml(inspectorAttrs(sel[0]))}
+      </div>
       <div class="other-chans" data-other hidden></div>
 
       <div class="subhead">Ranges (what 0 and 255 mean)</div>
@@ -210,7 +237,13 @@ function getField(fixture, k) {
 }
 
 function setField(fixture, k, raw) {
-  if (k === "name") { fixture.name = raw; return; }
+  if (k === "name") {
+    fixture.name = raw;
+    // The inspector isn't re-synced per keystroke; keep the outline's label up to date.
+    const box = inspectorEl.querySelector("[data-outline]");
+    if (box) box.dataset.name = raw;
+    return;
+  }
   if (k === "color") { setColorHex(fixture, raw); return; }
   const v = numberFrom(raw);
   if (v == null) return;
@@ -272,6 +305,19 @@ function bindInspector() {
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
+  inspectorEl.querySelectorAll("[data-pt]").forEach((el) => bindPanTiltPad(el, {
+    get: () => {
+      const fixture = selectedFixtures()[0];
+      return fixture ? { pan: fixture.dmx.pan, tilt: fixture.dmx.tilt } : null;
+    },
+    set: (pan, tilt) => {
+      const fixture = selectedFixtures()[0];
+      setDmx(fixture, "pan", pan);
+      setDmx(fixture, "tilt", tilt);
+      changed({ list: false, persist: false });
+    },
+    done: () => changed(),
+  }));
   bindLinkControls();
   inspectorEl.querySelectorAll("[data-r]").forEach((el) => {
     // A new count rebuilds the rig's members, so it applies on Enter / leaving
@@ -333,6 +379,14 @@ export function syncInspector() {
     el.value = typeof v === "number" ? String(round(v)) : v;
   });
   syncDmxRows(fixture);
+  inspectorEl.querySelector("[data-rgb]")?.style.setProperty("--rgb", fixture.color);
+  // The pad needs both pan and tilt.
+  const pad = inspectorEl.querySelector("[data-pt]");
+  if (pad) {
+    const absent = ["pan", "tilt"].some((a) => inspectorEl.querySelector(`[data-dl="${a}"]`)?.classList.contains("is-absent"));
+    pad.classList.toggle("is-disabled", absent);
+    pad.title = absent ? "This fixture doesn't have pan and tilt" : "Hold and move the mouse: left / right = pan, up / down = tilt (⇧ = fine)";
+  }
   const readout = inspectorEl.querySelector("#readout");
   if (readout) {
     const dir = beamDir(fixture);

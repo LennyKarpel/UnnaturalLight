@@ -1803,36 +1803,17 @@
     grid-row: 1;
   }
 
-  /* A line around each run of faders that control one fixture, with its name. */
+  /* A line around each run of faders that control one fixture, with its name (look: theme.css). */
   .fixture-outline {
     grid-row: 1;
-    position: relative;
     z-index: 1;
     margin: -3px -2px;
-    border: 1.5px solid var(--outline, var(--accent));
-    border-radius: 5px;
     pointer-events: none;
   }
 
   .fixture-outline.is-revealed {
     box-shadow: 0 0 0 2px var(--outline, var(--accent)), 0 0 14px var(--outline, var(--accent));
     transition: box-shadow 0.2s;
-  }
-
-  .fixture-outline::before {
-    content: attr(data-name);
-    position: absolute;
-    top: -0.55rem;
-    left: 4px;
-    max-width: calc(100% - 8px);
-    padding: 0 3px;
-    font-size: var(--text-2xs);
-    line-height: 1rem;
-    color: var(--outline, var(--accent));
-    background: var(--bg);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* Room above for fixture-outline labels, and at the sides so the first and
@@ -1914,20 +1895,16 @@
     color: #111;
   }
 
+  /* Color bar (look: theme.css): under its color faders. */
   .rgb-bar {
     grid-row: 2;
-    position: relative;
     z-index: 2;
     margin: 1px 3px 3px;
     height: 12px; /* same height as the B / F buttons beside it */
     align-self: center;
-    border-radius: 3px;
-    border: 1px solid var(--line);
-    background: var(--rgb, #000);
-    cursor: pointer;
   }
 
-  /* Pan / tilt pad: hold and move the mouse (app.js). */
+  /* Pan / tilt pad (look: theme.css): under its faders. */
   .pt-pad {
     grid-row: 2;
     position: relative;
@@ -1935,43 +1912,10 @@
     margin: 1px 3px 3px;
     height: 12px; /* same height as the B / F buttons */
     align-self: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 3px;
-    border: 1px solid #3a4252;
-    background: #1c212b;
-    color: var(--muted);
-    font-size: var(--text-xs);
-    line-height: 1;
-    cursor: move;
-    user-select: none;
-    touch-action: none;
-  }
-
-  .pt-pad:hover,
-  .pt-pad.is-held {
-    color: var(--ink);
-    border-color: var(--accent, #5fb7d6);
   }
 
   .rgb-bar[data-live] {
     cursor: default;
-  }
-
-  .rgb-bar input[type="color"] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    border: 0;
-    padding: 0;
-  }
-
-  .rgb-bar:hover:not([data-live]) {
-    border-color: var(--accent);
   }
 
   /* Channel meters (1–256) wrap into rows: as many per row as fit (at least 32). */

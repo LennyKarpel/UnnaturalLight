@@ -191,7 +191,7 @@ Every fixture is controlled by values from **0 to 255**, just like a dimmer chan
 | **Deep Red / White / Amber / Lime / Cyan / Indigo / UV** | the amount of each extra emitter, for fixtures that have them |
 | **Zoom** | narrowest … widest beam |
 
-Change them with the keys, or the sliders and numbers in the inspector (each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; channels a linked fixture doesn't have — e.g. pan and tilt on a fixed light — are dimmed and can't be changed; a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage):
+Change them with the keys, or the sliders and numbers in the inspector. Like the fixture's faders in the console, they have a line around them with the fixture's name on it, in the same color as its outline in the console (gold when it isn't linked), and each value sits in its own box, like a fader. Each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; channels a linked fixture doesn't have — e.g. pan and tilt on a fixed light — are dimmed and can't be changed; a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage. Beside the **Pan** and **Tilt** sliders, in the color strips' column, is the same **✥** pan / tilt pad as in the console (upright, spanning both rows): hold the mouse button on it and move the mouse — left / right = pan, up / down = tilt, ⇧ = fine:
 
 | Key | Does |
 |---|---|
@@ -202,7 +202,7 @@ Change them with the keys, or the sliders and numbers in the inspector (each col
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's **Color** picker (and **color** in the key strip) sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
+The inspector's **Color** bar under the color rows (filled with the fixture's color, like the console's color bar; click it to pick a color) and **color** in the key strip sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
 
 #### The color picker
 
@@ -274,7 +274,7 @@ Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Home**,
 
 ### The inspector
 
-The stage's right-hand panel has three parts: **Plan**, **Fixtures** and **Inspector**. Click the arrow beside a heading to collapse or expand that part. Drag the divider under **Plan** to make the plan smaller or larger, and the one under **Fixtures** to make the list shorter or taller; the inspector gets the rest. Double-click a divider to reset it. The browser remembers which parts are collapsed and the sizes you dragged. The fixture list and the inspector scroll on their own, with their headings pinned.
+The stage's right-hand panel has three parts: **Plan**, **Fixtures** and **Inspector**. Click the arrow beside a heading to collapse or expand that part. Drag the divider on the panel's left edge to make the whole panel wider or narrower (the 3D view gets the rest), the one under **Plan** to make the plan smaller or larger, and the one under **Fixtures** to make the list shorter or taller; the inspector gets the rest. Double-click a divider to reset it. The browser remembers which parts are collapsed and the sizes you dragged. The fixture list and the inspector scroll on their own, with their headings pinned.
 
 The inspector, at the bottom, shows the selected fixture:
 
@@ -605,6 +605,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
 | `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
 | `shared/trace.js` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
+| `shared/pan-tilt-pad.js` | The ✥ pan / tilt pad (hold and move the mouse), used under the console's pan / tilt faders and in the stage inspector |
 | `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B; one, shared by the console and the stage) in place of the browser's |
 | `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, thin scrollbars (`.thin-scroll`), and the styles of the shared dialog, color picker and trace card; loaded by the app page |
 | `shared/ask.js` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |

@@ -13,7 +13,7 @@
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: minmax(0, 1fr) var(--side-width, 340px);
     grid-template-areas: "head head" "view side";
     min-height: 0;
   }
@@ -122,8 +122,8 @@
      a collapse arrow; Fixtures and Inspector scroll below their heading. */
   aside {
     grid-area: side;
+    position: relative;
     background: var(--panel);
-    border-left: 1px solid var(--track);
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -199,6 +199,18 @@
     z-index: 1; pointer-events: none;
   }
   .vdivider:hover .grip, .vdivider.is-dragging .grip { border-color: var(--accent); }
+  /* Divider on the panel's left edge: drag to set its width, double-click to
+     reset. It draws the panel's left border; same look, turned upright. */
+  .hdivider { position: absolute; top: 0; bottom: 0; left: -4px; width: 7px; z-index: 3; cursor: col-resize; touch-action: none; }
+  .hdivider::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--track); }
+  .hdivider:hover::after, .hdivider.is-dragging::after { background: var(--accent); width: 2px; left: 2px; }
+  .hdivider .grip {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 8px; height: 44px; border-radius: 4px;
+    background: var(--panel); border: 1px solid var(--track);
+    z-index: 1; pointer-events: none;
+  }
+  .hdivider:hover .grip, .hdivider.is-dragging .grip { border-color: var(--accent); }
   /* Nothing to resize while the part above is collapsed. */
   #planSection.is-collapsed + .vdivider, #fixtures.is-collapsed + .vdivider { cursor: default; pointer-events: none; }
   #planSection.is-collapsed + .vdivider .grip, #fixtures.is-collapsed + .vdivider .grip { display: none; }
@@ -224,6 +236,11 @@
   dialog.dlg .fields input[type="number"] { width: 100%; }
   .fields.rig-fields { margin-top: 10px; }
   input:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* The DMX values, outlined like the fixture's faders in the console (theme.css); each row in its own box, like a console fader. */
+  .dmx-box { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: 4px 8px; align-items: center; margin-top: 8px; padding: 10px 6px 6px; --outline-bg: var(--panel); }
+  .dmx-box label:not(.rgb-bar) { color: var(--muted); }
+  .dmx-box .rgb-bar { height: 14px; }
+  .dmx-line { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 3px 4px 3px 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; }
   .dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
   .dmx-row input[type="number"] { width: 100%; }
   /* Color channels: an upright strip between the label and the slider, in the emitter's color (like the console's color faders). */
@@ -232,6 +249,11 @@
   [data-dl].is-absent { opacity: 0.35; }
   [data-dl].is-absent input:disabled { opacity: 1; }
   .dmx-row.has-emitter::before { content: ""; position: absolute; left: -5px; top: 15%; bottom: 15%; width: 3px; border-radius: 2px; background: var(--emitter); }
+  /* Pan and tilt rows, with the pan / tilt pad (shared/pan-tilt-pad.js) upright across both, in the color strips' column (ending where they end). */
+  .pt-block { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: 4px; }
+  .pt-block > [data-dl="pan"] { grid-row: 1; }
+  .pt-block > [data-dl="tilt"] { grid-row: 2; }
+  .pt-block > .pt-pad { grid-column: 2; grid-row: 1 / 3; justify-self: start; position: relative; z-index: 1; width: 12px; margin: 5px 0 5px -14px; font-size: var(--text-2xs); }
   .dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
   .chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
   /* Other channels (link.js): sliders for channels the stage doesn't draw, under the DMX rows. */
@@ -282,7 +304,8 @@
       grid-template-areas: "head" "view" "side";
       height: auto;
     }
-    aside { border-left: 0; overflow: visible; }
+    aside { overflow: visible; }
+    .hdivider { display: none; }
     aside > #fixtures { max-height: none; }
     aside > #inspector { flex: none; }
     #fixtures > .list, #inspector > .inspector-body { overflow: visible; }
@@ -295,3 +318,4 @@
 
 /* Outside the pane scope (keyframes, page-wide states). */
 body.resizing-panel { cursor: row-resize; user-select: none; }
+body.resizing-panel-width { cursor: col-resize; user-select: none; }

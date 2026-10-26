@@ -94,6 +94,7 @@ import {
   isUnpatched,
   liveLevel,
   revealFixtures,
+  fixtureOutlineColors,
   refreshFaderPatchLabels,
   syncSlidersFromState,
   confirmAction,
@@ -769,6 +770,7 @@ startStageLink({
   live: () => ({ cueLevels: getPlaybackLevels(), fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
   fixtures: () => state.fixtures,
   groups: () => state.fixtureGroups,
+  outlines: fixtureOutlineColors,
   faderInfo: () => Array.from({ length: FADER_COUNT }, (_, i) => ({
     num: i + 1,
     name: faderName(i),

@@ -1,7 +1,8 @@
 // The stage's side panel layout: Plan, Fixtures and Inspector, stacked.
-// Each part collapses from the arrow beside its heading, and the dividers
-// between them resize the plan and the fixture list (styles: stage.css,
-// "Side panel"). Both are remembered in this browser.
+// Each part collapses from the arrow beside its heading, the dividers
+// between them resize the plan and the fixture list, and the one on its
+// left edge the panel's width (styles: stage.css, "Side panel"). All are
+// remembered in this browser.
 
 import { clamp } from "../shared/numbers.js";
 
@@ -42,20 +43,25 @@ asideEl.addEventListener("click", (e) => {
   btn.blur();
 });
 
-// Dividers between the parts: the one under Plan sets the plan's size, the
-// one under Fixtures the list's height (the inspector gets the rest). Sizes
-// are remembered in this browser; double-click a divider to reset it.
+// Dividers: the one on the panel's left edge sets its width; between the
+// parts, the one under Plan sets the plan's size, the one under Fixtures the
+// list's height (the inspector gets the rest). Sizes are remembered in this
+// browser; double-click a divider to reset it.
 const PANEL_SIZES_KEY = "unnaturallight.stage.panelSizes";
 const panelSizes = (() => {
   try { return JSON.parse(localStorage.getItem(PANEL_SIZES_KEY) ?? "{}") ?? {}; } catch { return {}; }
 })();
-const SIZE_VARS = { plan: "--plan-size", fixtures: "--fixtures-height" };
-const MIN_SIZE = { plan: 120, fixtures: 80 };
+const SIZE_VARS = { side: "--side-width", plan: "--plan-size", fixtures: "--fixtures-height" };
+const MIN_SIZE = { side: 280, plan: 120, fixtures: 80 };
+/** Room the 3D view keeps beside the panel. */
+const MIN_VIEW_WIDTH = 320;
+/** The stage's layout grid (the panel's width is one of its columns). */
+const appEl = asideEl.closest(".app");
 
 function applyPanelSize(key) {
   const v = panelSizes[key];
-  if (typeof v === "number") asideEl.style.setProperty(SIZE_VARS[key], `${v}px`);
-  else asideEl.style.removeProperty(SIZE_VARS[key]);
+  if (typeof v === "number") appEl.style.setProperty(SIZE_VARS[key], `${v}px`);
+  else appEl.style.removeProperty(SIZE_VARS[key]);
 }
 
 function savePanelSizes() {
@@ -64,22 +70,34 @@ function savePanelSizes() {
 
 for (const key of Object.keys(SIZE_VARS)) applyPanelSize(key);
 
-for (const divider of asideEl.querySelectorAll(".vdivider")) {
-  const key = divider.dataset.resize;
+/** Where a drag starts from, and how far it may go. */
+function dragRange(key, divider) {
+  if (key === "side") {
+    const start = asideEl.getBoundingClientRect().width;
+    return { start, max: Math.max(MIN_SIZE.side, appEl.getBoundingClientRect().width - MIN_VIEW_WIDTH) };
+  }
   // What the divider sizes: the plan canvas, or the Fixtures section.
-  const target = document.getElementById(key === "plan" ? "plan" : "fixtures");
+  const start = document.getElementById(key === "plan" ? "plan" : "fixtures").getBoundingClientRect().height;
+  // Leave the inspector (or what's below) at least a heading's worth of room.
+  return { start, max: start + Math.max(0, asideEl.getBoundingClientRect().bottom - divider.getBoundingClientRect().bottom - 60) };
+}
+
+for (const divider of asideEl.querySelectorAll("[data-resize]")) {
+  const key = divider.dataset.resize;
+  const sideways = key === "side";
+  const bodyClass = sideways ? "resizing-panel-width" : "resizing-panel";
   divider.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     divider.setPointerCapture(e.pointerId);
     divider.classList.add("is-dragging");
-    document.body.classList.add("resizing-panel");
-    const startY = e.clientY;
-    const start = target.getBoundingClientRect().height;
-    // Leave the inspector (or what's below) at least a heading's worth of room.
-    const max = start + Math.max(0, asideEl.getBoundingClientRect().bottom - divider.getBoundingClientRect().bottom - 60);
+    document.body.classList.add(bodyClass);
+    const from = sideways ? e.clientX : e.clientY;
+    const { start, max } = dragRange(key, divider);
     const onMove = (ev) => {
-      panelSizes[key] = Math.round(clamp(start + ev.clientY - startY, MIN_SIZE[key], max));
+      // The panel is on the right, so dragging its edge left widens it.
+      const moved = sideways ? from - ev.clientX : ev.clientY - from;
+      panelSizes[key] = Math.round(clamp(start + moved, MIN_SIZE[key], max));
       applyPanelSize(key);
     };
     const onUp = () => {
@@ -87,7 +105,7 @@ for (const divider of asideEl.querySelectorAll(".vdivider")) {
       divider.removeEventListener("pointerup", onUp);
       divider.removeEventListener("pointercancel", onUp);
       divider.classList.remove("is-dragging");
-      document.body.classList.remove("resizing-panel");
+      document.body.classList.remove(bodyClass);
       savePanelSizes();
     };
     divider.addEventListener("pointermove", onMove);
