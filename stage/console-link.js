@@ -105,6 +105,10 @@ export function createConsoleLink({ onLevels, onStageHello, onRegistered }) {
       }
       if (values.length) toConsole((c) => c.set(values));
     },
+    /** Hold (on) or release the console's blackout / flash on the dimmer fader(s) patched to `channel`. */
+    hold(kind, channel, on) {
+      toConsole((c) => c.hold(kind, channel, on));
+    },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
     setChannel(channel, value) {
       if (!this.live) return;

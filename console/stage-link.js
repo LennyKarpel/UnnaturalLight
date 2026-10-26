@@ -41,6 +41,7 @@ import { setChannelLevels } from "../shared/engine.js";
  *   unregister: (consoleIds: string[]) => void,
  *   adoptRoles: (stageFixtures: { consoleId?: string | null, layout?: (string | null)[] }[]) => void,
  *   reveal: (consoleIds: string[]) => void,
+ *   hold: (kind: "blackout" | "flash", channel: number, on: boolean) => void,
  * }} StageLinkApi
  */
 
@@ -121,6 +122,7 @@ export function startStageLink(linkApi) {
     unregister: (consoleIds) => api.unregister(consoleIds),
     select: (consoleIds) => api.reveal(consoleIds),
     layouts: (list) => api.adoptRoles(list),
+    hold: (kind, channel, on) => api.hold(kind, channel, on),
   });
   send();
   toStage((stage) => stage.hello());

@@ -296,7 +296,12 @@ function makePopover() {
     el.hidden = true;
   }
 
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el.hidden) close(); }, true);
+  // Escape just closes it (it doesn't also deselect, cancel, … on the page).
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || el.hidden) return;
+    e.stopPropagation();
+    close();
+  }, true);
   document.addEventListener("pointerdown", (e) => { if (!el.hidden && !e.altKey && !el.contains(e.target)) close(); }, true);
 
   return {

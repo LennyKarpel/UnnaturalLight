@@ -17,7 +17,6 @@ export function syncShowNameUi() {
 export function applyShowName(name) {
   const next = normalizeShowName(name);
   if (!next || next === state.showName) return false;
-  state.showName = next;
   syncShowNameUi();
   persistSession();
   return true;

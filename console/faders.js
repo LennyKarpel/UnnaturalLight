@@ -676,6 +676,33 @@ function holdButton(btn, set, serverSet, faders) {
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) btn.addEventListener(type, release);
 }
 
+/** Faders held from the stage's B / F buttons: "blackout:channel" / "flash:channel" → faders. */
+const stageHolds = new Map();
+
+/**
+ * The stage's B / F buttons (stage-link.js): while `on`, the dimmer fader(s)
+ * patched to `channel` are blacked out, or flashed full and white, like
+ * holding their B / F here.
+ * @param {"blackout" | "flash"} kind
+ */
+export function holdFromStage(kind, channel, on) {
+  const key = `${kind}:${channel}`;
+  const set = kind === "blackout" ? blackedOutFaders : flashingFaders;
+  const serverSet = kind === "blackout" ? state.serverBlackedOut : state.serverFlashing;
+  for (const f of stageHolds.get(key) ?? []) {
+    set.delete(f);
+    serverSet.delete(f);
+  }
+  stageHolds.delete(key);
+  if (on) {
+    const dimmers = dimmerFaderList().filter((f) => state.patch[f].some((t) => t.channel === channel));
+    const held = kind === "blackout" ? dimmers : [...new Set(dimmers.flatMap(flashGroup))];
+    for (const f of held) set.add(f);
+    stageHolds.set(key, held);
+  }
+  pushToDmx({ persist: false });
+}
+
 /** B / F buttons for a dimmer fader, placed in the row under the faders (with the color bars). */
 function addDimmerButtons(grid, fader, col) {
   const box = document.createElement("div");

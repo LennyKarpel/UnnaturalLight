@@ -84,13 +84,13 @@ window.addEventListener("keydown", (e) => {
     else select(null);
     return;
   }
-  if (e.code === "KeyT") { setAiming(!ui.aiming); return; }
+  if (e.code === "KeyA") { setAiming(!ui.aiming); return; }
   // Mac "delete" is Backspace; forward-delete is Delete. ⌘Z undoes it.
   if (e.key === "Backspace" || e.key === "Delete") {
     if (state.selected.length) { e.preventDefault(); deleteSelected(); }
     return;
   }
-  if (e.key === "a" || e.key === "A") { togglePlaceFixture(); return; }
+  if (e.key === "p" || e.key === "P") { togglePlaceFixture(); return; }
   if (e.code === "KeyF") { if (!e.repeat) startFlash(); e.preventDefault(); return; }
   if (e.key === "Tab" && state.fixtures.length) {
     e.preventDefault();

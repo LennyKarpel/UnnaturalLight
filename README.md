@@ -60,13 +60,13 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 ## 2. Quick start: your first fixture and cue
 
 1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height in meters) to your space.
-2. **Place a fixture.** Click **+ Place fixture** (or press `A`).
+2. **Place a fixture.** Click **+ Place fixture** (or press `P`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
 3. **See it in the console.** The console now has a fixture for it on its *Fixtures* tab, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the fixture's current values.
 4. **Move a fader** in the console's **Cue 1**: the fixture on the stage changes with it (brightness, direction, color, beam width).
 5. **Or adjust the fixture on the stage:** select it and use `+` / `−` (dimmer), the arrow keys (pan / tilt), `[` / `]` (zoom), or the sliders in the inspector. Its faders in the console follow.
-6. **Point it somewhere:** press `T` and click a spot on the floor; the fixture swings to aim at it.
+6. **Point it somewhere:** press `A` and click a spot on the floor; the fixture swings to aim at it.
 7. **Make a second look:** set up **Cue 2** (click its row to make it live, move its faders), then go back to **Cue 1**.
 8. **Run the cue:** press **GO**. The console transitions from Cue 1 to Cue 2 over Cue 2's **In** time, and you watch the stage fade with it.
 9. **Connect your DMX interface** (optional): plug it into the computer running `./server.sh`, click **Connect DMX** in the page header (top bar) and choose **DMX USB Pro**, or pick an Art-Net node from the same menu (see [Network DMX](#network-dmx-art-net--sacn)).
@@ -125,7 +125,7 @@ Each view shows every fixture's beam direction, the dot where its beam lands, an
 
 ### Placing fixtures
 
-1. Click **+ Place fixture** or press `A`.
+1. Click **+ Place fixture** or press `P`.
 2. Pick a **console type**. This decides what the fixture can do and how many console channels and faders it gets:
 
    | Console type | Channels / faders | Controls |
@@ -191,7 +191,7 @@ Every fixture is controlled by values from **0 to 255**, just like a dimmer chan
 | **Deep Red / White / Amber / Lime / Cyan / Indigo / UV** | the amount of each extra emitter, for fixtures that have them |
 | **Zoom** | narrowest … widest beam |
 
-Change them with the keys, or the sliders and numbers in the inspector. Like the fixture's faders in the console, they have a line around them with the fixture's name on it, in the same color as its outline in the console (gold when it isn't linked), and each value sits in its own box, like a fader. Each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; channels a linked fixture doesn't have — e.g. pan and tilt on a fixed light — are dimmed and can't be changed; a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage. Beside the **Pan** and **Tilt** sliders, in the color strips' column, is the same **✥** pan / tilt pad as in the console (upright, spanning both rows): hold the mouse button on it and move the mouse — left / right = pan, up / down = tilt, ⇧ = fine:
+Change them with the keys, or the sliders and numbers in the inspector. Like the fixture's faders in the console, they have a line around them with the fixture's name on it, in the same color as its outline in the console (gold when it isn't linked), and each value sits in its own box, like a fader. Each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; a linked fixture shows only the channels it has — e.g. no pan and tilt on a fixed light (a stage-only fixture shows them all); a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage. After **Dimmer** are small **B** and **F** buttons that work like the console's under a dimmer fader: hold **B** to black the fixture out, hold **F** to flash it full and white; both last only while held. On a fixture linked to the console they hold its dimmer fader's B / F there (so the real lights do it, and the console's buttons light up); on a stage-only fixture they just change how it looks on the stage. Beside the **Pan** and **Tilt** sliders, in the color strips' column, is the same **✥** pan / tilt pad as in the console (upright, spanning both rows): hold the mouse button on it and move the mouse — left / right = pan, up / down = tilt, ⇧ = fine:
 
 | Key | Does |
 |---|---|
@@ -202,7 +202,7 @@ Change them with the keys, or the sliders and numbers in the inspector. Like the
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's **Color** bar under the color rows (filled with the fixture's color, like the console's color bar; click it to pick a color) and **color** in the key strip sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
+The inspector's upright color bar beside the color rows (filled with the fixture's color, like the console's color bar; click it to pick a color) and **color** in the key strip sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255.
 
 #### The color picker
 
@@ -230,7 +230,7 @@ Library fixtures get these roles from their channels automatically (warm and col
 
 ### Aiming
 
-- **Aim at spot** (`T`): select one or more fixtures, press `T`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected fixture points at it. Great for focusing several fixtures on one spot.
+- **Aim at spot** (`A`): select one or more fixtures, press `A`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected fixture points at it. Great for focusing several fixtures on one spot.
 - **Each fixture has its own "zero"**: the direction it points at pan / tilt 128, and which way is "up" for it. It's shown as a dashed cyan line on the selected fixture.
   - **Set zero here** (`Z`): make the current direction the new zero.
   - **Aim zero at stage**: point the zero at the center of the stage.
@@ -253,7 +253,7 @@ A **rig** is a group of fixtures in a fixed arrangement that you place and move 
 Working with a rig:
 
 - All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
-- Click one fixture to adjust just it; **Select whole rig** (inspector or right-click) selects them all again.
+- Click one fixture to adjust just it; double-click any of its fixtures (in 3D, the plan or the fixture list), or use **Select whole rig** (inspector or right-click), to select them all again.
 - Dragging any of its fixtures moves the whole rig.
 - The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live. A new number of fixtures applies when you press `Enter`, leave the field or click its arrows, so typing e.g. 12 doesn't first rebuild the rig with 1.
 - In the console, a rig's fixtures are grouped under the rig's name.
@@ -479,10 +479,10 @@ To keep copies, share them or move to another computer:
 | `+` `−` | dimmer (`⇧` ×10) |
 | `]` `[` | zoom wider / narrower (`⇧` ×10) |
 | `H` | Home (pan / tilt to 128) |
-| `T` | Aim at spot |
+| `A` | Aim at spot |
 | `Z` | Set zero here |
 | `F` (hold) | Flash |
-| `A` | Place fixture |
+| `P` | Place fixture |
 | `Tab` / `⇧Tab` | next / previous fixture |
 | `⌫` / `Delete` | delete selected |
 | `⌘Z` | undo delete |

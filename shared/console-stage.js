@@ -18,6 +18,7 @@
  *   unregister  remove console fixtures the stage registered
  *   select      console fixtures selected on the stage (the console highlights them)
  *   layouts     the stage's channel layouts (the console takes color roles its fixtures lack)
+ *   hold        the stage's B / F held (on) or released on a dimmer channel
  * @typedef {{
  *   hello: () => void,
  *   set: (values: { channel: number, value: number }[]) => void,
@@ -25,6 +26,7 @@
  *   unregister: (consoleIds: string[]) => void,
  *   select: (consoleIds: string[]) => void,
  *   layouts: (list: { consoleId: string | null, layout: (string | null)[] }[]) => void,
+ *   hold: (kind: "blackout" | "flash", channel: number, on: boolean) => void,
  * }} ConsoleEnd
  */
 

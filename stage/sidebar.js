@@ -23,6 +23,8 @@ import {
   stopFlash,
   changed,
   select,
+  selectRigOf,
+  holdDimmer,
   openContextMenu,
   act,
 } from "./actions.js";
@@ -48,7 +50,7 @@ let listSelectionKey = "";
 export function renderList() {
   document.getElementById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
   if (!state.fixtures.length) {
-    listEl.innerHTML = `<div class="empty">None yet — press <kbd>A</kbd> or “+ Place fixture”.</div>`;
+    listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Place fixture”.</div>`;
     return;
   }
   // The list scrolls on its own; rebuilding it would jump back to the top.
@@ -63,7 +65,11 @@ export function renderList() {
       <div class="bar"><div style="width:${Math.round(fixture.intensity * 100)}%"></div></div>
       <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
     row.children[1].textContent = fixture.name + (isInside(fixture, state.box) ? "" : "  ·  outside");
-    row.addEventListener("click", (e) => (e.altKey ? showTrace({ kind: "stageFixture", id: fixture.id }, e) : select(fixture.id, e.shiftKey)));
+    row.addEventListener("click", (e) => {
+      if (e.altKey) showTrace({ kind: "stageFixture", id: fixture.id }, e);
+      // A double-click on a rig's fixture selects the whole rig. (Not "dblclick": the first click rebuilds the rows.)
+      else if (!(e.detail === 2 && selectRigOf(fixture.id))) select(fixture.id, e.shiftKey);
+    });
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);
   }
@@ -113,7 +119,8 @@ function rigSectionHtml(rig) {
 function dmxLineHtml(a) {
   return `
       <div class="dmx-line" data-dl="${a}">
-        <label>${DMX_LABELS[a]}</label>
+        <label>${DMX_LABELS[a]}</label>${a === "dimmer" ? `
+        <span class="dim-btns"><button type="button" class="dim-btn dim-blackout" data-hold="blackout" title="Blackout: dimmer at 0 while held">B</button><button type="button" class="dim-btn dim-flash" data-hold="flash" title="Flash: full and white while held">F</button></span>` : ""}
         <div ${COLOR_ROLES.includes(a) ? `class="dmx-row has-emitter" style="--emitter: ${emitterHex(a)}"` : `class="dmx-row"`}>
           <input type="range" min="0" max="255" step="1" data-d="${a}" />
           <input type="number" min="0" max="255" step="1" data-d="${a}" />
@@ -124,22 +131,32 @@ function dmxLineHtml(a) {
 
 /**
  * The inspector's DMX rows. Pan and tilt share one block, with the pan / tilt
- * pad standing upright across both, beside their sliders. Under the color
- * rows is the fixture's color, like the console's color bar.
+ * pad standing upright across both, beside their sliders. The color rows
+ * share one too, with the fixture's color (click to pick one) upright beside
+ * them, like the console's color bar.
  */
 function dmxRowsHtml(attrs) {
-  const lastColor = attrs.findLastIndex((a) => COLOR_ROLES.includes(a));
-  return attrs.map((a, i) => {
-    if (i === lastColor) return `${dmxLineHtml(a)}
-      <label>Color</label>
-      <div class="dmx-row"><label class="rgb-bar" data-rgb title="Click to pick a color (mixed onto the color channels it's linked with; red / green / blue when none)"><input type="color" data-k="color" aria-label="Color" /></label></div>`;
-    if (a === "tilt" && attrs[i - 1] === "pan") return "";
-    if (a === "pan" && attrs[i + 1] === "tilt") return `
+  const isColor = (a) => COLOR_ROLES.includes(a);
+  const firstColor = attrs.findIndex(isColor);
+  const lastColor = attrs.findLastIndex(isColor);
+  const lines = [];
+  attrs.forEach((a, i) => {
+    if (a === "tilt" && attrs[i - 1] === "pan") return;
+    const html = a === "pan" && attrs[i + 1] === "tilt" ? `
       <div class="pt-block">
-        <div data-pt>✥</div>${dmxLineHtml("pan")}${dmxLineHtml("tilt")}
+        <div data-pt title="Hold and move the mouse: left / right = pan, up / down = tilt (⇧ = fine)">✥</div>${dmxLineHtml("pan")}${dmxLineHtml("tilt")}
+      </div>` : dmxLineHtml(a);
+    lines.push({ html, color: i >= firstColor && i <= lastColor && firstColor >= 0 });
+  });
+  const colorLines = lines.filter((l) => l.color);
+  if (!colorLines.length) return lines.map((l) => l.html).join("");
+  // Each color line gets its own grid row, so the bar can span them all.
+  const block = `
+      <div class="color-block">
+        <label class="rgb-bar" data-rgb style="grid-row: 1 / ${colorLines.length + 1}" title="Click to pick a color (mixed onto the color channels it's linked with; red / green / blue when none)"><input type="color" data-k="color" aria-label="Color" /></label>${colorLines.map((l, k) => l.html.replace(/^(\s*<div class="[^"]*")/, `$1 style="grid-row: ${k + 1}"`)).join("")}
       </div>`;
-    return dmxLineHtml(a);
-  }).join("");
+  const at = lines.indexOf(colorLines[0]);
+  return [...lines.slice(0, at).map((l) => l.html), block, ...lines.slice(at + colorLines.length).map((l) => l.html)].join("");
 }
 
 /** Rebuild the inspector for the current selection (none, one, or several). */
@@ -165,7 +182,7 @@ export function renderInspector() {
       ${commonRig(sel) ? rigSectionHtml(commonRig(sel)) + rigLinkHtml() : ""}
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
-        <button data-act="aimSpot" title="Point all selected beams at one spot (T)">Aim at spot</button>
+        <button data-act="aimSpot" title="Point all selected beams at one spot (A)">Aim at spot</button>
         <button data-act="home">Home all</button>
         <button data-act="zero">Set zero here (all)</button>
         <button data-act="aim">Aim zero at stage</button>
@@ -190,7 +207,7 @@ export function renderInspector() {
       <label></label><div class="hint" style="margin:0">x · height · z (m)${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
 
       <div class="subhead">DMX values · 0–255</div>
-      <div class="fixture-outline dmx-box" data-outline>${dmxRowsHtml(inspectorAttrs(sel[0]))}
+      <div class="fixture-outline dmx-box" data-outline data-attrs="${inspectorAttrs(sel[0]).join(",")}">${dmxRowsHtml(inspectorAttrs(sel[0]))}
       </div>
       <div class="other-chans" data-other hidden></div>
 
@@ -219,7 +236,7 @@ export function renderInspector() {
     ${rig ? rigSectionHtml(rig) + rigLinkHtml() : ""}
     <div class="buttons">
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
-      <button data-act="aimSpot" title="Point the beam at a spot you click (T)">Aim at spot</button>
+      <button data-act="aimSpot" title="Point the beam at a spot you click (A)">Aim at spot</button>
       <button data-act="home" title="Pan/tilt back to 0 (H)">Home</button>
       ${rig ? `<button data-act="selectRig" title="Select every fixture in this rig">Select whole rig</button>` : `
       <button data-act="zero" title="Make the current direction the new zero (Z)">Set zero here</button>
@@ -347,6 +364,26 @@ function bindInspector() {
   inspectorEl.querySelectorAll("[data-act]").forEach((el) => {
     el.addEventListener("click", () => { act(el.dataset.act); el.blur(); });
   });
+  // B / F on the dimmer: only while held.
+  inspectorEl.querySelectorAll("[data-hold]").forEach((el) => {
+    let fixture = null;
+    const release = () => {
+      if (!fixture) return;
+      holdDimmer(el.dataset.hold, fixture, false);
+      fixture = null;
+      el.classList.remove("on");
+    };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      fixture = selectedFixtures()[0] ?? null;
+      if (!fixture) return;
+      el.setPointerCapture(e.pointerId);
+      el.classList.add("on");
+      holdDimmer(el.dataset.hold, fixture, true);
+    });
+    for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(t, release);
+  });
 }
 
 function syncRigFields(rig) {
@@ -380,13 +417,6 @@ export function syncInspector() {
   });
   syncDmxRows(fixture);
   inspectorEl.querySelector("[data-rgb]")?.style.setProperty("--rgb", fixture.color);
-  // The pad needs both pan and tilt.
-  const pad = inspectorEl.querySelector("[data-pt]");
-  if (pad) {
-    const absent = ["pan", "tilt"].some((a) => inspectorEl.querySelector(`[data-dl="${a}"]`)?.classList.contains("is-absent"));
-    pad.classList.toggle("is-disabled", absent);
-    pad.title = absent ? "This fixture doesn't have pan and tilt" : "Hold and move the mouse: left / right = pan, up / down = tilt (⇧ = fine)";
-  }
   const readout = inspectorEl.querySelector("#readout");
   if (readout) {
     const dir = beamDir(fixture);

@@ -18,7 +18,7 @@ import {
 } from "./stage-model.js";
 import { clamp } from "../shared/numbers.js";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, ui } from "./state.js";
-import { look, changed, select, applyAim, addFixtureAt, openContextMenu } from "./actions.js";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, openContextMenu } from "./actions.js";
 import { showTrace } from "./stage.js";
 
 // ---------------------------------------------------------------------
@@ -564,6 +564,13 @@ view.addEventListener("pointermove", (e) => {
     moveFixture(fixture, clamp(s(hit.x), -100, 100), fixture.y, clamp(s(hit.z), -100, 100));
   }
   changed({ list: false });
+}, true);
+
+// Double-click a rig's fixture: select the whole rig.
+view.addEventListener("dblclick", (e) => {
+  if (e.target !== renderer.domElement || ui.placing || ui.aiming) return;
+  const id = pickFixture(e);
+  if (id) selectRigOf(id);
 }, true);
 
 renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); });

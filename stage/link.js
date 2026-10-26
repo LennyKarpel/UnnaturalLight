@@ -249,8 +249,8 @@ function presentAttrs(fixture) {
 }
 
 /**
- * Inspector row order: the color rows in the fixture's channel order (like
- * its console faders), then the colors it doesn't have; the rest as usual.
+ * Inspector rows: only what the fixture has (all of them when it's
+ * stage-only), the color rows in its channel order (like its console faders).
  */
 export function inspectorAttrs(fixture) {
   const isColor = (a) => COLOR_ROLES.includes(a);
@@ -258,7 +258,9 @@ export function inspectorAttrs(fixture) {
   const colors = [...new Set([...present, ...DMX_ATTRS.filter(isColor)])];
   const others = DMX_ATTRS.filter((a) => !isColor(a));
   const at = DMX_ATTRS.findIndex(isColor);
-  return [...others.slice(0, at), ...colors, ...others.slice(at)];
+  const attrs = [...others.slice(0, at), ...colors, ...others.slice(at)];
+  const have = presentAttrs(fixture);
+  return have ? attrs.filter((a) => have.has(a)) : attrs;
 }
 
 /** A channel badge: its address and the console fader(s) patched to it (⌥-click traces it). */
@@ -315,20 +317,15 @@ function syncOtherChannels(fixture) {
 
 /**
  * DMX rows in the inspector: values, units, and which channel / fader drives
- * each. Attributes the fixture doesn't have (e.g. pan on a fixed light) are
- * dimmed and can't be changed.
+ * each. When the fixture's channels have changed (linked, unlinked, a new
+ * layout), the inspector is rebuilt with its new rows instead.
  */
 export function syncDmxRows(fixture) {
+  const rows = inspectorEl.querySelector("[data-outline]");
+  if (rows && rows.dataset.attrs !== inspectorAttrs(fixture).join(",")) { renderInspector(); return; }
   /** attr → its channels (the first, then any followers). */
   const chans = new Map();
   for (const { channel, attr } of [...linkChannels(fixture), ...followerChannels(fixture)]) chans.set(attr, [...(chans.get(attr) ?? []), channel]);
-  const present = presentAttrs(fixture);
-  inspectorEl.querySelectorAll("[data-dl]").forEach((el) => {
-    const absent = present != null && !present.has(el.dataset.dl);
-    el.classList.toggle("is-absent", absent);
-    el.title = absent ? "This fixture doesn't have this channel" : "";
-    el.querySelectorAll("input").forEach((input) => { input.disabled = absent; });
-  });
   inspectorEl.querySelectorAll("[data-d]").forEach((el) => {
     if (el === document.activeElement && el.type !== "range") return;
     el.value = String(fixture.dmx[el.dataset.d]);

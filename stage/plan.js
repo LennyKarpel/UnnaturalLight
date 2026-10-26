@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { round, beamDir, axisHits, rigOutline } from "./stage-model.js";
 import { clamp } from "../shared/numbers.js";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, ui } from "./state.js";
-import { look, changed, select, applyAim, addFixtureAt, openContextMenu } from "./actions.js";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, openContextMenu } from "./actions.js";
 import { showTrace } from "./stage.js";
 
 // ---------------------------------------------------------------------
@@ -315,6 +315,14 @@ plan.addEventListener("pointerdown", (e) => {
   const [ia, ib] = toAB(best);
   planDrag = { id: best.id, da: ia - a, db: ib - b };
   plan.setPointerCapture(e.pointerId);
+});
+
+// Double-click a rig's fixture: select the whole rig.
+plan.addEventListener("dblclick", (e) => {
+  if (ui.placing || ui.aiming) return;
+  planFit = planFit || computeFit();
+  const fixture = planFixtureAt(...planPoint(e));
+  if (fixture) selectRigOf(fixture.id);
 });
 
 plan.addEventListener("pointermove", (e) => {

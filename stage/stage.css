@@ -239,25 +239,31 @@
   /* The DMX values, outlined like the fixture's faders in the console (theme.css); each row in its own box, like a console fader. */
   .dmx-box { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: 4px 8px; align-items: center; margin-top: 8px; padding: 10px 6px 6px; --outline-bg: var(--panel); }
   .dmx-box label:not(.rgb-bar) { color: var(--muted); }
-  .dmx-box .rgb-bar { height: 14px; }
   .dmx-line { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 3px 4px 3px 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; }
   .dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
   .dmx-row input[type="number"] { width: 100%; }
   /* Color channels: an upright strip between the label and the slider, in the emitter's color (like the console's color faders). */
   .dmx-row.has-emitter { position: relative; }
-  /* Channels the fixture doesn't have (link.js): dimmed, can't be changed. */
-  [data-dl].is-absent { opacity: 0.35; }
-  [data-dl].is-absent input:disabled { opacity: 1; }
   .dmx-row.has-emitter::before { content: ""; position: absolute; left: -5px; top: 15%; bottom: 15%; width: 3px; border-radius: 2px; background: var(--emitter); }
   /* Pan and tilt rows, with the pan / tilt pad (shared/pan-tilt-pad.js) upright across both, in the color strips' column (ending where they end). */
   .pt-block { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: 4px; }
   .pt-block > [data-dl="pan"] { grid-row: 1; }
   .pt-block > [data-dl="tilt"] { grid-row: 2; }
   .pt-block > .pt-pad { grid-column: 2; grid-row: 1 / 3; justify-self: start; position: relative; z-index: 1; width: 12px; margin: 5px 0 5px -14px; font-size: var(--text-2xs); }
+  /* The color rows, with the fixture's color (theme.css .rgb-bar) upright across them, left of their color strips. */
+  .color-block { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: 4px; }
+  .color-block > .rgb-bar { grid-column: 2; justify-self: start; z-index: 1; width: 6px; margin: 5px 0 5px -14px; }
+  /* Blackout / flash on the dimmer row, stacked where the pan / tilt pad and color bar stand: only while held (like the console's under its dimmer faders). */
+  .dmx-line > * { grid-row: 1; }
+  .dim-btns { grid-column: 2; justify-self: start; z-index: 1; display: flex; flex-direction: column; gap: 1px; margin-left: -14px; }
+  .dim-btn { width: 12px; height: 11px; padding: 0; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--panel); color: var(--muted); font: 600 var(--text-2xs)/1 var(--font); cursor: pointer; }
+  .dim-btn:hover { color: var(--ink); border-color: var(--muted); }
+  .dim-blackout.on, .dim-blackout:active { background: var(--warn); border-color: var(--warn); color: #1a0d0a; }
+  .dim-flash.on, .dim-flash:active { background: #fff; border-color: #fff; color: #111; }
   .dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
   .chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
   /* Other channels (link.js): sliders for channels the stage doesn't draw, under the DMX rows. */
-  .other-chans { grid-column: 1 / -1; display: grid; grid-template-columns: 74px 1fr; gap: 6px 8px; align-items: center; }
+  .other-chans { grid-column: 1 / -1; display: grid; grid-template-columns: 90px 1fr; gap: 6px 8px; align-items: center; }
   .other-chans[hidden] { display: none; }
   .other-chans label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* A color with two channels (e.g. Deep Red and Red) lists both, one above the other. */
@@ -287,7 +293,7 @@
   .hud .flash-on span { color: #fff; font-weight: 700; }
   .empty { color: var(--muted); }
 
-  .fields { display: grid; grid-template-columns: 74px 1fr; gap: 6px 8px; align-items: center; }
+  .fields { display: grid; grid-template-columns: 90px 1fr; gap: 6px 8px; align-items: center; }
   .fields > label { color: var(--muted); }
   .xyz { display: flex; gap: 4px; }
   .xyz input { flex: 1; width: 0; }

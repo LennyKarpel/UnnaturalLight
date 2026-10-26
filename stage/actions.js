@@ -13,6 +13,7 @@ import {
   serializeStage,
   homeFixture,
   applyFixture,
+  linkChannels,
 } from "./stage-model.js";
 import { newId } from "../shared/ids.js";
 import {
@@ -40,8 +41,15 @@ export const flashing = new Set();
 let flashStart = 0;
 let flashTimer = 0;
 
-/** What a fixture looks like right now (its own settings, or white/full while flashing). */
-export const look = (fixture) => (flashing.has(fixture.id) ? { color: "#ffffff", intensity: 1 } : fixture);
+// Blackout: while the inspector's B is held, a stage-only fixture draws dark.
+export const blackedOut = new Set();
+
+/** What a fixture looks like right now (its own settings, white/full while flashing, or dark while blacked out). */
+export const look = (fixture) => {
+  if (flashing.has(fixture.id)) return { color: "#ffffff", intensity: 1 };
+  if (blackedOut.has(fixture.id)) return { color: fixture.color, intensity: 0 };
+  return fixture;
+};
 
 function redrawLook() {
   syncScene();
@@ -104,6 +112,16 @@ export function select(id, additive = false) {
   changed({ inspector: false });
 }
 
+/** Select every fixture in `id`'s rig (double-click); false if it isn't in one. */
+export function selectRigOf(id) {
+  const rig = rigOf(byId(id));
+  if (!rig) return false;
+  state.selected = rigMembers(rig).map((m) => m.id);
+  renderInspector();
+  changed({ inspector: false });
+  return true;
+}
+
 const bannerEl = document.getElementById("banner");
 const PLACE_HINT = bannerEl.textContent;
 const RIG_PLACE_HINT = "Click where the rig's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
@@ -132,7 +150,7 @@ export function setPlacing(on, rigCfg = null) {
 
 export function setAiming(on) {
   if (on && !selectedFixtures().length) {
-    setBanner("Select one or more fixtures first, then Aim at spot (T)", 2500);
+    setBanner("Select one or more fixtures first, then Aim at spot (A)", 2500);
     return;
   }
   if (on && ui.placing) setPlacing(false);
@@ -172,6 +190,25 @@ export function addFixtureAt(x, y, z) {
   requestRegistrations();
 }
 
+/**
+ * The inspector's B / F on the dimmer, held (`on`) or released: blackout or
+ * full and white. A fixture whose dimmer has a console fader is held in the
+ * console, like its B / F there, so the lights do it too (and the stage shows
+ * what comes back); a stage-only one just looks it here.
+ * @param {"blackout" | "flash"} kind
+ */
+export function holdDimmer(kind, fixture, on) {
+  const channel = linkChannels(fixture).find((c) => c.attr === "dimmer")?.channel;
+  if (channel && consoleLink.live && consoleLink.fadersFor(channel).length) {
+    consoleLink.hold(kind, channel, on);
+    return;
+  }
+  const set = kind === "blackout" ? blackedOut : flashing;
+  if (on) set.add(fixture.id);
+  else set.delete(fixture.id);
+  redrawLook();
+}
+
 // ---------------------------------------------------------------------
 // Right-click menu (fixtures in 3D, plan and list)
 // ---------------------------------------------------------------------
@@ -194,7 +231,7 @@ export function openContextMenu(id, x, y) {
   const item = (cmd, label, key = "", cls = "") =>
     `<button type="button" data-cmd="${cmd}" class="menu-item ${cls}"><span>${label}</span><kbd>${key}</kbd></button>`;
   ctxMenu.innerHTML = `<div class="menu-title"></div>
-    ${item("aimSpot", "Aim at spot…", "T")}
+    ${item("aimSpot", "Aim at spot…", "A")}
     ${item("home", "Home", "H")}
     ${rig ? item("selectRig", "Select whole rig") : `${item("zero", "Set zero here", "Z")}${item("aim", "Aim zero at stage")}`}
     ${item("flash", "Flash (hold)", "F")}
@@ -354,10 +391,7 @@ export function act(name) {
   if (name === "zero") free.forEach(setZeroHere);
   if (name === "aimSpot") { setAiming(!ui.aiming); return; }
   if (name === "aim") free.forEach((i) => aimZeroAt(i, defaultTarget(i, state.box)));
-  if (name === "selectRig") {
-    const rig = rigOf(sel[0]);
-    if (rig) { state.selected = rigMembers(rig).map((m) => m.id); renderInspector(); }
-  }
+  if (name === "selectRig") { if (sel[0]) selectRigOf(sel[0].id); return; }
   if (name === "dup") { duplicateSelected(); return; }
   if (name === "del") { deleteSelected(); return; }
   changed();

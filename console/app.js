@@ -95,6 +95,7 @@ import {
   liveLevel,
   revealFixtures,
   fixtureOutlineColors,
+  holdFromStage,
   refreshFaderPatchLabels,
   syncSlidersFromState,
   confirmAction,
@@ -807,6 +808,7 @@ startStageLink({
   unregister: unregisterFromStage,
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
+  hold: holdFromStage,
 });
 
 // ---------------------------------------------------------------------
