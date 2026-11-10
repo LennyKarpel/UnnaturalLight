@@ -52,6 +52,7 @@ The terminal runs the **show server**: it holds the show, runs the fades and sen
 | `./server.sh --lan` | also let other computers on the network open the console (see [Running from another computer](#running-from-another-computer)) |
 | `./server.sh --fake-dmx` | pretend a DMX USB Pro is connected (the terminal prints what would be sent) |
 | `./server.sh --no-open` | don't open a browser |
+| `./server.sh --nowatch` | don't restart the server when one of its files changes (by default it restarts by itself, for development: see [For developers](#12-for-developers)). Use this for a show |
 
 If a page ever looks out of date after an update, press **⌘⇧R** (hard reload).
 
@@ -560,6 +561,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to TypeScript that only adds types (no enums, namespaces or parameter properties; `erasableSyntaxOnly` in `tsconfig.json` enforces it), so its types can simply be stripped:
 
 - **Server and tests:** Node runs the `.ts` files directly (`--experimental-strip-types`, Node 22.13+). `./server.sh` installs the npm dependencies when needed and runs `node --experimental-strip-types server/server.ts` (or `npm start`), which serves the app on port 8080 with caching off.
+- **Picking up edits:** files only the browser runs take effect on a page reload. Files the server runs (`server/` and what it imports from `console/` and `shared/`, e.g. `shared/engine.ts`, `console/songs.ts`) need a server restart. `./server.sh` does that by itself on save (for now it watches by default; the show is saved first, running fades are dropped and the pages reconnect). `./server.sh --nowatch` turns that off.
 - **Browser:** the server strips the types from each `.ts` file as it serves it (with Node's own `stripTypeScriptTypes`, cached per file) and sends it as JavaScript, so line and column numbers match the source in the browser's devtools. The page needs the show server; opening `index.html` from disk or another static server won't run it.
 - **Type checking:** `npm run typecheck` (`tsc`, strict mode, nothing written). three.js comes from a CDN in the browser and from `@types/three` for checking. Run `npm install` once to get TypeScript and the type packages.
 
