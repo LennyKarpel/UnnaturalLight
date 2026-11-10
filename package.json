@@ -4,14 +4,21 @@
   "type": "module",
   "description": "UnnaturalLight show server: serves the console and stage, owns the show state and drives the DMX USB Pro(s)",
   "scripts": {
-    "start": "node server/server.js",
-    "test": "node --test"
+    "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/server.ts",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p ."
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "serialport": "^13.0.0",
     "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.160.0",
+    "@types/ws": "^8.18.2",
+    "typescript": "5.9"
   }
 }

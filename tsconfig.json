@@ -1,0 +1,22 @@
+{
+  // Type checking only (`npm run typecheck`). Nothing is compiled: Node runs
+  // server/ and test/ with its built-in type stripping, and server/server.ts
+  // strips types from the browser's .ts files as it serves them. So only
+  // erasable syntax: no enums, namespaces or constructor parameter properties.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  "include": ["console", "page", "server", "shared", "stage", "test"]
+}

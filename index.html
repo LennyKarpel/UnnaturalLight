@@ -7,7 +7,7 @@
     <script>
       // From another computer this page is opened with ?token=… (printed by the
       // server). Keep it for this tab before the app starts (same key as
-      // shared/server-socket.js).
+      // shared/server-socket.ts).
       try {
         const token = new URLSearchParams(location.search).get("token");
         if (token) sessionStorage.setItem("unnaturallight.token", token);
@@ -347,7 +347,7 @@
 
           <div id="cuesScroll" class="cues-scroll thin-scroll">
             <main id="cues" class="cues" aria-label="Cues"></main>
-            <!-- One sideways scrollbar for every cue row (and the Live strip): see app.js. -->
+            <!-- One sideways scrollbar for every cue row (and the Live strip): see app.ts. -->
             <div id="cuesHScroll" class="cues-hscroll" aria-hidden="true"><div></div></div>
           </div>
         </section>
@@ -537,8 +537,8 @@
     </div>
     <div id="outputMenu" class="menu output-menu" role="menu" aria-label="DMX output" hidden></div>
 
-    <script type="module" src="page/page.js"></script>
-    <script type="module" src="console/app.js"></script>
-    <script type="module" src="stage/stage.js"></script>
+    <script type="module" src="page/page.ts"></script>
+    <script type="module" src="console/app.ts"></script>
+    <script type="module" src="stage/stage.ts"></script>
   </body>
 </html>

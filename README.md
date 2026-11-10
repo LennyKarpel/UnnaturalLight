@@ -28,7 +28,7 @@ The two stay **in sync**: when you place a fixture on the stage it's set up in t
 
 ### What you need
 
-- **Node.js 20 or newer** on the computer the DMX interfaces plug into ([nodejs.org](https://nodejs.org)). It runs the show server.
+- **Node.js 22.13 or newer** on the computer the DMX interfaces plug into ([nodejs.org](https://nodejs.org)). It runs the show server.
 - A current web browser (Chrome, Edge, Safari or Firefox) for the Console and Stage.
 - **Internet access** the first time you open the Stage (it downloads its 3D library), and whenever you browse the fixture library.
 - To drive real lights: one **Enttec DMX USB Pro** per DMX universe. You can use everything else without one.
@@ -206,7 +206,7 @@ The inspector's upright color bar beside the color rows (filled with the fixture
 
 #### The color picker
 
-The console's color bars and the stage's color pickers all open the same picker (`shared/color-picker.js`) instead of the browser's own:
+The console's color bars and the stage's color pickers all open the same picker (`shared/color-picker.ts`) instead of the browser's own:
 
 - **Wheel:** hue around the edge, saturation toward the center. Click or drag. It picks at full brightness; the dimmer sets how bright the fixture is.
 - **Swatches:** common lighting colors (warm white, white, cool white, amber, orange, red, pink, magenta, UV, blue, cyan, green), then a row of colors already in use (**In use** in the console, **On stage** on the stage).
@@ -216,7 +216,7 @@ Every change applies straight away. Click anywhere outside the picker, or press 
 
 #### Mixing onto extra emitters
 
-Some fixtures have more than red, green and blue: deep red, white, amber, lime, cyan, indigo, UV. The picker still picks one color, and `shared/color.js` works out the level of every emitter the fixture has so the mix **is that color** (accurate color, not "everything up"). Each emitter is treated as the color it gives at full (white = equal red, green and blue; deep red ≈ a darker red leaning toward crimson; amber ≈ red with some green; lime ≈ green with some red; cyan = green and blue; indigo ≈ blue with a little red), and they take their share in order:
+Some fixtures have more than red, green and blue: deep red, white, amber, lime, cyan, indigo, UV. The picker still picks one color, and `shared/color.ts` works out the level of every emitter the fixture has so the mix **is that color** (accurate color, not "everything up"). Each emitter is treated as the color it gives at full (white = equal red, green and blue; deep red ≈ a darker red leaning toward crimson; amber ≈ red with some green; lime ≈ green with some red; cyan = green and blue; indigo ≈ blue with a little red), and they take their share in order:
 
 1. **White** takes the part red, green and blue have in common.
 2. **Deep red**, **amber**, **lime**, **cyan** and **indigo** take as much of what's left as they can — the one nearest in hue first, so a crimson goes to deep red, an orange to amber, a yellow-green to lime, a sea green to cyan and a violet to indigo. Plain red stays on red.
@@ -379,7 +379,7 @@ Select a fixture on the stage (click it, or `Tab` to it) and the console's fader
 
 ### Staying in sync
 
-- **Console → Stage:** faders, cues fading, the blend, submasters and Master all show on the stage as they happen.
+- **Console → Stage:** faders, cues fading, the blend, submasters and Master all show on the stage as they happen. The stage draws a fade's in-between levels too, so it can look a touch smoother than the real lights, which only get DMX's 256 steps.
 - **Stage → Console:** changing a linked fixture on the stage (keys, sliders, Home, Aim at spot…) moves its faders in the console, allowing for Master and the submasters (with Master at 50%, setting the dimmer to 100 on the stage puts its fader at 200).
 - When a fixture is first linked, or the console opens, the **console's values win**.
 - Only channels that have a fader patched are synced. A channel without a fader stays under the stage's control.
@@ -557,66 +557,76 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 
 ## 12. For developers
 
-Plain HTML / JavaScript, no build step. `./server.sh` installs the npm dependencies (`serialport`, `ws`) when needed and runs `node server/server.js`, which serves the app on port 8080 with caching off. Open the folder in IntelliJ as a Web module; `console/jsconfig.json` sets up JavaScript checking for the console files.
+Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to TypeScript that only adds types (no enums, namespaces or parameter properties; `erasableSyntaxOnly` in `tsconfig.json` enforces it), so its types can simply be stripped:
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.js`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.js`) and reading / saving shows. The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+- **Server and tests:** Node runs the `.ts` files directly (`--experimental-strip-types`, Node 22.13+). `./server.sh` installs the npm dependencies when needed and runs `node --experimental-strip-types server/server.ts` (or `npm start`), which serves the app on port 8080 with caching off.
+- **Browser:** the server strips the types from each `.ts` file as it serves it (with Node's own `stripTypeScriptTypes`, cached per file) and sends it as JavaScript, so line and column numbers match the source in the browser's devtools. The page needs the show server; opening `index.html` from disk or another static server won't run it.
+- **Type checking:** `npm run typecheck` (`tsc`, strict mode, nothing written). three.js comes from a CDN in the browser and from `@types/three` for checking. Run `npm install` once to get TypeScript and the type packages.
+
+Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
+
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) and reading / saving shows. The stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
 | Path | What's in it |
 |---|---|
-| `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.js`), and the import map for three.js |
-| `page/page.js`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
+| `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.ts`), and the import map for three.js |
+| `page/page.ts`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
-| `server/server.js` | Show server: serves the app, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
-| `server/show.js` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
-| `server/dmx.js` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
-| `server/net-dmx.js` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
+| `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
+| `server/show.ts` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
+| `server/dmx.ts` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
+| `server/net-dmx.ts` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
 | `test/` | `npm test`: unit tests for the shared logic (see above) |
 | `server/data/` | `session.json` (the show, with the stage under `stage`), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
 | `console/styles.css` | Console styles, scoped to its pane (`:where(#consolePane)`; breakpoints are container queries on the pane) |
-| `console/app.js` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
-| `console/state.js` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
-| `console/dom.js` | The console's elements (in its pane of `index.html`) |
-| `console/live.js` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
-| `console/faders.js` | Fader names and menu, and what's drawn on fader rows (color bars, pan / tilt pads, blackout / flash buttons, fixture outlines) |
-| `console/show-tab.js` | Show tab: the song list |
-| `console/set-bar.js` | Run tab set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
-| `console/set-tab.js` | Set tab: building sets by drag and drop, picking the active set |
-| `console/cues.js` | Run tab: the cue rows with their menus |
-| `console/patch-tab.js`, `fixtures-tab.js` | Patch and Fixtures tabs (and the channel / count / group pickers) |
-| `console/nav.js` | Tabs: show name, tab order, routing |
-| `console/server-link.js` | Console side of the show-server link |
-| `console/patch.js` | Fader patch; the show's universe count (channel addresses for the current show) |
-| `console/fixtures.js`, `show.js`, `songs.js`, `sets.js` | Fixtures, show save / load, songs and cues, sets (and what's UP NEXT across set songs) |
-| `console/stage-link.js` | Console side of its link with the stage |
+| `console/app.ts` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
+| `console/state.ts` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
+| `console/dom.ts` | The console's elements (in its pane of `index.html`), the drag helpers its lists share (`wireRowDrag`: rows dragged by their handle; `startDragScroll`: scrolling the list while a drag nears its edge), and its popup menus (`openPopup` shows one by its button and resolves with the pick, or the dismissal on Esc / a click outside / another popup opening; `menuItem`, `closePopup`) |
+| `console/live.ts` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
+| `console/faders.ts` | Fader names and menu, and what's drawn on fader rows (color bars, pan / tilt pads, blackout / flash buttons, fixture outlines) |
+| `console/show-tab.ts` | Show tab: the song list |
+| `console/set-bar.ts` | Run tab set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
+| `console/set-tab.ts` | Set tab: building sets by drag and drop, picking the active set |
+| `console/cues.ts` | Run tab: the cue rows with their menus |
+| `console/patch-tab.ts`, `fixtures-tab.ts` | Patch and Fixtures tabs (and the channel / count / group pickers) |
+| `console/nav.ts` | Tabs: show name, tab order, routing |
+| `console/server-link.ts` | Console side of the show-server link |
+| `console/patch.ts` | Fader patch; the show's universe count (channel addresses for the current show) |
+| `console/fixtures.ts`, `show.ts`, `songs.ts`, `sets.ts` | Fixtures, show save / load, songs and cues, sets (and what's UP NEXT across set songs) |
+| `console/stage-link.ts` | Console side of its link with the stage |
 | `stage/stage.css` | Stage styles, scoped to its pane (`:where(#stagePane)`; breakpoints are container queries on the pane) |
-| `stage/stage.js` | Starts the stage; keeps up with other app windows and the show server; ⌥-click traces |
-| `stage/state.js` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
-| `stage/view3d.js`, `plan.js` | The 3D view and the plan view, with their mouse handling |
-| `stage/sidebar.js` | Fixture list, inspector and key strip |
-| `stage/panel.js` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
-| `stage/actions.js`, `keys.js` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
-| `stage/dialogs.js` | Box size, View settings, Place rig and Place fixture dialogs |
-| `stage/link.js` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
-| `stage/stage-model.js` | Fixture and rig data, DMX values ↔ angles / color / beam, aiming math, save format |
-| `stage/console-link.js` | Stage side of its link with the console |
-| `stage/show-link.js` | Stage side of the show-server link: keeps the stage with the show |
-| `stage/fixture-library.js` | Open Fixture Library browsing, picker, fixture mode → channel profile |
-| `shared/engine.js` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
-| `shared/trace.js` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
-| `shared/pan-tilt-pad.js` | The ✥ pan / tilt pad (hold and move the mouse), used under the console's pan / tilt faders and in the stage inspector |
-| `shared/color-picker.js` | The color picker (wheel, swatches, R/G/B; one, shared by the console and the stage) in place of the browser's |
+| `stage/stage.ts` | Starts the stage; keeps up with other app windows and the show server; ⌥-click traces |
+| `stage/state.ts` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
+| `stage/view3d.ts`, `plan.ts` | The 3D view and the plan view, with their mouse handling |
+| `stage/frame.ts` | Work done at the start of each 3D frame, before it's drawn (the console's latest levels are taken there, so they show in that frame) |
+| `stage/sidebar.ts` | Fixture list, inspector and key strip |
+| `stage/panel.ts` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
+| `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
+| `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
+| `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
+| `stage/stage-model.ts` | Fixture and rig data, DMX values ↔ angles / color / beam, aiming math, save format |
+| `stage/console-link.ts` | Stage side of its link with the console |
+| `stage/show-link.ts` | Stage side of the show-server link: keeps the stage with the show |
+| `stage/fixture-library.ts` | Open Fixture Library browsing, picker, fixture mode → channel profile |
+| `shared/engine.ts` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
+| `shared/trace.ts` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
+| `shared/pan-tilt-pad.ts` | The ✥ pan / tilt pad (hold and move the mouse), used under the console's pan / tilt faders and in the stage inspector |
+| `shared/color-picker.ts` | The color picker (wheel, swatches, R/G/B; one, shared by the console and the stage) in place of the browser's |
 | `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, thin scrollbars (`.thin-scroll`), and the styles of the shared dialog, color picker and trace card; loaded by the app page |
-| `shared/ask.js` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |
-| `shared/server-socket.js` | The window's one WebSocket to the show server (token, reconnecting), shared by the console and the stage |
-| `shared/console-stage.js` | The console ↔ stage link inside the page: what each side may call on the other |
-| `shared/panes.js` | Which pane you're working in (the stage's keys only act there) |
-| `shared/live-fields.js` | Which show fields change while playing, used by the server and the console |
-| `shared/address.js` | Universes and channel addresses (`2/45` ↔ 557) |
-| `shared/attributes.js` | Fixture attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
-| `shared/color.js` | Hex ↔ R/G/B, and mixing a color onto a fixture's emitters (red, green, blue, deep red, white, amber, lime, cyan, indigo, UV) and back |
-| `shared/numbers.js`, `html.js`, `ids.js` | Small helpers: clamping to 0–255 and ranges, escaping text for HTML, new ids |
+| `shared/ask.ts` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |
+| `shared/server-socket.ts` | The window's one WebSocket to the show server (token, reconnecting), shared by the console and the stage |
+| `shared/console-stage.ts` | The console ↔ stage link inside the page: what each side may call on the other |
+| `shared/panes.ts` | Which pane you're working in (the stage's keys only act there) |
+| `shared/live-fields.ts` | Which show fields change while playing, used by the server and the console |
+| `shared/address.ts` | Universes and channel addresses (`2/45` ↔ 557) |
+| `shared/attributes.ts` | Fixture attributes (dimmer, pan, tilt, red, green, blue, zoom) and their names |
+| `shared/color.ts` | Hex ↔ R/G/B, and mixing a color onto a fixture's emitters (red, green, blue, deep red, white, amber, lime, cyan, indigo, UV) and back |
+| `shared/numbers.ts`, `html.ts`, `ids.ts`, `storage.ts` | Small helpers: clamping to 0–255 and ranges (`clamp`, `clampInt`, `clampByte`), escaping text for HTML and making elements (`el(tag, class, text)`, `button(class, text)`), new ids, and this browser's localStorage without the throwing (`readStored`/`store`, `readStoredJson`/`storeJson`) |
+| `shared/query.ts` | Element lookups that must succeed (`elById`, `$`, `must`): they throw naming what's missing; `elById(id, HTMLButtonElement)` also checks the kind (the console's `dom.ts` uses it for all its elements) |
+| `shared/guards.ts` | Checks for outside data (saved files, server messages, `data-*` values): `isOneOf`, `isRecord`, `isPresent`; `errorMessage` for caught errors |
+| `shared/protocol.ts` | Types of the WebSocket messages between the page and the show server |
 
 ### How it all talks
 
@@ -624,7 +634,7 @@ The console and the stage are one app: anything both use (and the page header, o
    browser (this computer or another one)            show computer
   ┌──────────────────────────────────────┐        ┌──────────────────────────┐
   │  the app (one page)                  │  /ws   │  show server             │
-  │    console ──┐   ┌── one connection ─┼◀──────▶│  (server/server.js)      │    USB    ┌───────────────┐
+  │    console ──┐   ┌── one connection ─┼◀──────▶│  (server/server.ts)      │    USB    ┌───────────────┐
   │              │ in-page link          │        │   · holds the show       │──────────▶│ DMX USB Pro   │──▶ lights
   │    stage   ◀─┘   │  (both use it)    │        │   · runs fades, 40 Hz    │  (one per │ (per universe)│
   │                                      │        │   · saves session.json   │  universe)└───────────────┘
@@ -632,14 +642,14 @@ The console and the stage are one app: anything both use (and the page header, o
   └──────────────────────────────────────┘
 ```
 
-There are three links; the first two share the window's one WebSocket (`shared/server-socket.js`), and each side ignores the other's messages. The **show server** is the one that counts: it holds the show, runs the fades and drives the DMX interfaces, so closing or backgrounding a browser tab never affects the lights. Every app window is a view of it, and windows keep each other in step only through it.
+There are three links; the first two share the window's one WebSocket (`shared/server-socket.ts`), and each side ignores the other's messages. The **show server** is the one that counts: it holds the show, runs the fades and drives the DMX interfaces, so closing or backgrounding a browser tab never affects the lights. Every app window is a view of it, and windows keep each other in step only through it.
 
 #### 1. Console ↔ show server (WebSocket `/ws`)
 
-`console/server-link.js`, over `shared/server-socket.js`.
+`console/server-link.ts`, over `shared/server-socket.ts`.
 
 - **Connecting.** The server answers with `hello`: the show, the stage, the live mix (master, submasters, crossfade, LIVE and the selected cue, whether a transition is running, held flash / blackout faders) and the DMX status. An empty server (first run) takes the first console's show (`seed`).
-- **Console → server: only what changed.** The whole show when its structure changes, single fader cells while dragging, live fields (`shared/live-fields.js`), held flash / blackout buttons, GO / pause / stop, a loaded show file's stage, and requests (DMX, the stage for **Save show**) answered with a `reply`. Every message is in the [message reference](#message-reference-websocket-ws).
+- **Console → server: only what changed.** The whole show when its structure changes, single fader cells while dragging, live fields (`shared/live-fields.ts`), held flash / blackout buttons, GO / pause / stop, a loaded show file's stage, and requests (DMX, the stage for **Save show**) answered with a `reply`. Every message is in the [message reference](#message-reference-websocket-ws).
 
 - **Server → consoles.** Each edit is passed on to the other consoles. `live` is sent on every fade step (and `show`, to every console, when GO arrives on the next set song), and `dmx` whenever the output status changes.
 - **No jitter while dragging.** A value just changed on a console wins over the server's broadcasts for 0.6 s.
@@ -647,7 +657,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 
 #### 2. Stage ↔ show server (the same WebSocket)
 
-`stage/show-link.js`, over `shared/server-socket.js`. This keeps the stage (box, rigs, fixtures) with the show, so it's in the show file and the same on every computer.
+`stage/show-link.ts`, over `shared/server-socket.ts`. This keeps the stage (box, rigs, fixtures) with the show, so it's in the show file and the same on every computer.
 
 - **Connecting.** `hello` carries the server's stage. The stage sends its own instead if the server has none yet, or if it was edited while it couldn't reach the server.
 - **Edits.** After an edit made on the stage, it sends the whole stage (`stage`), and the server passes it on to the other app windows' stages. Values that only followed the console aren't sent; the console already has them.
@@ -657,9 +667,9 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 
 #### 3. Console ↔ stage (inside the page)
 
-`console/stage-link.js` ↔ `stage/console-link.js`, over `shared/console-stage.js`. The console and the stage are one page, so this link is always there: there's no "console offline", no tab to reopen, and nothing between browser tabs. Each app window has its own console and stage; other windows follow through the show server (links 1 and 2). Each side joins the link with the functions the other may call; a call runs as soon as the caller's current update is done.
+`console/stage-link.ts` ↔ `stage/console-link.ts`, over `shared/console-stage.ts`. The console and the stage are one page, so this link is always there: there's no "console offline", no tab to reopen, and nothing between browser tabs. Each app window has its own console and stage; other windows follow through the show server (links 1 and 2). Each side joins the link with the functions the other may call; a call runs as soon as the caller's current update is done.
 
-- **Console → stage: `levels`.** Output levels for every universe, which faders feed each channel, and the console's fixtures. It's called on every output change, and when the stage starts (its `hello`).
+- **Console → stage: `levels`.** Output levels for every universe (whole numbers, as DMX sends them, plus `exact`: the same unrounded, which the stage draws so a fade brightens smoothly rather than in DMX's whole steps; the fixtures' DMX values stay whole), which faders feed each channel, and the console's fixtures. It's called on every output change, and when the stage starts (its `hello`).
 - **Stage → console:**
 
   | Call | What |
@@ -715,7 +725,7 @@ Requests (those with `id`, a number the console picks) are answered with a `repl
 
 ##### The live object
 
-What changes while playing (`show.live()` in `server/show.js`; the field lists are in `shared/live-fields.js`):
+What changes while playing (`show.live()` in `server/show.ts`; the field lists are in `shared/live-fields.ts`):
 
 | Field | Meaning |
 |---|---|
@@ -726,11 +736,11 @@ What changes while playing (`show.live()` in `server/show.js`; the field lists a
 | `fade` | `null`, or `{ paused }` while a transition runs (server → console only) |
 | `flashing`, `blackedOut` | fader indexes held by any console (server → console only) |
 
-UP NEXT isn't sent: each side works it out from LIVE and the set (`upNextCue` in `console/sets.js`). Past a song's last cue it is the index one past the end, meaning the next set song's first cue.
+UP NEXT isn't sent: each side works it out from LIVE and the set (`upNextCue` in `console/sets.ts`). Past a song's last cue it is the index one past the end, meaning the next set song's first cue.
 
 ##### The show object
 
-What the console saves and the server holds (`serializeShow` / `parseShow` in `console/show.js`). A saved file adds `version` (1), `app` (`"UnnaturalLight"`), `kind` (`"show"`), `savedAt` and, when there is one, `stage`; a file with another `app` or `kind` is refused.
+What the console saves and the server holds (`serializeShow` / `parseShow` in `console/show.ts`). A saved file adds `version` (1), `app` (`"UnnaturalLight"`), `kind` (`"show"`), `savedAt` and, when there is one, `stage`; a file with another `app` or `kind` is refused.
 
 | Field | Meaning |
 |---|---|
@@ -754,7 +764,7 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 
 #### DMX output
 
-Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved, and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.js`) and its network output (`server/net-dmx.js`; a packet only when the frame changed, or after 1 s). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
+Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved (during a fade, `live.fade` carries its start, target, length and time elapsed: between these updates, which arrive unevenly, each console works the crossfade out itself every screen frame for what it shows, so the stage view fades smoothly; only the server's value is synced back), and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.ts`) and its network output (`server/net-dmx.ts`; a packet only when the frame changed, or after 1 s). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
 
 #### Other computers
 

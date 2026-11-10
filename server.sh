@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the UnnaturalLight show server (server/server.js): serves the console
+# Start the UnnaturalLight show server (server/server.ts): serves the console
 # and stage, holds the show and drives the DMX USB Pro(s).
 #
 #   ./server.sh                 this machine only, port 8080
@@ -15,7 +15,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "error: node not found (install Node.js 20 or newer: https://nodejs.org)" >&2
+  echo "error: node not found (install Node.js 22.13 or newer: https://nodejs.org)" >&2
   exit 1
 fi
 
@@ -25,4 +25,4 @@ if [ ! -d node_modules ] || [ package.json -nt node_modules ]; then
   touch node_modules
 fi
 
-exec node server/server.js "$@"
+exec node --experimental-strip-types --disable-warning=ExperimentalWarning server/server.ts "$@"

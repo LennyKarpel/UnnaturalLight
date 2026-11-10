@@ -1,0 +1,8 @@
+/**
+ * The parts of a show that change while playing, kept by the show server
+ * (../server/show.ts) and synced live by every console (../console/server-link.ts).
+ */
+
+/** Show fields that change while playing (sent on their own, many times a second). */
+export const LIVE_FIELDS = ["master", "cross", "fromSub", "toSub", "fromCue", "selectedCue"] as const;
+export type LiveField = (typeof LIVE_FIELDS)[number];
