@@ -64,3 +64,55 @@ test("summaries: accepted in requests, sent to Claude as context, written out pl
   assert.match(text, /^Summary of what came before: before\nOperator: play song 2\nAssistant used select_song \{"song":"2"\}\nTool result: x+…\nAssistant: Song 2 is LIVE\.$/);
   assert.ok(text.length < 600, "long tool results are cut short");
 });
+
+// --- round 2: fixtures ---------------------------------------------------------
+
+import { findFixtures, fixtureLevels, fixtureRoles, roleFromName, type FixtureInfo } from "../page/chat/tools.ts";
+
+const fx = (name: string, group: string | null, roles: (string | null)[], firstFader: number): FixtureInfo => ({
+  name,
+  group,
+  channels: roles.map((role, k) => ({ channel: 100 + k, role: role as FixtureInfo["channels"][number]["role"], faders: [firstFader + k] })),
+});
+const ring1 = fx("Ring 1 - 1", "Ring 1", ["dimmer", "pan", "tilt", "red", "green", "blue", "white", "zoom"], 1);
+const ring2 = fx("Ring 1 - 2", "Ring 1", ["dimmer", "red", "green", "blue"], 9);
+const par = fx("Front Par", null, [null, null], 20);
+const all = [ring1, ring2, par];
+
+test("findFixtures: by name, group, all, or the one name containing it", () => {
+  assert.deepEqual(findFixtures(all, ["Ring 1 - 2"]), [ring2]);
+  assert.deepEqual(findFixtures(all, ["ring 1"]), [ring1, ring2], "a group's name");
+  assert.deepEqual(findFixtures(all, ["all"]), all);
+  assert.deepEqual(findFixtures(all, ["par"]), [par]);
+  assert.deepEqual(findFixtures(all, ["Ring 1 - 1", "ring 1"]), [ring1, ring2], "no repeats");
+  assert.throws(() => findFixtures(all, ["- "]), /matches "Ring 1 - 1", "Ring 1 - 2"/);
+  assert.throws(() => findFixtures(all, ["back light"]), /No fixture or group "back light"/);
+  assert.throws(() => findFixtures(all, []), /Which fixtures/);
+});
+
+test("fixture roles: from the fixture's channels, else from fader names (… Dim, … R)", () => {
+  assert.equal(roleFromName("Front Par Dim"), "dimmer");
+  assert.equal(roleFromName("Par 2 R"), "red");
+  assert.equal(roleFromName("Wash Dimmer"), "dimmer");
+  assert.equal(roleFromName("Fader 12"), null);
+  const names = (f: number) => (f === 20 ? "Front Par Dim" : f === 21 ? "Front Par Pan" : "");
+  assert.deepEqual([...fixtureRoles(par, names)], [["dimmer", [20]], ["pan", [21]]]);
+  assert.deepEqual(fixtureRoles(ring1, names).get("zoom"), [8]);
+});
+
+test("fixtureLevels: dimmer in %, color mixed onto the emitters, missing channels reported", () => {
+  const roles = fixtureRoles(ring1, () => "");
+  const { cells, missing } = fixtureLevels(roles, { dimmer: 50, color: "#ff0000", pan: 128, channels: { uv: 10 } });
+  assert.equal(cells.get(1), 128, "dimmer 50% → 128");
+  assert.equal(cells.get(4), 255, "red");
+  assert.equal(cells.get(5), 0, "green");
+  assert.equal(cells.get(7), 0, "no white in pure red");
+  assert.equal(cells.get(2), 128, "pan");
+  assert.deepEqual(missing, ["uv"]);
+  assert.throws(() => fixtureLevels(roles, { color: "red" }), /#rrggbb/);
+  assert.throws(() => fixtureLevels(roles, { channels: { sparkle: 1 } }), /Unknown channel "sparkle"/);
+  assert.throws(() => fixtureLevels(roles, { dimmer: 140 }), /dimmer must be 0–100/);
+  // White light on red / green / blue / white: mostly the white emitter.
+  const white = fixtureLevels(roles, { color: "#ffffff" }).cells;
+  assert.equal(white.get(7), 255);
+});

@@ -17,9 +17,10 @@ import {
   normalizeNavOrder,
   normalizeShowName,
   parseShow,
+  serializeShow,
   normalizeUniverses,
 } from "./show.ts";
-import { type Cue, createCue, MAX_CUES, normalizeSongs, resolveActiveSong } from "./songs.ts";
+import { type Cue, type Song, createCue, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
 import {
   type PatchTarget,
   FADER_COUNT,
@@ -166,7 +167,7 @@ import {
 } from "./fixtures-tab.ts";
 import { errorMessage } from "../shared/guards.ts";
 import { el } from "../shared/html.ts";
-import { clamp, clampInt } from "../shared/numbers.ts";
+import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
 
 // ---------------------------------------------------------------------
 // Universes: count, outputs (DMX USB Pro / Art-Net / sACN), Channels-tab meter universe
@@ -845,8 +846,141 @@ const consoleChat = {
   setCrossfader(percent: number) {
     setCross(percent, { fromUser: true });
   },
+
+  // --- editing (round 2) ------------------------------------------------------
+  // Cues are found by song id (null = the playing song) and 0-based index.
+  // Each edit goes through the same state and redraws as the console's own
+  // controls, then pushToDmx syncs it to the show server.
+
+  /** A cue's name, In time and every fader's level (index = fader − 1). */
+  cue(songId: string | null, index: number) {
+    const c = chatSong(songId).cues[index];
+    if (!c) throw new Error("No such cue");
+    return { name: c.name, fadeSeconds: c.fadeTime, levels: [...c.levels] };
+  },
+  /** Every fader: number (1-based), name, and whether it's patched to a channel. */
+  faders: () => Array.from({ length: FADER_COUNT }, (_, i) => ({ fader: i + 1, name: faderName(i), patched: !isUnpatched(state.patch[i]) })),
+  /** Set levels (0–255) in a cue: [fader index (0-based), level] pairs. */
+  setCueLevels(songId: string | null, index: number, cells: [number, number][]) {
+    const c = chatSong(songId).cues[index];
+    if (!c) throw new Error("No such cue");
+    for (const [i, level] of cells) if (i >= 0 && i < FADER_COUNT) c.levels[i] = clampByte(level);
+    syncSlidersFromState();
+    pushToDmx();
+  },
+  /** Add a cue after `after` (0-based; default: at the end), blank or a copy of cue `copyOf`. LIVE stays where it is. Returns its index. */
+  addCue(songId: string | null, opts: { after?: number; copyOf?: number; name?: string; fadeSeconds?: number }) {
+    const song = chatSong(songId);
+    if (song.cues.length >= MAX_CUES) throw new Error("The song has its maximum of cues");
+    const source = opts.copyOf == null ? null : song.cues[opts.copyOf];
+    if (opts.copyOf != null && !source) throw new Error("No such cue to copy");
+    const at = opts.after == null ? song.cues.length : clampInt(opts.after + 1, 0, song.cues.length);
+    song.cues.splice(at, 0, createCue({ name: opts.name ?? "", levels: source?.levels, fadeTime: opts.fadeSeconds ?? source?.fadeTime }));
+    afterCueListChange(song, (i) => (i >= at ? i + 1 : i));
+    return at;
+  },
+  /** Rename a cue ("" = just "Cue N") and/or set its In time (seconds). */
+  editCue(songId: string | null, index: number, opts: { name?: string; fadeSeconds?: number }) {
+    const song = chatSong(songId);
+    const c = song.cues[index];
+    if (!c) throw new Error("No such cue");
+    if (opts.name != null) c.name = opts.name.trim().slice(0, 40);
+    if (opts.fadeSeconds != null) c.fadeTime = normalizeCueFadeTime(opts.fadeSeconds);
+    afterCueListChange(song, (i) => i);
+    return { name: c.name, fadeSeconds: c.fadeTime };
+  },
+  /** Delete a cue (a song keeps at least MIN_CUES). */
+  deleteCue(songId: string | null, index: number) {
+    const song = chatSong(songId);
+    if (!song.cues[index]) throw new Error("No such cue");
+    if (song.cues.length <= MIN_CUES) throw new Error(`A song keeps at least ${MIN_CUES} cues`);
+    song.cues.splice(index, 1);
+    const n = song.cues.length;
+    afterCueListChange(song, (i) => (i > index ? i - 1 : Math.min(i, n - 1)));
+  },
+  /** A new song at the end of the show (not played). Returns its id. */
+  addSong(name: string) {
+    if (state.songs.length >= MAX_SONGS) throw new Error(`The show has its maximum of ${MAX_SONGS} songs`);
+    const song = createSong({ name: normalizeSongName(name, state.songs.length) });
+    state.songs.push(song);
+    afterSongsChange();
+    return song.id;
+  },
+  renameSong(songId: string, name: string) {
+    const song = chatSong(songId);
+    song.name = normalizeSongName(name, state.songs.indexOf(song));
+    afterSongsChange();
+    return song.name;
+  },
+  /** Fixtures, with the faders that drive each channel (fader numbers 1-based) and what each channel does. */
+  fixtures() {
+    const groups = new Map(state.fixtureGroups.map((g) => [g.id, g.name]));
+    return state.fixtures.map((f) => ({
+      name: f.name,
+      group: f.groupId ? groups.get(f.groupId) ?? null : null,
+      channels: Array.from({ length: f.channelEnd - f.channelStart + 1 }, (_, k) => {
+        const channel = f.channelStart + k;
+        return {
+          channel,
+          role: f.roles?.[k] ?? null,
+          faders: state.patch.flatMap((targets, i) => (targets.some((t) => t.channel === channel) ? [i + 1] : [])),
+        };
+      }),
+    }));
+  },
+  /** What the show's edits are now (everything but playback), to undo a chat turn's edits. */
+  editSnapshot: () => editSnapshot(),
+  /** Put the show's edits back to a snapshot, keeping playback (what's LIVE, the song, levels) as it is now. */
+  restoreEdits(snapshot: string) {
+    const saved: unknown = JSON.parse(snapshot);
+    if (!saved || typeof saved !== "object") throw new Error("Bad snapshot");
+    const now = currentShowState();
+    const playback = Object.fromEntries([...LIVE_FIELDS, ...PLAYBACK_FIELDS].map((f) => [f, now[f]]));
+    applyShow(parseShow({ ...saved, ...playback }), { fromServer: true });
+    persistSession();
+  },
 };
 export type ConsoleChat = typeof consoleChat;
+
+/** Show fields about playback, not edits (with LIVE_FIELDS): left out of edit snapshots. */
+const PLAYBACK_FIELDS = ["activeSongId", "activeEntryId"] as const;
+
+function editSnapshot(): string {
+  const all: Record<string, unknown> = serializeShow(currentShowState());
+  for (const f of ["savedAt", ...LIVE_FIELDS, ...PLAYBACK_FIELDS]) delete all[f];
+  return JSON.stringify(all);
+}
+
+/** A song by id, or the playing one (null). */
+function chatSong(songId: string | null): Song {
+  const song = songId == null ? getActiveSong() : state.songs.find((s) => s.id === songId);
+  if (!song) throw new Error("No such song");
+  return song;
+}
+
+/**
+ * A song's cues changed: if it's the playing song, keep LIVE / selected on
+ * the same cues (`moved` maps an old index to its new one) and redraw.
+ */
+function afterCueListChange(song: Song, moved: (i: number) => number) {
+  if (song.id === getActiveSong().id) {
+    state.fromCue = moved(state.fromCue);
+    state.selectedCue = moved(state.selectedCue);
+    bindActiveSong();
+    renderCues();
+    renderSelectedGroup();
+    refreshCueSelects();
+  }
+  renderShowTab();
+  pushToDmx();
+}
+
+function afterSongsChange() {
+  syncSongUi();
+  renderShowTab();
+  renderSetTab();
+  persistSession();
+}
 window.consoleChat = consoleChat;
 
 // Live link to the stage: send output levels, apply fader moves made there.

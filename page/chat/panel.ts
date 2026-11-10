@@ -9,7 +9,7 @@
  */
 
 import type { ChatAssistantMessage, ChatMessage, ChatToolCall } from "../../shared/chat-protocol.ts";
-import { el } from "../../shared/html.ts";
+import { button, el } from "../../shared/html.ts";
 import { elById } from "../../shared/query.ts";
 import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { readStoredJson, storeJson } from "../../shared/storage.ts";
@@ -241,8 +241,46 @@ function setBusy(busy: boolean) {
   panel.classList.toggle("is-busy", busy);
 }
 
+/** The show's edits now (not playback), or null before the console is up. */
+function editSnapshot(): string | null {
+  try {
+    return window.consoleChat?.editSnapshot() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * After a turn that edited the show: an Undo button that puts the edits
+ * back as they were before it (playback stays as it is). Only while the
+ * show hasn't changed since; only the latest turn's.
+ */
+function offerUndo(before: string, after: string) {
+  const row = el("div", "chat-undo");
+  const btn = button("quiet", "Undo these changes");
+  btn.title = "Put cues, songs and fixtures back as they were before this request (what's LIVE stays)";
+  row.append(btn);
+  log.append(row);
+  scrollDown();
+  btn.addEventListener("click", () => {
+    row.remove();
+    if (editSnapshot() !== after) {
+      bubble("hint", "Can't undo: the show has changed since.");
+      return;
+    }
+    try {
+      window.consoleChat?.restoreEdits(before);
+      bubble("hint", "Undone.");
+    } catch (err) {
+      bubble("error", `Couldn't undo: ${errorMessage(err)}`);
+    }
+  });
+}
+
 async function send(text: string) {
   log.querySelector(".is-hint")?.remove();
+  for (const old of log.querySelectorAll(".chat-undo")) old.remove();
+  const before = editSnapshot();
   capHistory();
   const prompt: ChatMessage = { role: "user", text };
   prefs.history.push(prompt);
@@ -318,6 +356,8 @@ async function send(text: string) {
   }
   if (abort.signal.aborted) bubble("hint", "Stopped.");
   for (const c of chips.values()) if (c.el.dataset.state === "wait") c.set("stopped", "Not run");
+  const after = editSnapshot();
+  if (before != null && after != null && after !== before) offerUndo(before, after);
   running = null;
   setBusy(false);
   save();

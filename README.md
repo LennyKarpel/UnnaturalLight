@@ -97,7 +97,12 @@ UnnaturalLight is **one app on one page**: the Stage on the left and the Console
 
 The **Chat** button in the page header opens a panel on the right where you can ask for things in plain words, such as "play song 2", "what's up next?", "master to 60%" or "GO". It answers briefly and does what you asked through this window's console, the same as clicking the controls yourself, so every other window follows as usual. The panes make room for the panel; it never covers them.
 
-- **What it can do so far:** see what's playing and what's in the show; play a song (from a given cue); make a cue LIVE (a jump, with no fade); GO; pause, resume or stop a transition; set the master and the crossfader. More is coming: editing cues, fixture settings and the stage.
+- **What it can do so far:**
+  - *Playback:* see what's playing and what's in the show; play a song (from a given cue); make a cue LIVE (a jump, with no fade); GO; pause, resume or stop a transition; set the master and the crossfader.
+  - *Cues and songs:* read a cue's levels; set faders in a cue; add a cue (empty or a copy of another), rename it or change its fade time, delete it; add or rename a song.
+  - *Fixtures:* list the fixtures and their channels; set a fixture's (or a group's, e.g. "Ring 1") dimmer in %, color (any color name; it's mixed onto the fixture's emitters), pan, tilt, zoom, or any channel by its role. Unless you name a cue, edits go into the **LIVE cue**, so you see them at once.
+  - The stage and DMX outputs aren't in the chat yet.
+- **Undo:** after a request that changed the show (cues, songs, fixture levels), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show since. Playback (LIVE, GO, master) isn't undone.
 - **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran).
 - **It does what you ask straight away**, GO included: it never asks you to confirm. Word requests carefully during a show.
 - **Resize it** by dragging its left edge (the grip in the middle marks it); double-click the edge for the default width. With the edge focused, ← / → resize it too (⇧ for bigger steps). The width is remembered.
@@ -583,7 +588,7 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, and the chat (the `/chat` request checks, finding songs, the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -591,9 +596,9 @@ The console and the stage are one app: anything both use (and the page header, o
 |---|---|
 | `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.ts`), and the import map for three.js |
 | `page/page.ts`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
-| `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop |
+| `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop, Undo, the resize divider |
 | `page/chat/loop.ts` | One chat turn: POST `/chat`, stream the reply, run the tools it calls, send the results back, repeat |
-| `page/chat/tools.ts` | The chat's tools: name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
+| `page/chat/tools.ts` | The chat's tools (playback, cues and songs, fixtures): name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, the chat at `/chat`, 40 Hz fade / DMX loop, saving |
 | `server/chat/chat.ts` | `POST /chat`: checks the request, asks the model, streams the reply; the system prompt. `POST /chat/summary`: sums up older messages |
@@ -818,7 +823,7 @@ page runs the tools → sends the results in the next POST → repeat
 | `UNNATURALLIGHT_CHAT_EFFORT` | `low` | How hard it thinks (`low` … `max`); low keeps replies quick |
 
 - **Anthropic adapter:** streams with prompt caching on, and opts into the API's server-side fallbacks (`fallbacks: "default"`), so a request the model declines is retried on a fallback model in the same call. Claude's thinking blocks are tied to the system prompt, tools and earlier messages they were made with; a saved conversation can outlive those (an update changes the prompt or tools, or the panel drops its oldest messages), so the adapter asks the API to drop blocks that no longer match (`prefix_mismatch_behavior: "drop_block"`) rather than fail with *“bound to a different conversation”*. Only the model's past reasoning is lost; the conversation itself is kept.
-- **No confirming:** tools run as soon as the model calls them. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
+- **No confirming:** tools run as soon as the model calls them; the panel's **Undo** is the safety net instead. Before each prompt it takes `consoleChat.editSnapshot()` (the show as saved, minus playback and live fields) and, if the turn changed it, offers `restoreEdits(before)`, only while the snapshot still equals the one after the turn. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
 - **Long chats:** past 20 prompts the panel sends the oldest 10 (and any earlier summary) to `POST /chat/summary`, which has the model sum them up in plain text (`transcript` and `SUMMARY_PROMPT` in `server/chat/chat.ts`, no tools); the summary replaces them as a `summary` message at the start (to Claude: a user message marked as a summary). It runs in the background after a turn, and only if those messages are still there unchanged. If summing up keeps failing, the oldest prompts are dropped past 40. A prompt whose turn failed or was stopped before anything was done is taken back out of the conversation.
 - **Saved conversations are repaired** on load and before each turn (`repairHistory` in `page/chat/loop.ts`): a reload or server restart mid-turn can leave a tool call without a result, which the API refuses, so it gets a *not run* result.
 - **Adding a tool:** add it to `TOOLS` in `page/chat/tools.ts`, and a hook in `consoleChat` (`console/app.ts`) if it needs one. Nothing on the server changes.

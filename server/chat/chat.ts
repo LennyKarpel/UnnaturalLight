@@ -24,8 +24,13 @@ Terms:
 - LIVE: the cue on stage now. UP NEXT: the cue GO fades to (the next cue, or the next set song's first).
 - transition: GO fades from LIVE to UP NEXT over UP NEXT's fade time.
 - master: overall level, 0–100%. crossfader: 0 = all LIVE, 100 = all UP NEXT.
+- fader: one of 256 sliders; a cue stores a level (0–255) for each. Faders drive DMX channels; a fixture's channels each do one thing (dimmer, pan, tilt, red, green, blue, white, amber, zoom, …).
 
-Use the tools to see and change the show; never guess what's in it — call get_show when you need to know. Making a cue LIVE by selecting it jumps straight there (no fade); GO fades. Do what's asked straight away — don't ask for confirmation first. If no tool can do what's asked, say so plainly.`;
+Use the tools to see and change the show; never guess what's in it — call get_show, get_cue or list_fixtures when you need to know. Making a cue LIVE by selecting it jumps straight there (no fade); GO fades.
+
+Editing: a change to the LIVE cue shows on stage at once; other cues change what they'll look like when played. Edits go into the LIVE cue unless the person names another. For a fixture's brightness, color or position use set_fixture (dimmer in %, color as #rrggbb); use set_cue_levels for faders by number. "Brighter" or "dimmer" without a number: change it by about 20 percentage points. After editing, say in a few words what changed.
+
+Do what's asked straight away — don't ask for confirmation first (the person can undo a request's edits with the Undo button in the chat). If no tool can do what's asked, say so plainly.`;
 
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {

@@ -95,6 +95,8 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
 .chat-msg.is-user { align-self: flex-end; background: var(--panel-2); }
 /* A prompt that failed before anything was done (left out of the conversation). */
 .chat-msg.is-user.is-failed { opacity: 0.5; text-decoration: line-through; }
+.chat-undo { align-self: flex-start; }
+.chat-undo button { padding: 2px 10px; font-size: var(--text-sm); }
 .chat-summary { color: var(--muted); font-size: var(--text-sm); }
 .chat-summary > summary { cursor: pointer; }
 .chat-summary-text { white-space: pre-wrap; margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--line-strong); }
