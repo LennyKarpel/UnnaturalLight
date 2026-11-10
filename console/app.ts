@@ -48,7 +48,7 @@ import {
   normalizeMount,
   normalizeRoles,
 } from "./fixtures.ts";
-import { normalizeSets } from "./sets.ts";
+import { normalizeSets, playbackCue } from "./sets.ts";
 import {
   currentCueTitle,
   channelsCueMenuBtn,
@@ -78,6 +78,7 @@ import {
 import {
   blankShowState,
   getActiveSong,
+  getActiveSet,
   getPlaybackLevels,
   bindActiveSong,
   syncPlaybackPair,
@@ -128,11 +129,12 @@ import {
   stopTimedFade,
   goNextCue,
   stepLiveCue,
+  setSelectedCue,
   showArrivedCue,
   toggleFadePause,
   followFade,
 } from "./live.ts";
-import { syncSongUi, renderShowTab, addSong } from "./show-tab.ts";
+import { syncSongUi, renderShowTab, addSong, setActiveSong } from "./show-tab.ts";
 import { renderSetTab } from "./set-tab.ts";
 import {
   cueUi,
@@ -164,7 +166,7 @@ import {
 } from "./fixtures-tab.ts";
 import { errorMessage } from "../shared/guards.ts";
 import { el } from "../shared/html.ts";
-import { clampInt } from "../shared/numbers.ts";
+import { clamp, clampInt } from "../shared/numbers.ts";
 
 // ---------------------------------------------------------------------
 // Universes: count, outputs (DMX USB Pro / Art-Net / sACN), Channels-tab meter universe
@@ -771,11 +773,81 @@ declare global {
     consoleHeader?: ConsoleHeader;
     /** Set by the page header if it starts first: called once the console is ready. */
     onConsoleHeader?: (header: ConsoleHeader) => void;
+    /** The console's hooks for the chat panel's tools (page/chat/tools.ts). */
+    consoleChat?: ConsoleChat;
   }
 }
 
 window.consoleHeader = consoleHeader;
 window.onConsoleHeader?.(consoleHeader);
+
+// For the chat panel's tools (../page/chat/tools.ts): what the show is
+// doing, and the same playback actions as the console's own controls.
+const consoleChat = {
+  /** The show, as the chat's get_show tool reports it. */
+  show() {
+    const show = currentShowState();
+    const song = getActiveSong();
+    const set = getActiveSet();
+    const songNumber = (id: string) => show.songs.findIndex((s) => s.id === id) + 1;
+    const hasUpNext = state.toCue !== state.fromCue;
+    return {
+      showName: show.showName,
+      serverConnected: state.serverLive,
+      playing: {
+        song: { number: songNumber(song.id), name: song.name },
+        live: { cue: state.fromCue + 1, label: cueLabel(state.fromCue) },
+        upNext: hasUpNext ? { label: cueLabel(state.toCue), fadeSeconds: playbackCue(state, state.toCue)?.fadeTime ?? null } : null,
+        transition: state.fadeState ? (state.fadeState.paused ? "paused" : "running") : "none",
+      },
+      master: Math.round(state.master),
+      crossfader: Math.round(state.cross),
+      activeSet: { name: set.name, songs: set.entries.map((e) => show.songs.find((s) => s.id === e.songId)?.name ?? "?") },
+      songs: show.songs.map((s, i) => ({
+        number: i + 1,
+        name: s.name,
+        cues: s.cues.map((c, j) => ({ number: j + 1, name: c.name, fadeSeconds: c.fadeTime })),
+      })),
+    };
+  },
+  /** Songs in show order (the chat finds one by number or name). */
+  songs: () => state.songs.map((s) => ({ id: s.id, name: s.name, cues: s.cues.length })),
+  /** Play song `songId` from cue `cue` (0-based): it's LIVE at once, no fade. */
+  playSong(songId: string, cue = 0) {
+    setActiveSong(songId, undefined, cue);
+  },
+  /** Make cue `cue` (0-based) of the playing song LIVE at once, no fade. */
+  makeLive(cue: number) {
+    setSelectedCue(cue);
+    cuesEl.querySelector<HTMLElement>(`.fader-row[data-row="${state.selectedCue}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  },
+  /** GO (false: nothing UP NEXT, or the show server is offline). */
+  go(): boolean {
+    if (!state.serverLive || state.toCue === state.fromCue) return false;
+    goNextCue();
+    return true;
+  },
+  /** Pause / resume the running transition (false: none running). */
+  pause(): boolean {
+    if (!state.fadeState) return false;
+    toggleFadePause();
+    return true;
+  },
+  /** Stop the running transition where it is. */
+  stop() {
+    stopTimedFade();
+  },
+  setMaster(percent: number) {
+    state.master = clamp(percent, 0, 100);
+    syncMasterUi();
+    pushToDmx();
+  },
+  setCrossfader(percent: number) {
+    setCross(percent, { fromUser: true });
+  },
+};
+export type ConsoleChat = typeof consoleChat;
+window.consoleChat = consoleChat;
 
 // Live link to the stage: send output levels, apply fader moves made there.
 startStageLink({

@@ -15,6 +15,7 @@
     </script>
     <link rel="stylesheet" href="shared/theme.css" />
     <link rel="stylesheet" href="page/page.css" />
+    <link rel="stylesheet" href="page/chat/chat.css" />
     <link rel="stylesheet" href="console/styles.css" />
     <link rel="stylesheet" href="stage/stage.css" />
     <script type="importmap">
@@ -47,6 +48,7 @@
           <span id="serverPill" class="pill" title="Not connected to the show server">Server · offline</span>
           <span class="sep"></span>
         </span>
+        <button type="button" id="chatBtn" title="Chat: ask for changes in words" aria-pressed="false" aria-controls="chatPanel">Chat</button>
         <button type="button" class="swap" id="swapBtn" title="Swap sides (Both view)" aria-label="Swap sides">⇄</button>
         <div class="seg" role="group" aria-label="Show">
           <button type="button" data-mode="console" title="Show only the console">Console</button>
@@ -531,6 +533,8 @@
   
       </div>
     </main>
+    <!-- The chat panel (page/chat/panel.ts fills it in). -->
+    <aside id="chatPanel" class="chat" aria-label="Chat" hidden></aside>
 
     <div id="showMenu" class="menu" role="menu" aria-label="Show actions" hidden>
       <button type="button" class="menu-item" role="menuitem" data-act="rename">Rename</button>
@@ -540,5 +544,6 @@
     <script type="module" src="page/page.ts"></script>
     <script type="module" src="console/app.ts"></script>
     <script type="module" src="stage/stage.ts"></script>
+    <script type="module" src="page/chat/panel.ts"></script>
   </body>
 </html>

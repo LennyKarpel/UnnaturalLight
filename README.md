@@ -32,6 +32,7 @@ The two stay **in sync**: when you place a fixture on the stage it's set up in t
 - A current web browser (Chrome, Edge, Safari or Firefox) for the Console and Stage.
 - **Internet access** the first time you open the Stage (it downloads its 3D library), and whenever you browse the fixture library.
 - To drive real lights: one **Enttec DMX USB Pro** per DMX universe. You can use everything else without one.
+- For the [chat](#the-chat) (optional): an **Anthropic API key**. Everything else works without one.
 
 ### Starting it
 
@@ -91,6 +92,21 @@ UnnaturalLight is **one app on one page**: the Stage on the left and the Console
 - Cues keep fading and DMX keeps flowing in every view: both run on the show server. A hidden side keeps up too (the stage follows the faders while you see only the console), so it's right the moment you show it.
 - Keyboard shortcuts go to whichever side you last clicked in (or the only one shown): the stage's keys never move fixtures while you're working in the console.
 - **The page header** (top bar) holds the console's show controls, in every view: the show's name (click it, or **⋮ → Rename**, to rename it), **New show**, **Save show**, **Load show**, the universe count and the **DMX output** button(s), the **Server** pill, and the console's latest status message (empty until something happens, like a save or a DMX connect; **Show server offline — reconnecting…** in red if the server goes away). The two panes keep their own title bars, **Stage** and **Console**.
+
+### The chat
+
+The **Chat** button in the page header opens a panel on the right where you can ask for things in plain words, such as "play song 2", "what's up next?", "master to 60%" or "GO". It answers briefly and does what you asked through this window's console, the same as clicking the controls yourself, so every other window follows as usual. The panes make room for the panel; it never covers them.
+
+- **What it can do so far:** see what's playing and what's in the show; play a song (from a given cue); make a cue LIVE (a jump, with no fade); GO; pause, resume or stop a transition; set the master and the crossfader. More is coming: editing cues, fixture settings and the stage.
+- **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran).
+- **It does what you ask straight away**, GO included: it never asks you to confirm. Word requests carefully during a show.
+- **Resize it** by dragging its left edge (the grip in the middle marks it); double-click the edge for the default width. With the edge focused, ← / → resize it too (⇧ for bigger steps). The width is remembered.
+- **Stop** (the Send button while it's working; click it) stops it; anything it hasn't done yet isn't done (– in the chat). Enter does nothing while it's working, so it never stops a turn by surprise. **New** starts a new conversation. **Esc** closes the panel.
+- The conversation is kept in this browser, so a reload doesn't lose it. App windows in the same browser share it, so use the chat in one of them at a time.
+- **Long chats are summed up:** past 20 of your prompts, the oldest 10 are summed up in a few lines (one short extra model call) and the summary takes their place: it keeps what you asked for, what was done and any names you gave things. It shows as *Earlier messages, summed up* (click to read it).
+- **A prompt that fails before anything is done** is crossed out and left out of the conversation, so typing it again means it once, not twice.
+
+**Setting it up:** the chat needs an Anthropic API key on the show computer. Set it in the terminal before starting the server, e.g. `ANTHROPIC_API_KEY=sk-ant-… ./server.sh` (or `export` it in your shell profile). Without one, the chat says so and the rest of the app works as usual. It uses the internet, and each message costs a little API usage. By default it uses Claude Opus 5.5 with a light thinking effort for quick replies; to change that, see [The chat server](#the-chat-server).
 
 ### Running from another computer
 
@@ -567,7 +583,7 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) and reading / saving shows. The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, and the chat (the `/chat` request checks, finding songs, the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -575,15 +591,21 @@ The console and the stage are one app: anything both use (and the page header, o
 |---|---|
 | `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.ts`), and the import map for three.js |
 | `page/page.ts`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
+| `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop |
+| `page/chat/loop.ts` | One chat turn: POST `/chat`, stream the reply, run the tools it calls, send the results back, repeat |
+| `page/chat/tools.ts` | The chat's tools: name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
-| `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, 40 Hz fade / DMX loop, saving |
+| `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, the chat at `/chat`, 40 Hz fade / DMX loop, saving |
+| `server/chat/chat.ts` | `POST /chat`: checks the request, asks the model, streams the reply; the system prompt. `POST /chat/summary`: sums up older messages |
+| `server/chat/model.ts` | The `ChatModel` interface and picking the provider / model from the environment |
+| `server/chat/anthropic.ts` | The Anthropic (Claude) adapter |
 | `server/show.ts` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.ts` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/net-dmx.ts` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
 | `test/` | `npm test`: unit tests for the shared logic (see above) |
 | `server/data/` | `session.json` (the show, with the stage under `stage`), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
 | `console/styles.css` | Console styles, scoped to its pane (`:where(#consolePane)`; breakpoints are container queries on the pane) |
-| `console/app.ts` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks, the show-server link |
+| `console/app.ts` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks (`consoleHeader`), the chat's hooks (`consoleChat`), the show-server link |
 | `console/state.ts` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
 | `console/dom.ts` | The console's elements (in its pane of `index.html`), the drag helpers its lists share (`wireRowDrag`: rows dragged by their handle; `startDragScroll`: scrolling the list while a drag nears its edge), and its popup menus (`openPopup` shows one by its button and resolves with the pick, or the dismissal on Esc / a click outside / another popup opening; `menuItem`, `closePopup`) |
 | `console/live.ts` | Output levels, Live strip and channel meters, LIVE / UP NEXT, GO, crossfade, submasters, master |
@@ -629,6 +651,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `shared/query.ts` | Element lookups that must succeed (`elById`, `$`, `must`): they throw naming what's missing; `elById(id, HTMLButtonElement)` also checks the kind (the console's `dom.ts` uses it for all its elements) |
 | `shared/guards.ts` | Checks for outside data (saved files, server messages, `data-*` values): `isOneOf`, `isRecord`, `isPresent`; `errorMessage` for caught errors |
 | `shared/protocol.ts` | Types of the WebSocket messages between the page and the show server |
+| `shared/chat-protocol.ts` | The chat's own message and tool types, between the page and `/chat` (no provider's format) |
 
 ### How it all talks
 
@@ -770,7 +793,35 @@ Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the conso
 
 #### Other computers
 
-By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the app with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before the app starts, and the console and the stage read it from there.
+By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket or `/chat` request from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the app with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before the app starts, and the console and the stage read it from there.
+
+#### The chat server
+
+The chat panel (`page/chat/`) runs its tools **in the page**: they call the console's own functions (`window.consoleChat`), so the chat's changes reach the show server and other windows the same way a click does, and the page never talks to a model provider. The show server's `POST /chat` (`server/chat/`) only asks the model and holds the credentials:
+
+```
+chat panel ──conversation + tool list──▶ POST /chat ──▶ model provider
+     ▲                                       │
+     └──── reply streamed, with tool calls ◀─┘
+page runs the tools → sends the results in the next POST → repeat
+```
+
+- **Request:** `{ messages, tools }` in the chat's own format (`shared/chat-protocol.ts`): `user` / `assistant` (`text`, `toolCalls`, and `raw`, the provider's own reply passed back unchanged) / `tool` (`results`, one per call). Tools are a name, description and JSON Schema.
+- **Reply:** one JSON object per line: `text` chunks as the model writes, then `done` with the whole reply (and the model's label), or `error`.
+- **Provider:** only `server/chat/model.ts` and its adapters know who answers. Another provider is another adapter (`ChatModel.reply`), picked with the environment:
+
+| Variable | Default | |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | | Credentials for the Anthropic adapter (or a profile from `ant auth login`) |
+| `UNNATURALLIGHT_CHAT_PROVIDER` | `anthropic` | Which adapter |
+| `UNNATURALLIGHT_CHAT_MODEL` | `claude-opus-5-5` | The provider's model id |
+| `UNNATURALLIGHT_CHAT_EFFORT` | `low` | How hard it thinks (`low` … `max`); low keeps replies quick |
+
+- **Anthropic adapter:** streams with prompt caching on, and opts into the API's server-side fallbacks (`fallbacks: "default"`), so a request the model declines is retried on a fallback model in the same call. Claude's thinking blocks are tied to the system prompt, tools and earlier messages they were made with; a saved conversation can outlive those (an update changes the prompt or tools, or the panel drops its oldest messages), so the adapter asks the API to drop blocks that no longer match (`prefix_mismatch_behavior: "drop_block"`) rather than fail with *“bound to a different conversation”*. Only the model's past reasoning is lost; the conversation itself is kept.
+- **No confirming:** tools run as soon as the model calls them. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
+- **Long chats:** past 20 prompts the panel sends the oldest 10 (and any earlier summary) to `POST /chat/summary`, which has the model sum them up in plain text (`transcript` and `SUMMARY_PROMPT` in `server/chat/chat.ts`, no tools); the summary replaces them as a `summary` message at the start (to Claude: a user message marked as a summary). It runs in the background after a turn, and only if those messages are still there unchanged. If summing up keeps failing, the oldest prompts are dropped past 40. A prompt whose turn failed or was stopped before anything was done is taken back out of the conversation.
+- **Saved conversations are repaired** on load and before each turn (`repairHistory` in `page/chat/loop.ts`): a reload or server restart mid-turn can leave a tool call without a result, which the API refuses, so it gets a *not run* result.
+- **Adding a tool:** add it to `TOOLS` in `page/chat/tools.ts`, and a hook in `consoleChat` (`console/app.ts`) if it needs one. Nothing on the server changes.
 
 ### Other details
 

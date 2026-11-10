@@ -14,7 +14,8 @@ import type { ClientMessage, ServerMessage } from "./protocol.ts";
 const RECONNECT_MS = 1000;
 const TOKEN_KEY = "unnaturallight.token";
 
-function accessToken() {
+/** The access token this tab was opened with (other machines), or null. */
+export function accessToken() {
   try {
     return sessionStorage.getItem(TOKEN_KEY);
   } catch {

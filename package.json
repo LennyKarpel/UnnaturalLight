@@ -12,6 +12,7 @@
     "node": ">=22.13"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "serialport": "^13.0.0",
     "ws": "^8.22.0"
   },

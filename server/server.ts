@@ -7,6 +7,8 @@
 //     and to Art-Net / sACN nodes (server/net-dmx.ts),
 //     so closing or backgrounding a browser tab never affects the lights
 //   - saves the show to server/data/session.json
+//   - answers the chat panel at POST /chat and /chat/summary (server/chat/:
+//     asks the model; the tools run in the page)
 //
 // Each app window talks to it over one WebSocket at /ws, shared by its
 // console (console/server-link.ts) and its stage (stage/show-link.ts).
@@ -29,6 +31,7 @@ import { MAX_UNIVERSES } from "../console/patch.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
 import { createShow } from "./show.ts";
+import { handleChat, handleChatSummary } from "./chat/chat.ts";
 import type { ClientMessage, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
 import { errorMessage } from "../shared/guards.ts";
 
@@ -227,8 +230,16 @@ function stripped(file: string, data: Buffer): string {
   return js;
 }
 
+/** This machine, or another that has the token printed at start. */
+const allowed = (req: http.IncomingMessage, url: URL) => isLoopback(req) || url.searchParams.get("token") === TOKEN;
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (url.pathname === "/chat" || url.pathname === "/chat/summary") {
+    if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
+    else (url.pathname === "/chat" ? handleChat : handleChatSummary)(req, res).catch((err) => console.error(err));
+    return;
+  }
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
   if (rel === "") rel = "index.html";
   const file = path.resolve(ROOT, rel);
@@ -266,7 +277,7 @@ const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://x");
   // Other machines must present the token printed at start.
-  if (url.pathname !== "/ws" || (!isLoopback(req) && url.searchParams.get("token") !== TOKEN)) {
+  if (url.pathname !== "/ws" || !allowed(req, url)) {
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
     return;
