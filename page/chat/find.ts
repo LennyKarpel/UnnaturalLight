@@ -18,6 +18,22 @@ export function findSong(songs: { id: string; name: string; cues: number }[], qu
 }
 
 /**
+ * One stage item (a rig, named position or riser) by name: exact, ignoring
+ * case, else the one whose name contains it. `kind` names it in the errors
+ * ("position"); `none` is the error when there are none at all.
+ */
+export function findByName<T extends { name: string }>(items: T[], query: unknown, kind: string, none: string): T {
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) throw new Error(`Which ${kind}?`);
+  const exact = items.filter((item) => item.name.toLowerCase() === q);
+  if (exact.length === 1) return exact[0];
+  const partial = items.filter((item) => item.name.toLowerCase().includes(q));
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) throw new Error(`"${query}" matches ${partial.map((item) => `"${item.name}"`).join(", ")}: which one?`);
+  throw new Error(items.length ? `No ${kind} "${query}" (${kind}s: ${items.map((item) => item.name).join(", ")})` : none);
+}
+
+/**
  * Fixtures by name: each query is a fixture's name, a group's name or "all"
  * (exact, ignoring case), else the one fixture whose name contains it.
  */

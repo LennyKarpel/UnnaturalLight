@@ -80,11 +80,7 @@ export function normalizeSongName(name: unknown, index = 0) {
   return text || defaultSongName(index);
 }
 
-function normalizeCue(
-  value: unknown,
-  index = 0,
-  defaultFadeTime = DEFAULT_CUE_FADE_TIME,
-): Cue | null {
+function normalizeCue(value: unknown, defaultFadeTime = DEFAULT_CUE_FADE_TIME): Cue | null {
   if (!isRecord(value)) return null;
   const obj = value;
   const id =
@@ -112,7 +108,7 @@ function normalizeCues(
   const out: Cue[] = [];
   const seen = new Set();
   for (let i = 0; i < source.length && out.length < MAX_CUES; i++) {
-    const raw = normalizeCue(source[i], i, defaultFadeTime);
+    const raw = normalizeCue(source[i], defaultFadeTime);
     if (!raw) continue;
     let id = raw.id;
     while (seen.has(id)) id = newCueId();

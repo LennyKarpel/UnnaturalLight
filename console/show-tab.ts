@@ -7,9 +7,8 @@ import { getActiveEntry, getActiveSet, bindActiveSong, persistSession, state } f
 import { abortInlineEdits, confirmAction, promptName } from "./faders.ts";
 import { pushToDmx, refreshCueSelects, renderSelectedGroup, syncCrossUi, stopTimedFade, updateFadePauseButton } from "./live.ts";
 import { renderCues, openActionMenu } from "./cues.ts";
+import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
-
-export let endInlineSongRename: null | (() => void) = null;
 
 /** Names of the sets `songId` is in. */
 function setsWithSong(songId: string) {
@@ -50,20 +49,7 @@ export function renderShowTab() {
     handle.setAttribute("aria-hidden", "true");
     handle.textContent = "⋮⋮";
 
-    const name = el("h3", "song-row-name", song.name);
-    name.title = "Click to rename";
-    name.setAttribute("role", "button");
-    name.tabIndex = 0;
-    name.addEventListener("click", (event) => {
-      event.stopPropagation();
-      beginInlineSongRename(song.id, name);
-    });
-    name.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginInlineSongRename(song.id, name);
-      }
-    });
+    const name = songNameEl(song);
 
     const meta = el("span", "song-row-meta");
     const n = song.cues.length;
@@ -167,72 +153,25 @@ function beginInlineSongRename(id: string, target: HTMLElement) {
   if (!song || !(target instanceof HTMLElement) || !target.isConnected) return;
   abortInlineEdits();
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "cue-title-input";
-  input.maxLength = 40;
-  input.value = song.name;
-  input.setAttribute("aria-label", "Song name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
-  const parent = target.parentElement;
-  if (!parent) return;
-  target.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit: boolean) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineSongRename === finishAbort) endInlineSongRename = null;
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim();
-    if (commit && next) {
-      song.name = normalizeSongName(next);
-      persistSession();
-    }
-
-    const restored = el("h3", "song-row-name", song.name);
-    restored.title = "Click to rename";
-    restored.setAttribute("role", "button");
-    restored.tabIndex = 0;
-    restored.addEventListener("click", (event) => {
-      event.stopPropagation();
-      beginInlineSongRename(id, restored);
-    });
-    restored.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginInlineSongRename(id, restored);
+  inlineRename({
+    replace: target,
+    value: song.name,
+    label: "Song name",
+    className: "cue-title-input",
+    done: (name, putBack) => {
+      if (name) {
+        song.name = normalizeSongName(name);
+        persistSession();
       }
-    });
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-    syncSongUi();
-  };
+      putBack(songNameEl(song));
+      syncSongUi();
+    },
+  });
+}
 
-  const finishAbort = () => finish(false);
-  endInlineSongRename = finishAbort;
-
-  const onKeydown = (event: KeyboardEvent) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-  const onBlur = () => finish(true);
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+/** A song row's name, click to rename. */
+function songNameEl(song: { id: string; name: string }) {
+  return clickToRename(el("h3", "song-row-name", song.name), (name) => beginInlineSongRename(song.id, name));
 }
 
 /**

@@ -1,7 +1,7 @@
 // The plan view (2D): top, front or side, with dragging and right-click.
 import * as THREE from "three";
 import { describeSpot, fmtLength, gridStep, onUnitChange, snapLength } from "./units.ts";
-import { round, beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
+import { beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
 import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";

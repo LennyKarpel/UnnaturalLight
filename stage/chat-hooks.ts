@@ -21,9 +21,6 @@ declare global {
   }
 }
 
-/** Console types by key, for the chat ("none" = stage only). */
-export const CHAT_CONSOLE_TYPES = ["movable/multi", "movable/single", "fixed/multi", "fixed/single", "none"] as const;
-
 const fixtureOrThrow = (id: string) => {
   const f = byId(id);
   if (!f) throw new Error("No such fixture on the stage");

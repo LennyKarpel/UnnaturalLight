@@ -26,13 +26,10 @@ import {
   renderSelectedGroup,
   refreshSelectedGroup,
 } from "./live.ts";
-import { endInlineSongRename } from "./show-tab.ts";
-import { cueUi, renderCues, endInlineRename } from "./cues.ts";
-import {
-  renderPatchTable,
-} from "./patch-tab.ts";
+import { cueUi, renderCues } from "./cues.ts";
+import { renderPatchTable } from "./patch-tab.ts";
 import { showTab } from "./nav.ts";
-import { endInlineFixtureRename } from "./fixtures-tab.ts";
+import { abortInlineRename, inlineRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
 
 /**
@@ -124,11 +121,9 @@ export function makeFaderNameLabel(index: number) {
   return label;
 }
 
+/** End a rename in progress (without saving) and close any open menu. */
 export function abortInlineEdits() {
-  endInlineFaderRename?.();
-  endInlineRename?.();
-  endInlineFixtureRename?.();
-  endInlineSongRename?.();
+  abortInlineRename();
   closePopup();
 }
 
@@ -170,8 +165,6 @@ function applyFaderName(index: number, name: string) {
   return true;
 }
 
-let endInlineFaderRename: null | (() => void) = null;
-
 export function wirePatchFaderTitle(title: HTMLElement, index: number): HTMLElement {
   title.className = "fader-name patch-fader-name";
   title.dataset.fader = String(index);
@@ -193,63 +186,19 @@ export function wirePatchFaderTitle(title: HTMLElement, index: number): HTMLElem
 }
 
 function beginInlineFaderRename(index: number, target: HTMLElement) {
-  if (!(target instanceof HTMLElement) || !target.isConnected) return;
+  if (!target.isConnected) return;
   abortInlineEdits();
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "cue-title-input fader-title-input";
-  input.maxLength = 40;
-  input.value = faderName(index);
-  input.setAttribute("aria-label", "Fader name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
-  const parent = target.parentElement;
-  if (!parent) return;
-  target.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit: boolean) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineFaderRename === finishAbort) endInlineFaderRename = null;
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim();
-    if (commit && next && next !== faderName(index)) {
-      applyFaderName(index, next);
-      return;
-    }
-
-    const restored = document.createElement("h3");
-    wirePatchFaderTitle(restored, index);
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-  };
-
-  const finishAbort = () => finish(false);
-  endInlineFaderRename = finishAbort;
-
-  const onKeydown = (event: KeyboardEvent) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-  const onBlur = () => finish(true);
-
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+  inlineRename({
+    replace: target,
+    value: faderName(index),
+    label: "Fader name",
+    className: "cue-title-input fader-title-input",
+    done: (name, putBack) => {
+      // A new name redraws every fader title; otherwise put this one back.
+      if (name && applyFaderName(index, name)) return;
+      putBack(wirePatchFaderTitle(document.createElement("h3"), index));
+    },
+  });
 }
 
 function openFaderNameMenu(anchor: HTMLElement, index: number, clientX?: number, clientY?: number) {
@@ -328,6 +277,41 @@ export function applyFaderPatchState(wrap: HTMLElement, slider: HTMLInputElement
   } else if (slider.hasAttribute("title")) {
     slider.removeAttribute("title");
   }
+}
+
+/**
+ * Fader `i`'s cell in a row of faders (the live row, a cue's row, the
+ * selected cue): its name, what it's patched to and its value, lit up when
+ * it's the selected fader. Pressing it selects the fader.
+ */
+export function faderCell(i: number, level: number, className = "fader") {
+  const wrap = el("div", className);
+  wrap.dataset.fader = String(i);
+  wrap.classList.toggle("is-selected-fader", i === state.selectedFader);
+  wrap.addEventListener("pointerdown", () => setSelectedFader(i));
+  const patched = el("div", "patch-target", formatChannelLabel(state.patch[i]));
+  patched.title = formatChannelTooltip(state.patch[i]);
+  if (isUnpatched(state.patch[i])) patched.classList.add("is-unpatched");
+  const value = el("div", "value", String(level));
+  wrap.append(makeFaderNameLabel(i), patched, value);
+  return { wrap, patched, value };
+}
+
+/** A cue level slider (0–255) for fader `i`, added to its cell; `onInput` gets each new level. */
+export function levelSlider(wrap: HTMLElement, i: number, level: number, label: string, onInput: (level: number) => void) {
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "255";
+  slider.value = String(level);
+  slider.setAttribute("aria-label", label);
+  applyFaderPatchState(wrap, slider, state.patch[i]);
+  slider.addEventListener("input", () => {
+    setSelectedFader(i);
+    onInput(Number(slider.value));
+  });
+  wrap.append(slider);
+  return slider;
 }
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */

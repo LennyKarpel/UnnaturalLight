@@ -70,31 +70,10 @@ function stageFixtures(queries: unknown): StageFixture[] {
   return all.filter((f) => found.has(f.id));
 }
 
-/** A named position by name (exact, else the one whose name contains it). */
-function findPosition(query: unknown) {
-  const positions = stage().stage().positions;
-  const q = String(query ?? "").trim().toLowerCase();
-  if (!q) throw new Error("Which position?");
-  const exact = positions.filter((p) => p.name.toLowerCase() === q);
-  if (exact.length === 1) return exact[0];
-  const partial = positions.filter((p) => p.name.toLowerCase().includes(q));
-  if (partial.length === 1) return partial[0];
-  if (partial.length > 1) throw new Error(`"${query}" matches ${partial.map((p) => `"${p.name}"`).join(", ")}: which one?`);
-  throw new Error(positions.length ? `No position "${query}" (positions: ${positions.map((p) => p.name).join(", ")})` : "There are no named positions yet");
-}
-
-/** A riser by name (exact, else the one whose name contains it). */
-function findRiser(query: unknown) {
-  const risers = stage().stage().risers;
-  const q = String(query ?? "").trim().toLowerCase();
-  if (!q) throw new Error("Which riser?");
-  const exact = risers.filter((r) => r.name.toLowerCase() === q);
-  if (exact.length === 1) return exact[0];
-  const partial = risers.filter((r) => r.name.toLowerCase().includes(q));
-  if (partial.length === 1) return partial[0];
-  if (partial.length > 1) throw new Error(`"${query}" matches ${partial.map((r) => `"${r.name}"`).join(", ")}: which one?`);
-  throw new Error(risers.length ? `No riser "${query}" (risers: ${risers.map((r) => r.name).join(", ")})` : "There are no risers");
-}
+/** Rigs, named positions and risers by name (see findByName). */
+const findPosition = (query: unknown) => findByName(stage().stage().positions, query, "position", "There are no named positions yet");
+const findRiser = (query: unknown) => findByName(stage().stage().risers, query, "riser", "There are no risers");
+const findRig = (query: unknown) => findByName(stage().stage().rigs, query, "rig", "There are no rigs");
 
 const RISER_SIZES = {
   width: { type: "number", minimum: 0.1, maximum: 50, description: "Meters, along x before it's turned" },
@@ -110,19 +89,6 @@ const riserSizes = (a: Args) => {
   for (const k of Object.keys(RISER_SIZES) as (keyof typeof RISER_SIZES)[]) if (a[k] != null) out[k] = num(a[k], k);
   return out;
 };
-
-/** A rig by name (exact, else the one whose name contains it). */
-function findRig(query: unknown) {
-  const rigs = stage().stage().rigs;
-  const q = String(query ?? "").trim().toLowerCase();
-  if (!q) throw new Error("Which rig?");
-  const exact = rigs.filter((r) => r.name.toLowerCase() === q);
-  if (exact.length === 1) return exact[0];
-  const partial = rigs.filter((r) => r.name.toLowerCase().includes(q));
-  if (partial.length === 1) return partial[0];
-  if (partial.length > 1) throw new Error(`"${query}" matches ${partial.map((r) => `"${r.name}"`).join(", ")}: which one?`);
-  throw new Error(rigs.length ? `No rig "${query}" (rigs: ${rigs.map((r) => r.name).join(", ")})` : "There are no rigs");
-}
 
 const who = (a: Args) => (Array.isArray(a.fixtures) ? a.fixtures.join(", ") : String(a.fixtures ?? ""));
 const xyzText = (p: unknown) => {

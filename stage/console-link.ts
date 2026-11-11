@@ -22,8 +22,6 @@ const PENDING_MS = 600;
 /** A console fixture as the stage hears of it. */
 export type ConsoleFixture = StageLevels["fixtures"][number];
 
-export type ConsoleLink = ReturnType<typeof createConsoleLink>;
-
 export function createConsoleLink({
   onLevels,
   onStageHello,

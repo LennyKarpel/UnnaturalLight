@@ -52,8 +52,8 @@ import {
   cueLabel,
   fillCueTitle,
   faderName,
-  setSelectedFader,
-  makeFaderNameLabel,
+  faderCell,
+  levelSlider,
   isUnpatched,
   setText,
   setValue,
@@ -254,29 +254,15 @@ export function renderLiveRow() {
   const fillEls = [];
 
   for (let i = 0; i < FADER_COUNT; i++) {
-    const wrap = el("div", "fader live-fader");
-    wrap.dataset.fader = String(i);
-    wrap.classList.toggle("is-selected-fader", i === state.selectedFader);
-    wrap.addEventListener("pointerdown", () => setSelectedFader(i));
-
-    const label = makeFaderNameLabel(i);
-
-    const patched = el("div", "patch-target", formatChannelLabel(state.patch[i]));
-    patched.title = formatChannelTooltip(state.patch[i]);
-    if (isUnpatched(state.patch[i])) patched.classList.add("is-unpatched");
+    const { wrap, patched, value } = faderCell(i, 0, "fader live-fader");
     patchLabelEls[i] = patched;
-
-    const value = el("div", "value", "0");
     valueEls[i] = value;
-
     const meter = el("div", "live-meter");
     meter.setAttribute("aria-hidden", "true");
-
     const fill = el("div", "live-meter-fill");
     fillEls[i] = fill;
     meter.append(fill);
-
-    wrap.append(label, patched, value, meter);
+    wrap.append(meter);
     liveFadersEl.append(wrap);
   }
 
@@ -381,42 +367,20 @@ export function renderSelectedGroup() {
   const row = state.cueLevels[state.selectedCue] ?? zeros();
 
   for (let i = 0; i < FADER_COUNT; i++) {
-    const wrap = el("div", "fader");
-    wrap.dataset.fader = String(i);
-    wrap.classList.toggle("is-selected-fader", i === state.selectedFader);
-    wrap.addEventListener("pointerdown", () => setSelectedFader(i));
-
-    const label = makeFaderNameLabel(i);
-
-    const patched = el("div", "patch-target", formatChannelLabel(state.patch[i]));
-    patched.title = formatChannelTooltip(state.patch[i]);
-    if (isUnpatched(state.patch[i])) patched.classList.add("is-unpatched");
+    const { wrap, patched, value } = faderCell(i, row[i]);
     patchLabelEls[i] = patched;
-
-    const value = el("div", "value", String(row[i]));
     valueEls[i] = value;
-
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "0";
-    slider.max = "255";
-    slider.value = String(row[i]);
-    slider.setAttribute("aria-label", `${cueLabel(state.selectedCue)} ${faderName(i)}`);
-    applyFaderPatchState(wrap, slider, state.patch[i]);
-    slider.addEventListener("input", () => {
-      setSelectedFader(i);
-      state.cueLevels[state.selectedCue][i] = Number(slider.value);
-      value.textContent = String(state.cueLevels[state.selectedCue][i]);
-      // Keep the Run tab UI in sync if that cue is rendered
-      if (cueUi[state.selectedCue]) {
-        cueUi[state.selectedCue].sliders[i].value = String(state.cueLevels[state.selectedCue][i]);
-        cueUi[state.selectedCue].valueEls[i].textContent = String(state.cueLevels[state.selectedCue][i]);
+    sliders[i] = levelSlider(wrap, i, row[i], `${cueLabel(state.selectedCue)} ${faderName(i)}`, (level) => {
+      state.cueLevels[state.selectedCue][i] = level;
+      value.textContent = String(level);
+      // Keep the Run tab's row for this cue in step, if it's drawn.
+      const cueRow = cueUi[state.selectedCue];
+      if (cueRow) {
+        cueRow.sliders[i].value = String(level);
+        cueRow.valueEls[i].textContent = String(level);
       }
       pushToDmx();
     });
-    sliders[i] = slider;
-
-    wrap.append(label, patched, value, slider);
     selectedGroupFadersEl.append(wrap);
   }
 

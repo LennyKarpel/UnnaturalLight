@@ -10,7 +10,6 @@ import {
   MAX_FIXTURES,
   DEG,
   FORWARD,
-  round,
   baseQuat,
   fullQuat,
   isInside,
@@ -306,6 +305,25 @@ scene.add(followLines);
 /** Invisible: a bigger target than a position's diamond, for click / drag. */
 const positionPickGeom = new THREE.SphereGeometry(0.25, 12, 8);
 
+/**
+ * Point a two-point line from `a` to `b`, keeping its bounds (so it isn't
+ * culled) and its dashes up to date.
+ */
+function setLine(line: THREE.Line, a: Xyz, b: Xyz) {
+  const pts = line.geometry.attributes.position;
+  pts.setXYZ(0, a.x, a.y, a.z);
+  pts.setXYZ(1, b.x, b.y, b.z);
+  pts.needsUpdate = true;
+  line.geometry.computeBoundingSphere();
+  line.computeLineDistances();
+}
+
+/** Drop a label sprite and its texture. */
+function disposeLabel(label: THREE.Sprite) {
+  label.material.map?.dispose();
+  label.material.dispose();
+}
+
 /** A camera-facing text label (canvas texture), about `height` meters tall. */
 function makeLabel(text: string, height = 0.32, color = "#e8e4dc") {
   const canvas = document.createElement("canvas");
@@ -345,12 +363,6 @@ riserMat.extensions.derivatives = true;
 type RiserVisual = { group: THREE.Group; mesh: THREE.Mesh; edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>; label: THREE.Sprite; text: string };
 const riserVisuals = new Map<string, RiserVisual>();
 
-/** Drop a label sprite and its texture. */
-function disposeLabel(label: THREE.Sprite) {
-  label.material.map?.dispose();
-  label.material.dispose();
-}
-
 // The picked-out riser's handles (one set, moved onto whichever riser is
 // picked out): boxes on its top corners and edges to resize it, a knob past
 // its upstage edge to turn it, an arrow above it for its height. Drawn over
@@ -383,15 +395,6 @@ const heightStem = stemLine();
 /** How far above the top the height arrow sits (clear of the name label). */
 const HEIGHT_HANDLE_RISE = 0.5;
 
-function setStem(line: THREE.Line, a: THREE.Vector3, b: THREE.Vector3) {
-  const pts = line.geometry.attributes.position;
-  pts.setXYZ(0, a.x, a.y, a.z);
-  pts.setXYZ(1, b.x, b.y, b.z);
-  pts.needsUpdate = true;
-  line.geometry.computeBoundingSphere();
-  line.computeLineDistances();
-}
-
 /** Put the handles on the picked-out riser (in its own turned frame), or take them off. */
 function syncHandles() {
   const riser = riserById(ui.activeRiser);
@@ -401,9 +404,9 @@ function syncHandles() {
   const { w, d, h } = riser;
   for (const { h: hd, mesh } of sizeHandles) mesh.position.set((hd.su * w) / 2, h, (hd.sv * d) / 2);
   turnHandle.position.set(0, h, -(d / 2 + TURN_HANDLE_GAP));
-  setStem(turnStem, new THREE.Vector3(0, h, -d / 2), turnHandle.position);
+  setLine(turnStem, new THREE.Vector3(0, h, -d / 2), turnHandle.position);
   heightHandle.position.set(0, h + HEIGHT_HANDLE_RISE, 0);
-  setStem(heightStem, new THREE.Vector3(0, h, 0), new THREE.Vector3(0, h + HEIGHT_HANDLE_RISE - 0.1, 0));
+  setLine(heightStem, new THREE.Vector3(0, h, 0), new THREE.Vector3(0, h + HEIGHT_HANDLE_RISE - 0.1, 0));
   v.group.updateMatrixWorld(true);
 }
 
@@ -515,8 +518,7 @@ function syncPositions() {
   for (const [id, v] of positionVisuals) {
     if (ids.has(id)) continue;
     scene.remove(v.group);
-    v.label.material.map?.dispose();
-    v.label.material.dispose();
+    disposeLabel(v.label);
     v.stem.geometry.dispose();
     positionVisuals.delete(id);
   }
@@ -552,8 +554,7 @@ function syncPosition(position: StagePosition) {
   }
   if (v.text !== position.name) {
     v.group.remove(v.label);
-    v.label.material.map?.dispose();
-    v.label.material.dispose();
+    disposeLabel(v.label);
     v.label = makeLabel(position.name);
     v.text = position.name;
     v.group.add(v.label);
@@ -656,20 +657,12 @@ function showPositionPreview(p: THREE.Vector3 | null, surface: string | null, mo
   const { w, d, h } = state.box;
   const span = (lo: number, hi: number, v: number) => [Math.min(lo, v), Math.max(hi, v)];
   const [x0, x1] = span(-w / 2, w / 2, p.x), [y0, y1] = span(0, h, p.y), [z0, z1] = span(-d / 2, d / 2, p.z);
-  const set = (line: THREE.Line, a: THREE.Vector3, b: THREE.Vector3) => {
-    const pts = line.geometry.attributes.position;
-    pts.setXYZ(0, a.x, a.y, a.z);
-    pts.setXYZ(1, b.x, b.y, b.z);
-    pts.needsUpdate = true;
-    line.geometry.computeBoundingSphere();
-    line.computeLineDistances();
-  };
-  set(previewAxes.x, new THREE.Vector3(x0, p.y, p.z), new THREE.Vector3(x1, p.y, p.z));
-  set(previewAxes.y, new THREE.Vector3(p.x, y0, p.z), new THREE.Vector3(p.x, y1, p.z));
-  set(previewAxes.z, new THREE.Vector3(p.x, p.y, z0), new THREE.Vector3(p.x, p.y, z1));
+  setLine(previewAxes.x, { x: x0, y: p.y, z: p.z }, { x: x1, y: p.y, z: p.z });
+  setLine(previewAxes.y, { x: p.x, y: y0, z: p.z }, { x: p.x, y: y1, z: p.z });
+  setLine(previewAxes.z, { x: p.x, y: p.y, z: z0 }, { x: p.x, y: p.y, z: z1 });
   const text = describeSpot(p, surface);
   if (text !== previewText) {
-    if (previewLabel) { positionPreview.remove(previewLabel); previewLabel.material.map?.dispose(); previewLabel.material.dispose(); }
+    if (previewLabel) { positionPreview.remove(previewLabel); disposeLabel(previewLabel); }
     previewLabel = makeLabel(text, 0.3, "#c58cff");
     previewText = text;
     positionPreview.add(previewLabel);
@@ -739,12 +732,7 @@ export function syncScene() {
     v.cone.visible = lk.intensity > 0.001;
     v.lens.material.color.copy(color).multiplyScalar(0.25 + 0.75 * lk.intensity);
 
-    const pts = v.axis.geometry.attributes.position;
-    pts.setXYZ(0, fixture.x, fixture.y, fixture.z);
-    const end = new THREE.Vector3(fixture.x, fixture.y, fixture.z).addScaledVector(dir, len);
-    pts.setXYZ(1, end.x, end.y, end.z);
-    pts.needsUpdate = true;
-    v.axis.computeLineDistances();
+    setLine(v.axis, fixture, new THREE.Vector3(fixture.x, fixture.y, fixture.z).addScaledVector(dir, len));
     v.axis.visible = sel;
 
     uniforms.uPos.value[i].set(fixture.x, fixture.y, fixture.z);
@@ -797,6 +785,8 @@ renderer.setAnimationLoop(() => {
 // OrbitControls off before it sees a press that lands on a fixture.
 const raycaster = new THREE.Raycaster();
 const DRAG_THRESHOLD = 4;
+/** Has the pointer gone further than a click from where it was pressed (`at`)? */
+const movedFrom = (e: MouseEvent, at: { x: number; y: number } | null) => !!at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > DRAG_THRESHOLD;
 let downAt: { x: number; y: number } | null = null;
 let drag3d: null | { id: string; shift: boolean; active: boolean; vertical: boolean; plane: THREE.Plane; offset: THREE.Vector3 } = null;
 
@@ -904,11 +894,7 @@ export function updateGhost(e: PointerEvent | null) {
   const inside = isInside({ x: p.x, y: p.y, z: p.z }, state.box);
   ghost.material.color.set(inside ? 0x00dddd : 0xe2a13a);
   ghostStem.material.color.copy(ghost.material.color);
-  const pts = ghostStem.geometry.attributes.position;
-  pts.setXYZ(0, p.x, p.y, p.z);
-  pts.setXYZ(1, p.x, 0, p.z);
-  pts.needsUpdate = true;
-  ghostStem.computeLineDistances();
+  setLine(ghostStem, p, { x: p.x, y: 0, z: p.z });
 }
 
 /** Box surfaces by the (outward) normal of the face a ray hits from inside. */
@@ -1017,7 +1003,7 @@ view.addEventListener("pointerdown", (e) => {
 view.addEventListener("pointermove", (e) => {
   if (e.target !== renderer.domElement) return;
   if (dragHandle) {
-    if (!dragHandle.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    if (!dragHandle.active && !movedFrom(e, downAt)) return;
     dragHandle.active = true;
     const riser = riserById(dragHandle.id);
     if (!riser) return;
@@ -1034,7 +1020,7 @@ view.addEventListener("pointermove", (e) => {
     return;
   }
   if (dragRiser) {
-    if (!dragRiser.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    if (!dragRiser.active && !movedFrom(e, downAt)) return;
     dragRiser.active = true;
     renderer.domElement.style.cursor = "grabbing";
     const riser = riserById(dragRiser.id);
@@ -1051,7 +1037,7 @@ view.addEventListener("pointermove", (e) => {
     return;
   }
   if (dragPosition) {
-    if (!dragPosition.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    if (!dragPosition.active && !movedFrom(e, downAt)) return;
     dragPosition.active = true;
     renderer.domElement.style.cursor = "grabbing";
     const position = positionById(dragPosition.id);
@@ -1083,7 +1069,7 @@ view.addEventListener("pointermove", (e) => {
     return;
   }
   if (!drag3d.active) {
-    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    if (!movedFrom(e, downAt)) return;
     drag3d.active = true;
     if (!state.selected.includes(drag3d.id)) select(drag3d.id);
     renderer.domElement.style.cursor = "grabbing";
@@ -1123,7 +1109,7 @@ view.addEventListener("contextmenu", (e) => {
   if (e.target !== renderer.domElement) return;
   e.preventDefault();
   // ctrl-click (Mac) has no right-button press; treat it as a still click.
-  const still = rightDownAt ? Math.hypot(e.clientX - rightDownAt.x, e.clientY - rightDownAt.y) <= DRAG_THRESHOLD : e.ctrlKey;
+  const still = rightDownAt ? !movedFrom(e, rightDownAt) : e.ctrlKey;
   rightDownAt = null;
   if (!still || ui.placing || ui.aiming) return;
   const id = pickFixture(e);
@@ -1136,7 +1122,7 @@ view.addEventListener("contextmenu", (e) => {
 
 view.addEventListener("pointerup", (e) => {
   if (e.target !== renderer.domElement || e.button !== 0) return;
-  const moved = downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > DRAG_THRESHOLD;
+  const moved = movedFrom(e, downAt);
   const dh = dragHandle;
   if (dh) {
     dragHandle = null;

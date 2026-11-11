@@ -41,6 +41,7 @@ import {
   makeFixtureGroupPickerButton,
   type PickerButton,
 } from "./patch-tab.ts";
+import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
 
@@ -51,8 +52,6 @@ export let fixtureFormStartPicker: PickerButton | null = null;
 let fixtureFormCountPicker: PickerButton | null = null;
 let fixtureFormQtyPicker: PickerButton | null = null;
 let fixtureFormGroupPicker: PickerButton | null = null;
-
-export let endInlineFixtureRename: null | (() => void) = null;
 
 export function ensureFixtureFormStartPicker() {
   if (fixtureFormStartPicker) {
@@ -439,20 +438,7 @@ function renderFixtureRow(fixture: Fixture): HTMLElement {
   row.setAttribute("role", "listitem");
   row.dataset.id = fixture.id;
 
-  const name = el("h3", "fixture-row-name", fixture.name);
-  name.title = "Click to rename";
-  name.setAttribute("role", "button");
-  name.tabIndex = 0;
-  name.addEventListener("click", (event) => {
-    event.stopPropagation();
-    beginInlineFixtureRename(fixture.id, name);
-  });
-  name.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      beginInlineFixtureRename(fixture.id, name);
-    }
-  });
+  const name = fixtureNameEl(fixture);
 
   const range = el("div", "fixture-ch-range");
 
@@ -559,22 +545,8 @@ function renderFixtureGroupHeader({ title, count, groupId = null, onRemove }: {
   }) {
   const header = el("div", "fixture-group-header");
 
-  const label = el("h3", "fixture-group-name", title);
-  if (groupId) {
-    label.title = "Click to rename";
-    label.setAttribute("role", "button");
-    label.tabIndex = 0;
-    label.addEventListener("click", (event) => {
-      event.stopPropagation();
-      beginInlineFixtureGroupRename(groupId, label);
-    });
-    label.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginInlineFixtureGroupRename(groupId, label);
-      }
-    });
-  }
+  // A real group's name can be renamed ("Ungrouped" can't).
+  const label = groupId ? groupNameEl({ id: groupId, name: title }) : el("h3", "fixture-group-name", title);
 
   const meta = el("span", "fixture-group-meta", count === 1 ? "1 fixture" : `${count} fixtures`);
 
@@ -710,83 +682,43 @@ function beginInlineFixtureRename(id: string, target?: HTMLElement) {
       `.fixture-row[data-id="${CSS.escape(id)}"] .fixture-row-name`,
     );
   if (!(title instanceof HTMLElement) || !title.isConnected) return;
+  renameInList(title, fixture, "Fixture name", "fixture-name-input", fixtureNameEl);
+}
 
-  const parent = title.parentElement;
-  if (!parent) return;
+/**
+ * Rename a fixture or a group in the list: a new name redraws the list;
+ * otherwise `nameEl` makes its name again.
+ */
+function renameInList<T extends { id: string; name: string }>(
+  title: HTMLElement,
+  item: T,
+  label: string,
+  inputClass: string,
+  nameEl: (item: T) => HTMLElement,
+) {
+  inlineRename({
+    replace: title,
+    value: item.name,
+    label,
+    className: `cue-title-input ${inputClass}`,
+    done: (name, putBack) => {
+      if (name && name !== item.name) {
+        item.name = name;
+        persistSession();
+        renderFixtures();
+      } else putBack(nameEl(item));
+    },
+  });
+}
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "cue-title-input fixture-name-input";
-  input.maxLength = 40;
-  input.value = fixture.name;
-  input.setAttribute("aria-label", "Fixture name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
+/** A fixture row's name, click to rename. */
+function fixtureNameEl(fixture: Fixture) {
+  return clickToRename(el("h3", "fixture-row-name", fixture.name), (name) => beginInlineFixtureRename(fixture.id, name));
+}
 
-  title.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit: boolean) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineFixtureRename === finishAbort) {
-      endInlineFixtureRename = null;
-    }
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim().slice(0, 40);
-    const changed = Boolean(commit && next && next !== fixture.name);
-    if (changed) {
-      fixture.name = next;
-      persistSession();
-    }
-
-    if (changed) {
-      renderFixtures();
-      return;
-    }
-
-    const restored = el("h3", "fixture-row-name", fixture.name);
-    restored.title = "Click to rename";
-    restored.setAttribute("role", "button");
-    restored.tabIndex = 0;
-    restored.addEventListener("click", (event) => {
-      event.stopPropagation();
-      beginInlineFixtureRename(id, restored);
-    });
-    restored.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginInlineFixtureRename(id, restored);
-      }
-    });
-
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-  };
-
-  const finishAbort = () => finish(false);
-  endInlineFixtureRename = finishAbort;
-
-  const onKeydown = (event: KeyboardEvent) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-  const onBlur = () => finish(true);
-
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+/** A group card's name, click to rename. */
+function groupNameEl(group: { id: string; name: string }) {
+  return clickToRename(el("h3", "fixture-group-name", group.name), (name) => beginInlineFixtureGroupRename(group.id, name));
 }
 
 function beginInlineFixtureGroupRename(id: string, target?: HTMLElement) {
@@ -801,80 +733,7 @@ function beginInlineFixtureGroupRename(id: string, target?: HTMLElement) {
       `.fixture-group-card[data-group-id="${CSS.escape(id)}"] .fixture-group-name`,
     );
   if (!(title instanceof HTMLElement) || !title.isConnected) return;
-
-  const parent = title.parentElement;
-  if (!parent) return;
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "cue-title-input fixture-group-name-input";
-  input.maxLength = 40;
-  input.value = group.name;
-  input.setAttribute("aria-label", "Group name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
-  title.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit: boolean) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineFixtureRename === finishAbort) {
-      endInlineFixtureRename = null;
-    }
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim().slice(0, 40);
-    const changed = Boolean(commit && next && next !== group.name);
-    if (changed) {
-      group.name = next;
-      persistSession();
-      renderFixtures();
-      return;
-    }
-
-    const restored = el("h3", "fixture-group-name", group.name);
-    restored.title = "Click to rename";
-    restored.setAttribute("role", "button");
-    restored.tabIndex = 0;
-    restored.addEventListener("click", (event) => {
-      event.stopPropagation();
-      beginInlineFixtureGroupRename(id, restored);
-    });
-    restored.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginInlineFixtureGroupRename(id, restored);
-      }
-    });
-
-    if (input.isConnected) input.replaceWith(restored);
-    else parent.prepend(restored);
-  };
-
-  const finishAbort = () => finish(false);
-  endInlineFixtureRename = finishAbort;
-
-  const onKeydown = (event: KeyboardEvent) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-  const onBlur = () => finish(true);
-
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+  renameInList(title, group, "Group name", "fixture-group-name-input", groupNameEl);
 }
 
 export async function addFixtureGroup() {

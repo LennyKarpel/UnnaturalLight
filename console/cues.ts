@@ -1,5 +1,5 @@
 // Cue rows on the Run tab: drawing, reordering, renaming, cue menus.
-import { FADER_COUNT, formatChannelLabel, formatChannelTooltip } from "./patch.ts";
+import { FADER_COUNT } from "./patch.ts";
 import { MAX_CUES, MIN_CUES, createCue, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.ts";
 import {
   cuesScroll,
@@ -25,11 +25,9 @@ import {
   cueLabel,
   fillCueTitle,
   faderName,
-  setSelectedFader,
-  makeFaderNameLabel,
+  faderCell,
+  levelSlider,
   abortInlineEdits,
-  isUnpatched,
-  applyFaderPatchState,
   addColorBars,
   refreshColorBars,
   confirmRemoveCue,
@@ -43,6 +41,7 @@ import {
   pickCue,
   renderSelectedGroup,
 } from "./live.ts";
+import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
 
@@ -238,37 +237,14 @@ export function renderCues() {
     const sliders = [];
 
     for (let i = 0; i < FADER_COUNT; i++) {
-      const wrap = el("div", "fader");
-      wrap.dataset.fader = String(i);
-      wrap.classList.toggle("is-selected-fader", i === state.selectedFader);
-      wrap.addEventListener("pointerdown", () => setSelectedFader(i));
-
-      const label = makeFaderNameLabel(i);
-
-      const patched = el("div", "patch-target", formatChannelLabel(state.patch[i]));
-      patched.title = formatChannelTooltip(state.patch[i]);
-      if (isUnpatched(state.patch[i])) patched.classList.add("is-unpatched");
+      const { wrap, patched, value } = faderCell(i, state.cueLevels[r][i]);
       patchLabelEls[i] = patched;
-
-      const value = el("div", "value", String(state.cueLevels[r][i]));
       valueEls[i] = value;
-
-      const slider = document.createElement("input");
-      slider.type = "range";
-      slider.min = "0";
-      slider.max = "255";
-      slider.value = String(state.cueLevels[r][i]);
-      slider.setAttribute("aria-label", `${cueLabel(r)} ${faderName(i)}`);
-      applyFaderPatchState(wrap, slider, state.patch[i]);
-      slider.addEventListener("input", () => {
-        setSelectedFader(i);
-        state.cueLevels[r][i] = Number(slider.value);
-        value.textContent = String(state.cueLevels[r][i]);
+      sliders[i] = levelSlider(wrap, i, state.cueLevels[r][i], `${cueLabel(r)} ${faderName(i)}`, (level) => {
+        state.cueLevels[r][i] = level;
+        value.textContent = String(level);
         pushToDmx();
       });
-      sliders[i] = slider;
-
-      wrap.append(label, patched, value, slider);
       grid.append(wrap);
     }
 
@@ -281,8 +257,6 @@ export function renderCues() {
   refreshCueSelects();
   refreshColorBars();
 }
-
-export let endInlineRename: null | (() => void) = null;
 
 function applyCueName(index: number, name: string) {
   // An empty name is fine: the cue is then just "Cue N".
@@ -308,81 +282,31 @@ function beginInlineRename(index: number, target?: HTMLElement) {
     (index === state.selectedCue ? currentCueTitle : null);
   if (!(title instanceof HTMLElement) || !title.isConnected) return;
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "cue-title-input";
-  if (title.id === "currentCueTitle") {
-    input.classList.add("cue-title-input-lg");
-  }
-  input.maxLength = 40;
-  input.value = cueName(index);
-  input.placeholder = `Cue ${index + 1} name`;
-  input.setAttribute("aria-label", "Cue name");
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
   // Only the name is edited: "Cue N" stays in place in front of it.
   fillCueTitle(title, index, true);
-  title.querySelector<HTMLElement>(".cue-name")?.replaceWith(input);
-  for (const type of ["click", "dblclick", "pointerdown"]) input.addEventListener(type, (event) => event.stopPropagation());
-  input.focus();
-  input.select();
-
-  let finished = false;
-  const finish = (commit: boolean) => {
-    if (finished) return;
-    finished = true;
-    if (endInlineRename === finishAbort) endInlineRename = null;
-    input.removeEventListener("keydown", onKeydown);
-    input.removeEventListener("blur", onBlur);
-
-    const next = input.value.trim();
-    const changed = Boolean(commit && applyCueName(index, next));
-
-    fillCueTitle(title, index, true);
-
-    if (changed) {
-      // Rebuild row UI so every label picks up the new name
-      renderCues();
-      renderSelectedGroup();
-    }
-  };
-
-  const finishAbort = () => finish(false);
-  endInlineRename = finishAbort;
-
-  const onKeydown = (event: KeyboardEvent) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  };
-
-  const onBlur = () => finish(true);
-
-  input.addEventListener("keydown", onKeydown);
-  input.addEventListener("blur", onBlur);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+  const nameEl = title.querySelector<HTMLElement>(".cue-name");
+  if (!nameEl) return;
+  inlineRename({
+    replace: nameEl,
+    value: cueName(index),
+    label: "Cue name",
+    className: title.id === "currentCueTitle" ? "cue-title-input cue-title-input-lg" : "cue-title-input",
+    placeholder: `Cue ${index + 1} name`,
+    done: (name) => {
+      // An empty name is kept: the cue is then just "Cue N".
+      const changed = name != null && applyCueName(index, name);
+      fillCueTitle(title, index, true);
+      if (changed) {
+        // Rebuild the rows so every label picks up the new name.
+        renderCues();
+        renderSelectedGroup();
+      }
+    },
+  });
 }
 
 export function wireCurrentCueTitle(el: HTMLElement) {
-  el.title = "Click to rename";
-  el.setAttribute("role", "button");
-  el.tabIndex = 0;
-  el.addEventListener("click", () => {
-    beginInlineRename(state.selectedCue, el);
-  });
-  el.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      beginInlineRename(state.selectedCue, el);
-    }
-  });
+  clickToRename(el, () => beginInlineRename(state.selectedCue, el));
 }
 
 export function openChannelsCueMenu(anchor: HTMLElement): Promise<"select" | null> {

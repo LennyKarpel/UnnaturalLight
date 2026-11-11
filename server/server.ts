@@ -286,7 +286,7 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
 
-wss.on("connection", (ws, req) => {
+wss.on("connection", (ws) => {
   const client = { id: crypto.randomUUID() };
   clients.set(ws, client);
   ws.send(JSON.stringify({ type: "hello", clientId: client.id, show: show.serialized(), live: show.live(), outputs: outputStatus(), stage }));
