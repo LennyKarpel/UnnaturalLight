@@ -1,5 +1,6 @@
 import { FADER_COUNT, defaultPatch, normalizeFaderPatch, MAX_UNIVERSES, type FaderPatch } from "./patch.ts";
 import { normalizeFixtureGroups, normalizeFixtures, type Fixture, type FixtureGroup } from "./fixtures.ts";
+import { prettyJson } from "../shared/json.ts";
 import { normalizeSongs, resolveActiveSong, type Song } from "./songs.ts";
 import { normalizeSets, resolveActiveEntry, resolveActiveSet, upNextCue, type ShowSet } from "./sets.ts";
 import { clamp, clampInt } from "../shared/numbers.ts";
@@ -143,7 +144,7 @@ export function showSnapshot(state: ShowInput): string {
 /** @param stage the stage's layout, saved in the same file */
 function showToJson(state: ShowInput, stage: object | null = null): string {
   const data = serializeShow(state);
-  return `${JSON.stringify(stage ? { ...data, stage } : data, null, 2)}\n`;
+  return prettyJson(stage ? { ...data, stage } : data);
 }
 
 export function parseShow(data: unknown): ShowData {

@@ -1,7 +1,10 @@
 // The 3D view: the box, the fixtures and their beams, and picking, placing,
 // dragging and aiming with the mouse.
 import * as THREE from "three";
-import { describeSpot, snapLength } from "./units.ts";
+import { describeSpot, gridStep, lengthUnit, onUnitChange, snapLength } from "./units.ts";
+
+/** Grid squares per major square: 5 in feet, 1 in meters. */
+const majorEvery = () => (lengthUnit() === "ft" ? 5 : 1);
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   MAX_FIXTURES,
@@ -59,11 +62,21 @@ const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
 keyLight.position.set(5, 10, 8);
 scene.add(keyLight);
 
-const ground = new THREE.GridHelper(80, 80, 0x1c2027, 0x15181d);
-ground.position.y = -0.002;
+// The ground outside the box: a grid of 1 m or 5 ft squares (units.ts), about 80 m across.
+let ground = makeGround();
 scene.add(ground);
+function makeGround() {
+  const step = gridStep() * majorEvery();
+  const n = Math.round(80 / step);
+  const grid = new THREE.GridHelper(n * step, n, 0x1c2027, 0x15181d);
+  grid.position.y = -0.002;
+  return grid;
+}
 
 const uniforms = {
+  /** One grid square on the box's surfaces, in meters, and how many make a major one (feet: 1 ft lines, 5 ft squares). */
+  uGrid: { value: gridStep() },
+  uMajor: { value: majorEvery() },
   uCount: { value: 0 },
   uPos: { value: Array.from({ length: MAX_FIXTURES }, () => new THREE.Vector3()) },
   uDir: { value: Array.from({ length: MAX_FIXTURES }, () => new THREE.Vector3()) },
@@ -99,6 +112,8 @@ const fragmentShader = /* glsl */ `
   uniform float uFaceAlpha[6];
   uniform int uPass; // 0 = solid insides, 1 = see-through insides, 2 = outer shell
   uniform float uAlpha;
+  uniform float uGrid;
+  uniform float uMajor;
   varying vec3 vPos;
   varying vec3 vNormal;
 
@@ -135,7 +150,10 @@ const fragmentShader = /* glsl */ `
     }
 
     vec2 uv = abs(n.x) > 0.5 ? vPos.zy : (abs(n.y) > 0.5 ? vPos.xz : vPos.xy);
-    float grid = gridLine(uv);
+    // Major lines always; the ones between fade out where they'd crowd together.
+    vec2 fine = uv / uGrid;
+    float crowd = smoothstep(0.12, 0.3, max(fwidth(fine).x, fwidth(fine).y));
+    float grid = uMajor > 1.0 ? max(gridLine(fine / uMajor), gridLine(fine) * 0.6 * (1.0 - crowd)) : gridLine(fine);
     vec3 base = vec3(0.075, 0.08, 0.095) + grid * 0.06;
     vec3 col = base + light * 0.85 + vec3(edge) * 0.25;
     col = 1.0 - exp(-col * 1.4);
@@ -899,3 +917,15 @@ view.addEventListener("pointerup", (e) => {
   }
   if (!e.shiftKey) select(null);
 }, true);
+
+// Meters or feet: the grids follow.
+onUnitChange(() => {
+  scene.remove(ground);
+  ground.geometry.dispose();
+  (ground.material as THREE.Material).dispose();
+  ground = makeGround();
+  scene.add(ground);
+  uniforms.uGrid.value = gridStep();
+  uniforms.uMajor.value = majorEvery();
+  requestRender();
+});

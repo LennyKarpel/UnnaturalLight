@@ -266,8 +266,13 @@ export function addPositionAt(x: number, y: number, z: number, name?: string) {
   return position;
 }
 
-export function deletePosition(id: string) {
-  state.positions = state.positions.filter((p) => p.id !== id);
+export function deletePosition(id: string, { redoing = false } = {}) {
+  const index = state.positions.findIndex((p) => p.id === id);
+  if (index < 0) return;
+  const [position] = state.positions.splice(index, 1);
+  writeUndo([...readUndo(), { positionIndex: index, data: serializeStage(state.box, [], state.transparent, [], [position]) }]);
+  if (!redoing) writeRedo([]);
+  setBanner(`Deleted ${position.name} · ⌘Z to undo`, 4000);
   if (ui.activePosition === id) ui.activePosition = null;
   if (ui.hoverPosition === id) setHoverPosition(null);
   changed();
@@ -473,8 +478,8 @@ function duplicateSelected() {
  */
 const UNDO_KEY = `${STORAGE_KEY}.undo`;
 const MAX_UNDO = 50;
-/** One delete: where the fixtures were in the list, and them (as a stage file). */
-type UndoEntry = { indexes?: number[]; data: SavedStage };
+/** One delete: where the fixtures (or a named position) were in their list, and them (as a stage file). */
+type UndoEntry = { indexes?: number[]; positionIndex?: number; data: SavedStage };
 let undoMemory: UndoEntry[] = [];
 
 function readUndo(): UndoEntry[] {
@@ -488,6 +493,27 @@ function writeUndo(list: UndoEntry[]) {
   storeJson(UNDO_KEY, undoMemory);
 }
 
+/**
+ * Deletes undone, newest last, so ⇧⌘Z can delete them again: the fixture
+ * (or position) ids each undo put back. Shared like the undo list; a new
+ * delete clears it.
+ */
+const REDO_KEY = `${STORAGE_KEY}.redo`;
+type RedoEntry = { fixtures: string[]; positions: string[] };
+let redoMemory: RedoEntry[] = [];
+
+const isIds = (v: unknown): v is string[] => Array.isArray(v) && v.every((id) => typeof id === "string");
+function readRedo(): RedoEntry[] {
+  const list = readStoredJson(REDO_KEY) ?? redoMemory;
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((e) => (e && typeof e === "object" && isIds(e.fixtures) && isIds(e.positions) ? [{ fixtures: e.fixtures, positions: e.positions }] : []));
+}
+
+function writeRedo(list: RedoEntry[]) {
+  redoMemory = list.slice(-MAX_UNDO);
+  storeJson(REDO_KEY, redoMemory);
+}
+
 /** What a delete removes: the selection, widened to whole rigs. */
 function deletionIds() {
   const ids = new Set(state.selected);
@@ -498,7 +524,7 @@ function deletionIds() {
   return ids;
 }
 
-export function deleteSelected() {
+export function deleteSelected({ redoing = false } = {}) {
   const ids = deletionIds();
   const removed: { fixture: Fixture; index: number }[] = [];
   state.fixtures.forEach((fixture, index) => { if (ids.has(fixture.id)) removed.push({ fixture, index }); });
@@ -517,6 +543,7 @@ export function deleteSelected() {
   const what = rigs.length === 1 && removed.every((r) => r.fixture.rigId === rigs[0].id)
     ? rigs[0].name
     : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
+  if (!redoing) writeRedo([]); // a new delete: nothing to redo any more
   setBanner(`Deleted ${what} · ⌘Z to undo`, 4000);
 }
 
@@ -524,7 +551,19 @@ export function undoDelete() {
   const list = readUndo();
   const entry = list.pop();
   if (!entry) return;
-  const { fixtures, rigs } = parseStage(entry.data);
+  const { fixtures, rigs, positions } = parseStage(entry.data);
+  // A deleted named position: put it back where it was in the list.
+  if (entry.positionIndex != null) {
+    writeUndo(list);
+    const back = positions.filter((p) => !positionById(p.id));
+    if (!back.length) return;
+    state.positions.splice(Math.min(entry.positionIndex, state.positions.length), 0, ...back);
+    writeRedo([...readRedo(), { fixtures: [], positions: back.map((p) => p.id) }]);
+    changed();
+    showPositions();
+    setBanner(`Restored ${back[0].name} · ⇧⌘Z to delete again`, 2500);
+    return;
+  }
   // Skip any that are already back (e.g. undone in another window just now).
   const removed = fixtures
     .map((fixture, k) => ({ fixture, index: entry.indexes?.[k] ?? state.fixtures.length }))
@@ -548,8 +587,23 @@ export function undoDelete() {
   state.selected = removed.map((r) => r.fixture.id).filter((id) => byId(id));
   renderInspector();
   changed();
+  writeRedo([...readRedo(), { fixtures: removed.map((r) => r.fixture.id), positions: [] }]);
   const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
-  setBanner(`Restored ${what}`, 2000);
+  setBanner(`Restored ${what} · ⇧⌘Z to delete again`, 2500);
+}
+
+/** Delete again what the last ⌘Z put back (⇧⌘Z). */
+export function redoDelete() {
+  const list = readRedo();
+  const entry = list.pop();
+  if (!entry) return;
+  writeRedo(list);
+  for (const id of entry.positions) if (positionById(id)) deletePosition(id, { redoing: true });
+  // Only those still on the stage (another window may have deleted them since).
+  const still = entry.fixtures.filter((id) => byId(id));
+  if (!still.length) return;
+  state.selected = still;
+  deleteSelected({ redoing: true });
 }
 
 /** What the inspector's buttons and the right-click menu do (their `data-act` / `data-cmd`). */

@@ -114,13 +114,23 @@ let shareQueued = false;
 export function save({ share = true } = {}) {
   shareQueued ||= share;
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    const data = serialize();
-    storeJson(STORAGE_KEY, data);
-    if (shareQueued) ui.showLink?.send(data);
-    shareQueued = false;
-  }, 200);
+  savePending = true;
+  saveTimer = window.setTimeout(saveNow, 200);
 }
+
+let savePending = false;
+function saveNow() {
+  clearTimeout(saveTimer);
+  savePending = false;
+  const data = serialize();
+  storeJson(STORAGE_KEY, data);
+  if (shareQueued) ui.showLink?.send(data);
+  shareQueued = false;
+}
+
+// Closing or reloading the window: send a change still waiting out the
+// 200 ms above now, so the last edit isn't lost.
+window.addEventListener("pagehide", () => { if (savePending) saveNow(); });
 
 export function restore() {
   const saved = readStoredJson(STORAGE_KEY);

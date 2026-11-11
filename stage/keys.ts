@@ -15,6 +15,7 @@ import {
   closeContextMenu,
   deleteSelected,
   undoDelete,
+  redoDelete,
 } from "./actions.ts";
 import { settingsDlg, rigDlg, placeDlg, togglePlaceFixture } from "./dialogs.ts";
 import { elById } from "../shared/query.ts";
@@ -70,9 +71,16 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" || e.key === "Enter") t.blur();
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey && !settingsDlg.open && !rigDlg.open && !placeDlg.open) {
+  // ⌘Z undoes a delete; ⇧⌘Z (or ⌘Y) does it again.
+  const cmd = (e.metaKey || e.ctrlKey) && !e.altKey && !settingsDlg.open && !rigDlg.open && !placeDlg.open;
+  if (cmd && e.code === "KeyZ" && !e.shiftKey) {
     e.preventDefault();
     undoDelete();
+    return;
+  }
+  if (cmd && ((e.code === "KeyZ" && e.shiftKey) || e.code === "KeyY")) {
+    e.preventDefault();
+    redoDelete();
     return;
   }
   if (e.metaKey || e.ctrlKey) return;

@@ -28,6 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_UNIVERSES } from "../console/patch.ts";
+import { prettyJson } from "../shared/json.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
 import { createShow } from "./show.ts";
@@ -87,7 +88,7 @@ function saveNow() {
   if (!data) return;
   const file = stage ? { ...data, stage } : data;
   const tmp = `${SESSION_FILE}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(file)}\n`);
+  fs.writeFileSync(tmp, prettyJson(file));
   fs.renameSync(tmp, SESSION_FILE);
 }
 

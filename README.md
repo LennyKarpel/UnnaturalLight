@@ -126,7 +126,7 @@ Start the server with `./server.sh --lan`. The terminal prints a **remote** addr
 ### The stage area
 
 - **Box W / D / H** in the header set the size of the performance area.
-- **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a rig's center and size, positions, the readout and banners, and the plan's grid (1 m or 1 ft squares). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
+- **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a rig's center and size, positions, the readout and banners, and the grids: 1 m squares, or in feet 5 ft squares with 1 ft lines between (in 3D those fade out where they'd crowd together; the plan switches to 5 ft when zoomed out). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
 - The **amber line** marks the audience edge. *Stage left / right* are from the performer's point of view, facing the audience.
 - **⚙ View** opens view settings: the units (above), and tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
 
@@ -286,7 +286,7 @@ Fixtures aimed at a named position **follow** it: move the position (or the fixt
 - **Fixtures only on the stage** follow the same way, without cues, until their pan / tilt are changed some other way.
 - **You can see it:** the inspector shows **Following ‹position›** (for several fixtures, *8 of 8 following*), and the fixture list shows *→ ‹position›* after the name.
 - **Change it in the inspector:** the position is a dropdown: pick another and the selected fixtures aim at it and follow it instead (*(several)* when they follow different ones). When none follow, the same line reads **Aim at** *Choose a position…*. **Stop following** keeps them aimed where they are but stops following.
-- **Deleting a position** leaves the fixtures and cues aimed where they are (Undo brings it back, still followed). Copying a cue copies its aims.
+- **Deleting a position** leaves the fixtures and cues aimed where they are (⌘Z brings it back, still followed). Copying a cue copies its aims.
 - Aims use the pan nearest the fixture's home, so a position always gives a fixture the same pan / tilt.
 ### Rigs: circles, squares and lines of fixtures
 
@@ -317,7 +317,7 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 
 - **Duplicate** (right-click or inspector) copies the selected fixtures. If the original was set up in the console, the copy gets its own console fixture and faders too.
 - **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a rig removes the whole rig. Fixtures the stage set up in the console are removed there too, and their faders freed.
-- **⌘Z** brings back what you deleted (up to 50 times, in any stage window, even after a reload).
+- **⌘Z** brings back what you deleted: fixtures, rigs or a named position (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
 
 ### The right-click menu
 
@@ -510,7 +510,7 @@ If no nodes are found: check the node and this computer are on the same network 
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's show and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
+**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's show and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. Closing the window is safe at any moment: console edits reach the server at once, and a stage edit still waiting (stage edits are sent 0.2 s after you stop) is sent as the window closes. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
@@ -537,6 +537,7 @@ To keep copies, share them or move to another computer:
 | `Tab` / `⇧Tab` | next / previous fixture |
 | `⌫` / `Delete` | delete selected |
 | `⌘Z` | undo delete |
+| `⇧⌘Z` / `⌘Y` | redo (delete again) |
 | `Esc` | close menu / cancel / clear selection |
 
 Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave it) or while a dialog is open. The keys shown in the bar under the 3D view can also be clicked (hold to repeat, ⇧-click for ×10), and the bar has a color picker for the selected fixtures.
@@ -640,7 +641,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `server/dmx.ts` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/net-dmx.ts` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
 | `test/` | `npm test`: unit tests for the shared logic (see above) |
-| `server/data/` | `session.json` (the show, with the stage under `stage`), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
+| `server/data/` | `session.json` (the show, with the stage under `stage`; readable JSON, with each list of numbers, like a cue's 256 levels, on one line), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
 | `console/styles.css` | Console styles, scoped to its pane (`:where(#consolePane)`; breakpoints are container queries on the pane) |
 | `console/app.ts` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks (`consoleHeader`), the chat's hooks (`consoleChat`), the show-server link |
 | `console/state.ts` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
@@ -666,7 +667,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/frame.ts` | Work done at the start of each 3D frame, before it's drawn (the console's latest levels are taken there, so they show in that frame) |
 | `stage/sidebar.ts` | Fixture list, inspector and key strip |
 | `stage/panel.ts` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
-| `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
+| `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo / redo; keyboard |
 | `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
 | `stage/units.ts` | Meters or feet: converting what's shown and typed (the data stays in meters), snapping steps, saying where a spot is |
 | `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
@@ -675,6 +676,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/follow.ts` | Fixtures following named positions: aiming, re-aiming when a position or fixture moves (here and in the console's cues), what each one follows |
 | `stage/show-link.ts` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.ts` | Open Fixture Library browsing, picker, fixture mode → channel profile |
+| `shared/json.ts` | Readable JSON for `session.json` and saved show files (indented; lists of numbers on one line) |
 | `shared/engine.ts` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
 | `shared/trace.ts` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
 | `shared/pan-tilt-pad.ts` | The ✥ pan / tilt pad (hold and move the mouse), used under the console's pan / tilt faders and in the stage inspector |
