@@ -2,7 +2,8 @@
 // show (an entry points at a song, so a song can be in many sets, or twice in
 // one); the Run tab runs the active set.
 import { newId } from "../shared/ids.ts";
-import { resolveActiveSong, type Song } from "./songs.ts";
+import { cueSeconds, resolveActiveSong, stepPath, type Cue, type Song } from "./songs.ts";
+import type { StepPath } from "../shared/engine.ts";
 import { isRecord } from "../shared/guards.ts";
 
 export const MAX_SETS = 32;
@@ -138,6 +139,38 @@ export function playbackCue(play: Playback, index: number) {
   const song = resolveActiveSong(play.songs, play.activeSongId);
   if (index < song.cues.length) return song.cues[index];
   return index === song.cues.length ? nextSetSong(play)?.song.cues[0] : undefined;
+}
+
+/**
+ * Where GO (or Step) fades to from LIVE. LIVE on one of its cue's steps: the
+ * rest of that cue (Step: its next look). LIVE on a cue's own look: UP NEXT
+ * (Step, when UP NEXT has steps: its first). `cue` / `step` is where it
+ * arrives (the cue's index, and its step or -1 for its own look); `levels`
+ * the look faded to; `path` the steps passed through on the way; `seconds`
+ * its time; `at` / `total` where it starts in the cue's own time and that
+ * cue's whole time (for its timeline). null: nothing to go to.
+ */
+export type GoTarget = { cue: number; step: number; levels: number[]; path: StepPath | null; seconds: number; at: number; total: number; looks: number; first: number };
+
+export function goTarget(play: Playback & { liveStep: number; toCue: number }, step = false): GoTarget | null {
+  const live = playbackCue(play, play.fromCue);
+  const k = play.liveStep;
+  if (live && k >= 0 && k < live.steps.length) {
+    // The rest of the LIVE cue: from step k (once its hold is over).
+    const at = live.steps.slice(0, k + 1).reduce((t, s) => t + s.fadeTime + s.holdTime, 0);
+    const base = { cue: play.fromCue, at, total: cueSeconds(live), looks: live.steps.length + 1, first: k + 1 };
+    const next = live.steps[k + 1];
+    if (step && next) return { ...base, step: k + 1, levels: next.levels, path: null, seconds: next.fadeTime };
+    const rest = live.steps.slice(k + 1);
+    const path = rest.length ? { steps: rest.map((s) => ({ levels: s.levels, fade: s.fadeTime, hold: s.holdTime })), fade: live.fadeTime } : null;
+    return { ...base, step: -1, levels: live.levels, path, seconds: base.total - at };
+  }
+  if (play.toCue === play.fromCue) return null;
+  const next: Cue | undefined = playbackCue(play, play.toCue);
+  if (!next) return null;
+  const base = { cue: play.toCue, at: 0, total: cueSeconds(next), looks: next.steps.length + 1, first: 0 };
+  if (step && next.steps.length) return { ...base, step: 0, levels: next.steps[0].levels, path: null, seconds: next.steps[0].fadeTime };
+  return { ...base, step: -1, levels: next.levels, path: stepPath(next), seconds: base.total };
 }
 
 /**

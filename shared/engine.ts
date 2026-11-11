@@ -11,8 +11,12 @@ import { clampByte } from "./numbers.ts";
  */
 export type StepPath = { steps: { levels: number[]; fade: number; hold: number }[]; fade: number };
 
-/** `toPath`: UP NEXT's steps (none, or null: the crossfade goes straight to it). */
-export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number; toPath?: StepPath | null };
+/**
+ * `toLevels`: the look the crossfade goes to, when it isn't cue `toCue`'s
+ * (the LIVE cue's next step or own look, or UP NEXT's first step); `toPath`:
+ * the steps on the way to it (none, or null: straight to it).
+ */
+export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number; toLevels?: number[]; toPath?: StepPath | null };
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max. */
 export function liveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): number {
@@ -22,7 +26,7 @@ export function liveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): 
 /** liveLevel before rounding: the in-between level a fade passes through (the stage draws it; DMX can't send it). */
 export function exactLiveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): number {
   const a = ((cueLevels[mix.fromCue]?.[faderIndex] ?? 0) * mix.fromSub) / 100;
-  const b = ((cueLevels[mix.toCue]?.[faderIndex] ?? 0) * mix.toSub) / 100;
+  const b = (((mix.toLevels ?? cueLevels[mix.toCue])?.[faderIndex] ?? 0) * mix.toSub) / 100;
   const steps = mix.toPath?.steps;
   if (!steps?.length) {
     const t = mix.cross / 100;
@@ -135,7 +139,8 @@ export function setChannelLevels(patch: FaderPatch[], mix: Mix, cueLevels: numbe
       // …and the pre-master mix that gives it (see liveLevel above).
       const mixed = (level * 100) / mix.master;
       if (t < 1 && mix.fromSub > 0) cueLevels[mix.fromCue][i] = clampByte((mixed * 100) / mix.fromSub);
-      if (t > 0 && mix.toSub > 0) cueLevels[mix.toCue][i] = clampByte((mixed * 100) / mix.toSub);
+      const to = mix.toLevels ?? cueLevels[mix.toCue];
+      if (t > 0 && mix.toSub > 0 && to) to[i] = clampByte((mixed * 100) / mix.toSub);
       touched = true;
     }
   }

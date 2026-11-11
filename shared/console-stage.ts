@@ -70,6 +70,8 @@ export type AimPair = { fixture: string; position: string };
  *               the lights too
  *   testStep    the test, one step at a time: play to the LIVE cue's next
  *               step and hold (on its last: all the way)
+ *   testStepBack a held test: back to the step before, at once; otherwise
+ *               (or live) the console's ‹ Step (the look before LIVE's, LIVE)
  *   setTestFade set the LIVE cue's In time (seconds), as the test uses it
  *   stepCue     make the cue before (-1) or after (+1) LIVE the LIVE one (the
  *               cue the stage edits), as the console's ◀ ▶ beside GO do
@@ -86,6 +88,7 @@ export type ConsoleEnd = {
   reaim: (list: Reaim[]) => void;
   testFade: (on: boolean, live?: boolean) => void;
   testStep: (live?: boolean) => void;
+  testStepBack: (live?: boolean) => void;
   setTestFade: (seconds: number) => void;
   stepCue: (step: -1 | 1) => void;
 };
@@ -107,6 +110,8 @@ export type TransitionTest = {
   /** Whether there's a cue before / after LIVE (for ‹ ›; across set songs, as ◀ ▶ beside GO). */
   canBack: boolean;
   canForward: boolean;
+  /** Whether ‹ Step has somewhere to go (a held test's step before, or the look before LIVE's). */
+  canStepBack: boolean;
   /** While a test plays: in the first second ("hold") or fading, and seconds into the fade. */
   /**
    * While a test plays: holding the cue before ("hold"), fading, or held on a

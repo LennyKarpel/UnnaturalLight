@@ -18,6 +18,7 @@ const time = elById<HTMLSelectElement>("testFadeTime");
 const clock = elById("testFadeClock");
 const live = elById<HTMLInputElement>("testFadeLive");
 const stepBtn = elById<HTMLButtonElement>("testStepBtn");
+const stepBackBtn = elById<HTMLButtonElement>("testStepBackBtn");
 const steps = elById("testFadeSteps");
 /** Whether a live test can start: it needs a cue before LIVE to go back to. */
 let canLive = true;
@@ -39,6 +40,7 @@ btn.addEventListener("click", () => {
   consoleLink.testFade(!running || running.phase === "held", live.checked);
 });
 stepBtn.addEventListener("click", () => consoleLink.testStep(live.checked));
+stepBackBtn.addEventListener("click", () => consoleLink.testStepBack(live.checked));
 back.addEventListener("click", () => consoleLink.stepCue(-1));
 forward.addEventListener("click", () => consoleLink.stepCue(1));
 time.addEventListener("change", () => consoleLink.setTestFade(Number(time.value)));
@@ -54,8 +56,9 @@ consoleLink.onTest((t) => {
   const held = t.running?.phase === "held";
   btn.textContent = t.running && !held ? "■ Stop" : "▶ Test";
   btn.classList.toggle("is-running", !!t.running && !held);
-  stepBtn.hidden = t.steps < 2;
   stepBtn.disabled = btn.disabled || (!!t.running && !held);
+  stepBackBtn.disabled = !t.canStepBack;
+  stepBackBtn.title = t.running && !t.running.live ? "Previous step, in the test" : "Previous step: make the look before LIVE's LIVE now (no fade), as the console's ‹";
   // With steps the In time is the console's to set; here, their count and total time.
   time.hidden = t.steps > 1;
   steps.hidden = t.steps < 2;

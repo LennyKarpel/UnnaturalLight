@@ -83,10 +83,11 @@
           <!-- Test the fade into LIVE (stage/test-fade.ts), centered over the 3D view. -->
           <div class="test-fade" id="testFade">
             <button type="button" id="testFadeBtn" disabled>▶ Test</button>
-            <button type="button" id="testStepBtn" hidden title="Test one step at a time: play to the LIVE cue's next step and hold there">Step</button>
-            <button type="button" id="cueBackBtn" class="test-fade-step" title="Make the cue before LIVE the LIVE one (the cue the stage edits)" aria-label="Previous cue" disabled>‹</button>
+            <button type="button" id="cueBackBtn" class="test-fade-step" title="Make the cue before LIVE the LIVE one (the cue the stage edits)" aria-label="Previous cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
+            <button type="button" id="testStepBackBtn" class="test-fade-step" aria-label="Previous step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
             <span id="testFadeCues" class="test-fade-cues">—</span>
-            <button type="button" id="cueForwardBtn" class="test-fade-step" title="Make the cue after LIVE the LIVE one (the cue the stage edits)" aria-label="Next cue" disabled>›</button>
+            <button type="button" id="testStepBtn" class="test-fade-step" aria-label="Next step" disabled title="Test one step at a time: play to the LIVE cue's next step and hold there"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+            <button type="button" id="cueForwardBtn" class="test-fade-step" title="Make the cue after LIVE the LIVE one (the cue the stage edits)" aria-label="Next cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
             <label class="test-fade-live" title="Also on the real lights: the cue before is made LIVE, and a second later GO (the console follows)"><input type="checkbox" id="testFadeLive" /> Live</label>
             <select id="testFadeTime" aria-label="The LIVE cue's fade (In) time" title="The LIVE cue's fade (In) time" disabled></select>
             <span id="testFadeSteps" class="test-fade-steps" hidden title="The LIVE cue's steps and their total time (set them in the console)"></span>
@@ -316,12 +317,13 @@
                       </div>
                       <div class="crossfade-title go-title">
                         <div class="go-row">
-                          <button id="prevCueBtn" type="button" class="go-step" title="Previous cue (make it live now)" aria-label="Previous cue">◀</button>
+                          <button id="prevCueBtn" type="button" class="go-step" title="Previous cue (make it live now)" aria-label="Previous cue"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
+                          <button id="goStepBackBtn" type="button" class="go-step" aria-label="Previous step"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
                           <button id="goBtn" type="button" class="go-btn" title="GO — fade to the next cue">
                             GO
                           </button>
-                          <button id="goStepBtn" type="button" class="go-step go-step-btn" hidden>Step</button>
-                          <button id="nextCueBtn" type="button" class="go-step" title="Next cue (make it live now, no fade)" aria-label="Next cue">▶</button>
+                          <button id="goStepBtn" type="button" class="go-step" aria-label="Next step"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+                          <button id="nextCueBtn" type="button" class="go-step" title="Next cue (make it live now, no fade)" aria-label="Next cue"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
                         </div>
                         <output id="crossValue" class="go-progress">0%</output>
                       </div>

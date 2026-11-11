@@ -128,3 +128,16 @@ body > .menu .menu-item:disabled { color: var(--muted); cursor: default; backgro
 }
 .divider:hover .grip, body.dragging .divider .grip { border-color: var(--accent); }
 body.dragging { cursor: col-resize; user-select: none; }
+
+/* « ‹ › » on the console's GO row and the 3D view's test bar (cues: double, steps: single). */
+.chev {
+  display: block;
+  width: 1em;
+  height: 1em;
+  margin: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

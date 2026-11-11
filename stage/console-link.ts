@@ -160,6 +160,10 @@ export function createConsoleLink({
     testStep(live = false) {
       toConsole((c) => c.testStep(live));
     },
+    /** ‹ Step: a held test back a step; otherwise the console's ‹ Step. */
+    testStepBack(live = false) {
+      toConsole((c) => c.testStepBack(live));
+    },
     /** Make the cue before (-1) / after (+1) LIVE the LIVE one: the cue the stage edits. */
     stepCue(step: -1 | 1) {
       toConsole((c) => c.stepCue(step));

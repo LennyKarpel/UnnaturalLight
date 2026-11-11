@@ -4,9 +4,9 @@
 
 import { FADER_COUNT, setUniverseCount } from "../console/patch.ts";
 import { parseShow, serializeShow, type ShowData } from "../console/show.ts";
-import { clampStep, cueSeconds, resolveActiveSong, shownLevels, stepPath, type Look } from "../console/songs.ts";
-import { nextSetSong, playbackCue, playbackLevels, upNextCue } from "../console/sets.ts";
-import { computeChannelLevels, fadeCross, liveLevel, stepArrivals, timeAt } from "../shared/engine.ts";
+import { clampStep, resolveActiveSong, shownLevels, type Look } from "../console/songs.ts";
+import { goTarget, nextSetSong, playbackLevels, upNextCue } from "../console/sets.ts";
+import { computeChannelLevels, fadeCross, liveLevel, timeAt } from "../shared/engine.ts";
 import { LIVE_FIELDS, type LiveField } from "../shared/live-fields.ts";
 import { must } from "../shared/query.ts";
 import { errorMessage } from "../shared/guards.ts";
@@ -17,9 +17,9 @@ import { clamp } from "../shared/numbers.ts";
 /**
  * A GO fade in progress: the crossfade runs from `start` to `target` over
  * `durationMs`, eased, and is `elapsedMs` in. `id` changes when a new fade
- * starts or a paused one resumes.
+ * starts or a paused one resumes. `step`: a Step's (to the next look only).
  */
-export type FadeInfo = { id: number; paused: boolean; start: number; target: number; durationMs: number; elapsedMs: number };
+export type FadeInfo = { id: number; paused: boolean; start: number; target: number; step: boolean; durationMs: number; elapsedMs: number };
 
 export type Live = Record<LiveField, number> & {
   /** The timed fade running (null = none). Consoles animate it between updates. */
@@ -41,7 +41,8 @@ export function createShow(saved: unknown) {
       console.warn(`Saved session ignored: ${errorMessage(err)}`);
     }
   }
-  let fade: null | { start: number; target: number; durationMs: number; startedAt: number; pausedAt: number | null } = null;
+  /** The running fade; `step`: a Step's; `cue` / `liveStep`: where it arrives. */
+  let fade: null | { start: number; target: number; durationMs: number; startedAt: number; pausedAt: number | null; step: boolean; cue: number; liveStep: number } = null;
   /** client id → faders it holds flashed / blacked out */
   const holds = new Map<string, Holds>();
 
@@ -132,10 +133,11 @@ export function createShow(saved: unknown) {
     },
 
     /**
-     * GO: fade from LIVE to UP NEXT (through its steps, over its time), then
-     * advance. From part way (after a Step, or the crossfader moved) it goes
-     * on from there, over the time left. `step`: only as far as UP NEXT's
-     * next step, then hold there (its last step: all the way, as GO).
+     * GO: fade from LIVE to what's next (see goTarget: the rest of the LIVE
+     * cue when LIVE is on one of its steps, else UP NEXT through its steps),
+     * over its time, then arrive. From part way (the crossfader moved) it goes
+     * on from there, over the time left. `step`: only to the next look (the
+     * LIVE cue's next step, or UP NEXT's first), and arrive there.
      */
     go(now: number, { step = false } = {}) {
       const show = cur();
@@ -149,13 +151,10 @@ export function createShow(saved: unknown) {
         show.cross = 0;
       }
       clampPlayback();
-      if (show.toCue === show.fromCue) return;
-      const cue = playbackCue(show, show.toCue);
-      if (!cue) return;
-      const path = stepPath(cue);
-      const target = step && path ? (stepArrivals(path).find((at) => at > show.cross + 1e-6) ?? 100) : 100;
-      const durationMs = (timeAt(target) - timeAt(show.cross)) * cueSeconds(cue) * 1000;
-      fade = { start: show.cross, target, durationMs, startedAt: now, pausedAt: null };
+      const to = goTarget(show, step);
+      if (!to) return;
+      const durationMs = (1 - timeAt(show.cross)) * to.seconds * 1000;
+      fade = { start: show.cross, target: 100, durationMs, startedAt: now, pausedAt: null, step, cue: to.cue, liveStep: to.step };
     },
 
     togglePause(now: number) {
@@ -183,14 +182,8 @@ export function createShow(saved: unknown) {
       const t = fade.durationMs > 0 ? Math.min(1, (now - fade.startedAt) / fade.durationMs) : 1;
       show.cross = fadeCross(fade.start, fade.target, t);
       if (t < 1) return { arrived: null };
-      const { target } = fade;
+      const { cue: arrived, liveStep } = fade;
       fade = null;
-      // A Step: held on UP NEXT's step, part way through the crossfade.
-      if (target < 100) {
-        show.cross = target;
-        return { arrived: null };
-      }
-      const arrived = show.toCue;
       const next = arrived >= activeSong().cues.length ? nextSetSong(show) : null;
       if (next) {
         show.activeSongId = next.song.id;
@@ -198,7 +191,7 @@ export function createShow(saved: unknown) {
       }
       show.fromCue = next ? 0 : arrived;
       show.selectedCue = show.fromCue;
-      show.liveStep = -1; // arrived on the cue's own look
+      show.liveStep = liveStep; // the look arrived on: a step, or the cue's own (-1)
       show.cross = 0;
       clampPlayback();
       return { arrived: show.fromCue, songChanged: Boolean(next) };
@@ -211,7 +204,8 @@ export function createShow(saved: unknown) {
       const levels = cueLevels();
       const flashing = heldUnion("flashing");
       const blackedOut = heldUnion("blackedOut");
-      const mix = { ...s, toPath: stepPath(playbackCue(s, s.toCue)) };
+      const to = goTarget(s, fade?.step);
+      const mix = { ...s, toLevels: to?.levels, toPath: to?.path };
       return computeChannelLevels(s.patch, (i) => (flashing.has(i) ? 255 : blackedOut.has(i) ? 0 : liveLevel(mix, levels, i)));
     },
 
@@ -229,6 +223,7 @@ export function createShow(saved: unknown) {
           paused: fade.pausedAt != null,
           start: fade.start,
           target: fade.target,
+          step: fade.step,
           durationMs: fade.durationMs,
           elapsedMs: (fade.pausedAt ?? performance.now()) - fade.startedAt,
         },

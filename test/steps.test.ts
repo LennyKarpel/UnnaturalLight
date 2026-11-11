@@ -81,33 +81,38 @@ test("a GO passes through the steps, on time", () => {
   assert.equal(stepAt(path, step), 0, "arrived on the step: on it");
 });
 
-test("the server: Step holds on the step, GO goes on from there and arrives", () => {
+test("the server: Step lands on the next cue's step, LIVE; GO plays the rest of the cue", () => {
   const show = createShow(serializeShow(parseShow(showData())));
   const f1 = () => show.levels().get(1) ?? 0;
   show.go(0, { step: true });
+  assert.equal(show.live()!.fade!.durationMs, 1000, "the step's fade");
   show.tick(500);
   assert.ok(f1() > 0 && f1() < 100, `fading into the step: ${f1()}`);
-  assert.deepEqual(show.tick(1000), { arrived: null });
+  assert.deepEqual(show.tick(1000), { arrived: 1, songChanged: false });
+  assert.deepEqual({ live: show.live()!.fromCue, step: show.live()!.liveStep, cross: show.live()!.cross }, { live: 1, step: 0, cross: 0 });
   assert.equal(f1(), 100);
-  assert.equal(show.live()!.fade, null, "held: no fade running");
-  assert.equal(show.live()!.fromCue, 0, "still on the way to cue B");
-  // GO: the rest (the hold, then into the cue) over the time left, 3 s.
+  // GO: the rest of cue B, from its step into its own look, over its In time.
   show.go(2000);
-  assert.equal(show.live()!.fade!.durationMs, 3000);
-  show.tick(2500); // 1.5 s into the cue: on the step's hold (1 s – 2 s)
-  assert.equal(f1(), 100, "the step's hold");
-  assert.deepEqual(show.tick(5000), { arrived: 1, songChanged: false });
+  assert.equal(show.live()!.fade!.durationMs, 2000);
+  show.tick(3000);
+  assert.ok(Math.abs(f1() - 150) <= 1, `half way to the cue's own look: ${f1()}`);
+  assert.deepEqual(show.tick(4000), { arrived: 1, songChanged: false });
   assert.equal(f1(), 200);
   assert.equal(show.live()!.liveStep, -1);
 });
 
-test("the server: Step on the cue's last part goes all the way, like GO", () => {
+test("the server: Step from a cue's last step lands on its own look; with no steps ahead, Step is GO", () => {
+  const show = createShow(serializeShow(parseShow(showData())));
+  show.applyLive({ fromCue: 1, selectedCue: 1, liveStep: 0 });
+  show.go(0, { step: true });
+  assert.equal(show.live()!.fade!.durationMs, 2000, "the cue's own In");
+  show.tick(2000);
+  assert.deepEqual({ live: show.live()!.fromCue, step: show.live()!.liveStep }, { live: 1, step: -1 });
   const data = showData();
   data.songs[0].cues[1].steps = [];
-  const show = createShow(serializeShow(parseShow(data)));
-  show.go(0, { step: true });
-  assert.equal(show.live()!.fade!.target, 100);
-  assert.deepEqual(show.tick(2000), { arrived: 1, songChanged: false });
+  const plain = createShow(serializeShow(parseShow(data)));
+  plain.go(0, { step: true });
+  assert.deepEqual(plain.tick(2000), { arrived: 1, songChanged: false });
 });
 
 test("the server: a level edit by step id lands in the step", () => {

@@ -18,7 +18,6 @@ import { clampStep, defaultSongName, createSong, normalizeSongs, resolveActiveSo
 import {
   normalizeSets,
   nextSetSong,
-  playbackCue,
   playbackLevels,
   resolveActiveEntry,
   resolveActiveSet,
@@ -215,9 +214,6 @@ export function syncPlaybackPair() {
   state.cueLevels = shownLevels(cues, state.fromCue, state.liveStep);
   state.toCue = upNextCue(state);
 }
-
-/** UP NEXT as a cue (maybe the next set song's first), for its steps. */
-export const upNextCueObject = () => playbackCue(state, state.toCue);
 
 bindActiveSong();
 

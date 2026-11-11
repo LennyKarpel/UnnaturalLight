@@ -250,6 +250,7 @@ export const crossFromLabel = elById("crossFromLabel");
 export const crossToLabel = elById("crossToLabel");
 export const goBtn = elById("goBtn", HTMLButtonElement);
 export const goStepBtn = elById("goStepBtn", HTMLButtonElement);
+export const goStepBackBtn = elById("goStepBackBtn", HTMLButtonElement);
 export const crossTicks = elById("crossTicks");
 export const prevCueBtn = elById("prevCueBtn", HTMLButtonElement);
 export const nextCueBtn = elById("nextCueBtn", HTMLButtonElement);

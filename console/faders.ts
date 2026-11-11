@@ -2,7 +2,7 @@
 // extras drawn on fader rows (color bars, pan/tilt pads, blackout and
 // flash buttons, fixture outlines).
 import { liveLevel as mixLevel, exactLiveLevel as exactMixLevel, type Mix } from "../shared/engine.ts";
-import { stepPath } from "./songs.ts";
+import { goTarget } from "./sets.ts";
 import { installColorPicker } from "../shared/color-picker.ts";
 import { bindPanTiltPad, type PanTilt } from "../shared/pan-tilt-pad.ts";
 import { ask, type AskOptions } from "../shared/ask.ts";
@@ -13,7 +13,7 @@ import { FADER_COUNT, formatChannelLabel, formatChannelTooltip, type FaderPatch 
 import { formatChannelRange, type Fixture } from "./fixtures.ts";
 import { defaultFaderName } from "./show.ts";
 import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, tabPatch, closePopup, openPopup, menuItem } from "./dom.ts";
-import { getNextSetSong, getPlaybackLevels, persistSession, state, upNextCueObject } from "./state.ts";
+import { getNextSetSong, getPlaybackLevels, persistSession, state } from "./state.ts";
 import {
   liveUi,
   blackedOutFaders,
@@ -321,7 +321,10 @@ export function levelSlider(wrap: HTMLElement, i: number, level: number, label: 
 }
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
-const shownMix = (): Mix => ({ master: state.master, cross: shownCross(), fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue, toPath: stepPath(upNextCueObject()) });
+const shownMix = (): Mix => {
+  const to = goTarget(state, state.fadeState?.step);
+  return { master: state.master, cross: shownCross(), fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue, toLevels: to?.levels, toPath: to?.path };
+};
 
 export function liveLevel(faderIndex: number) {
   return mixLevel(shownMix(), getPlaybackLevels(), faderIndex);

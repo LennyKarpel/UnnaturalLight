@@ -81,7 +81,7 @@ async function openPage(debugPort: number, url: string) {
     ws.send(JSON.stringify({ id, method, params }));
   });
   await send("Runtime.enable");
-  await send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 900, deviceScaleFactor: 1, mobile: false });
+  await send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1200, deviceScaleFactor: 1, mobile: false });
 
   /** Run `expr` in the page (awaited) and return its value (JSON). Throws the page's error. */
   async function evaluate<T = unknown>(expr: string): Promise<T> {
@@ -95,6 +95,7 @@ async function openPage(debugPort: number, url: string) {
   const KEYS: Record<string, { code: string; vk: number }> = {
     Delete: { code: "Delete", vk: 46 }, Backspace: { code: "Backspace", vk: 8 }, Escape: { code: "Escape", vk: 27 },
     Enter: { code: "Enter", vk: 13 }, z: { code: "KeyZ", vk: 90 },
+    Tab: { code: "Tab", vk: 9 }, "-": { code: "Minus", vk: 189 }, "=": { code: "Equal", vk: 187 },
   };
 
   /** Keys and clicks only reach the tab in front, as with a person's: bring this one there first. */
@@ -118,23 +119,34 @@ async function openPage(debugPort: number, url: string) {
     /** A real click in the middle of the first element matching `selector`. */
     async click(selector: string) {
       await front();
-      // Scrolled to the middle (an edge can be under a scroll bar strip), and
-      // where it is once it stops moving (a smooth scroll may be under way).
-      const at = await evaluate<{ x: number; y: number } | null>(`(async () => {
+      // Scrolled into view where nothing covers it (a sticky scroll bar strip
+      // can), once it stops moving (a smooth scroll may be under way).
+      const at = await evaluate<{ x: number; y: number; covered?: string } | null>(`(async () => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return null;
         const center = () => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
-        el.scrollIntoView({ block: "center", inline: "nearest" });
-        let last = center();
-        for (let i = 0; i < 60; i++) {
-          await new Promise((r) => requestAnimationFrame(() => r()));
-          const now = center();
-          if (now.x === last.x && now.y === last.y) return now;
-          last = now;
+        const settled = async () => {
+          let last = center();
+          for (let i = 0; i < 60; i++) {
+            await new Promise((r) => requestAnimationFrame(() => r()));
+            const now = center();
+            if (now.x === last.x && now.y === last.y) return now;
+            last = now;
+          }
+          return last;
+        };
+        let covered = "";
+        for (const block of ["center", "start", "end"]) {
+          el.scrollIntoView({ block, inline: "nearest" });
+          const now = await settled();
+          const hit = document.elementFromPoint(now.x, now.y);
+          if (!hit || el.contains(hit)) return now;
+          covered = (hit.className || hit.tagName) + " in " + (hit.parentElement?.className ?? "");
         }
-        return last;
+        return { ...center(), covered };
       })()`);
       if (!at) throw new Error(`Nothing matches ${selector}`);
+      if (at.covered) throw new Error(`${selector} is under ${at.covered}`);
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
         await send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: type === "mouseMoved" ? "none" : "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
       }
@@ -159,14 +171,18 @@ async function openPage(debugPort: number, url: string) {
   return page;
 }
 
-/** The server and Chrome; `page()` opens another app window. Call `close()` when done. */
-export async function startApp() {
+/**
+ * The server and Chrome; `page()` opens another app window. Call `close()`
+ * when done. `data`: a folder whose files the server starts with (copied).
+ */
+export async function startApp({ data }: { data?: string } = {}) {
   const chrome = chromePath();
   if (!chrome) throw new Error("No Chrome found (set CHROME_PATH)");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "unnaturallight-browser-"));
   const dataDir = path.join(tmp, "data");
   const profile = path.join(tmp, "chrome");
   fs.mkdirSync(dataDir);
+  if (data) fs.cpSync(data, dataDir, { recursive: true });
   const port = await freePort();
   const procs: ChildProcess[] = [];
 

@@ -1143,13 +1143,6 @@
     color: var(--ink);
   }
 
-  /* Step: GO as far as UP NEXT's next step (cues with steps only). */
-  .go-step-btn {
-    font-family: var(--display);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
-
   .crossfader-wrap {
     position: relative;
   }

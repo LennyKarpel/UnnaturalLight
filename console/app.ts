@@ -49,7 +49,7 @@ import {
   normalizeMount,
   normalizeRoles,
 } from "./fixtures.ts";
-import { normalizeSets, playbackCue, previousSetSong } from "./sets.ts";
+import { goTarget, normalizeSets, playbackCue, previousSetSong } from "./sets.ts";
 import { allAims, applyAims, applyReaims } from "./aims.ts";
 import {
   currentCueTitle,
@@ -61,6 +61,7 @@ import {
   crossfader,
   goBtn,
   goStepBtn,
+  goStepBackBtn,
   prevCueBtn,
   nextCueBtn,
   fadePauseBtn,
@@ -134,6 +135,8 @@ import {
   goNextCue,
   stepLiveCue,
   stepNextCue,
+  stepBackCue,
+  previousLook,
   stepTarget,
   setSelectedCue,
   showArrivedCue,
@@ -309,6 +312,7 @@ goBtn.addEventListener("click", () => {
   goNextCue();
 });
 goStepBtn.addEventListener("click", () => stepNextCue());
+goStepBackBtn.addEventListener("click", () => stepBackCue());
 prevCueBtn.addEventListener("click", () => stepLiveCue(-1));
 nextCueBtn.addEventListener("click", () => stepLiveCue(1));
 
@@ -799,7 +803,7 @@ const consoleChat = {
     const song = getActiveSong();
     const set = getActiveSet();
     const songNumber = (id: string) => show.songs.findIndex((s) => s.id === id) + 1;
-    const hasUpNext = state.toCue !== state.fromCue;
+    const hasUpNext = !!goTarget(state);
     return {
       showName: show.showName,
       serverConnected: state.serverLive,
@@ -832,7 +836,7 @@ const consoleChat = {
   },
   /** GO (false: nothing UP NEXT, or the show server is offline). */
   go(): boolean {
-    if (!state.serverLive || state.toCue === state.fromCue) return false;
+    if (!state.serverLive || !goTarget(state)) return false;
     goNextCue();
     return true;
   },
@@ -997,7 +1001,10 @@ startStageLink({
   levels: computeChannelLevels,
   exactLevels: () => computeChannelLevels({ exact: true }),
   patch: () => state.patch,
-  live: () => ({ cueLevels: getPlaybackLevels(), fromCue: state.fromCue, toCue: state.toCue, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master }),
+  live: () => {
+    const to = goTarget(state, state.fadeState?.step);
+    return { cueLevels: getPlaybackLevels(), fromCue: state.fromCue, toCue: state.toCue, toLevels: to?.levels, toPath: to?.path, fromSub: state.fromSub, toSub: state.toSub, cross: state.cross, master: state.master };
+  },
   fixtures: () => state.fixtures,
   groups: () => state.fixtureGroups,
   outlines: fixtureOutlineColors,
@@ -1042,7 +1049,7 @@ startStageLink({
     // LIVE's own look (not the step shown, if one is), through its steps.
     const cue = playbackCue(state, live);
     const to = { label: cueLabel(live), levels: cue?.levels ?? [], path: stepPath(cue), seconds: cue ? cueSeconds(cue) : 0 };
-    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1) };
+    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1), canStepBack: !!previousLook() };
     if (live > 0) return { from: { label: cueLabel(live - 1), levels: levels[live - 1] ?? [] }, to, ...steps };
     const prev = previousSetSong(state);
     const last = prev?.song.cues.at(-1);
@@ -1057,6 +1064,7 @@ startStageLink({
     persistSession();
   },
   stepCue: stepLiveCue,
+  stepBack: stepBackCue,
   liveTest: (() => {
     /** The cue being tested (LIVE when the test started). */
     let target: Cue | undefined;
@@ -1069,7 +1077,7 @@ startStageLink({
       },
       go: () => consoleChat.go(),
       step() {
-        if (!state.serverLive || state.toCue === state.fromCue) return false;
+        if (!state.serverLive || !goTarget(state, true)) return false;
         stepNextCue();
         return true;
       },

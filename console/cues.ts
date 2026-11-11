@@ -42,7 +42,9 @@ import {
   setSelectedCue,
   pickCue,
   renderSelectedGroup,
+  shownCross,
 } from "./live.ts";
+import { goTarget } from "./sets.ts";
 import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
@@ -244,6 +246,7 @@ export function renderCues() {
 
   refreshCueSelects();
   refreshColorBars();
+  syncStepTimeline(shownCross());
 }
 
 // ---------------------------------------------------------------------
@@ -333,10 +336,16 @@ function stepTimeline(cue: Cue, r: number) {
   return bar;
 }
 
-/** How far a GO into UP NEXT has got, on its row's timeline (by time, as its steps play). */
+/**
+ * How far through its looks a cue has got, on its row's timeline (by time):
+ * the cue a crossfade is going into, or the LIVE cue when it's on a step.
+ */
 export function syncStepTimeline(cross: number) {
-  const bar = cuesEl.querySelector<HTMLElement>(".fader-row.is-next .cue-timeline");
-  bar?.style.setProperty("--done", String(cross > 0 && cross < 100 ? timeAt(cross) : 0));
+  for (const bar of cuesEl.querySelectorAll<HTMLElement>(".cue-timeline")) bar.style.removeProperty("--done");
+  const go = goTarget(state, state.fadeState?.step);
+  if (!go || go.total <= 0 || (go.at <= 0 && cross <= 0)) return;
+  const bar = cuesEl.querySelector<HTMLElement>(`.fader-row[data-row="${go.cue}"] .cue-timeline`);
+  bar?.style.setProperty("--done", String(Math.min(1, (go.at + timeAt(cross) * go.seconds) / go.total)));
 }
 
 /** The LIVE cue's shown look: which it is, its fade and hold, and Remove. */
@@ -350,6 +359,11 @@ function stepRow(cue: Cue, r: number) {
   const go = (to: number) => setSelectedCue(r, to === cue.steps.length ? -1 : to);
   const prev = stepButton("‹", "Previous step: make it LIVE (no fade) and edit it", () => go(k - 1), "cue-step-nav");
   const next = stepButton("›", "Next step: make it LIVE (no fade) and edit it", () => go(k + 1), "cue-step-nav");
+  // The same chevrons as the GO row's ‹ › (page/page.css .chev).
+  prev.innerHTML = `<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>`;
+  next.innerHTML = `<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>`;
+  prev.setAttribute("aria-label", "Previous step");
+  next.setAttribute("aria-label", "Next step");
   prev.disabled = k === 0;
   next.disabled = k === looks - 1;
   row.append(prev, next);

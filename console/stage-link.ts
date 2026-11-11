@@ -61,11 +61,15 @@ export type StageLinkApi = {
     to: { label: string; levels: number[]; path: StepPath | null; seconds: number };
     canBack: boolean;
     canForward: boolean;
+    /** Whether there's a look before LIVE's (for ‹ Step). */
+    canStepBack: boolean;
   };
   /** Set the LIVE cue's In time (the 3D view's test fade). */
   setTestFade: (seconds: number) => void;
   /** Make the cue before / after LIVE the LIVE one (the test bar's ‹ ›). */
   stepCue: (step: -1 | 1) => void;
+  /** The console's ‹ Step: make the look before LIVE's LIVE, at once. */
+  stepBack: () => void;
   /**
    * A live test: `start` makes the cue before LIVE the LIVE one (false: there's
    * none), `go` is GO and `step` is Step (false: it can't), `stop` puts the
@@ -109,7 +113,7 @@ function testLevels(api: StageLinkApi, exact: boolean): Map<number, number> | nu
 }
 
 function testInfo(api: StageLinkApi): TransitionTest {
-  const { from, to, canBack, canForward } = api.testCues();
+  const { from, to, canBack, canForward, canStepBack } = api.testCues();
   const looks = (test ? test.path : to.path)?.steps.length ?? 0;
   const running = test && {
     phase: performance.now() < test.start + TEST_HOLD_MS ? "hold" as const : test.fade ? "fade" as const : "held" as const,
@@ -123,6 +127,8 @@ function testInfo(api: StageLinkApi): TransitionTest {
     steps: looks + 1,
     canBack,
     canForward,
+    // A held stage-only test goes back in itself; otherwise ‹ Step is the console's.
+    canStepBack: !test ? canStepBack : running?.phase === "held" && (test.live ? canStepBack : test.cross > 0),
     running,
   };
 }
@@ -188,6 +194,25 @@ function stepTest(api: StageLinkApi, live: boolean) {
   if (!test) return startTest(api, live, true);
   if (test.fade || performance.now() < test.start + TEST_HOLD_MS) return; // under way: wait for it
   fadeOn(api, test, true);
+  send();
+}
+
+/**
+ * ‹ Step: a held stage-only test goes back to its step before (or the cue
+ * before, at its start), at once. Otherwise the console's ‹ Step: the look
+ * before LIVE's is made LIVE (a live test ends there).
+ */
+function stepBackTest(api: StageLinkApi) {
+  if (test && !test.live) {
+    if (test.fade || performance.now() < test.start + TEST_HOLD_MS) return; // under way
+    const arrivals = test.path ? stepArrivals(test.path) : [];
+    const cross = test.cross;
+    test.cross = [...arrivals].reverse().find((at) => at < cross - 1e-6) ?? 0;
+    send();
+    return;
+  }
+  test = null;
+  api.stepBack();
   send();
 }
 
@@ -283,6 +308,7 @@ export function startStageLink(api: StageLinkApi) {
       send();
     },
     testStep: (live = false) => stepTest(api, live),
+    testStepBack: () => stepBackTest(api),
     setTestFade: (seconds) => api.setTestFade(seconds),
     stepCue(step) {
       test = null; // a test of the old LIVE cue would be wrong now
