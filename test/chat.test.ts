@@ -176,3 +176,31 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
     delete (globalThis as { window?: unknown }).window;
   }
 });
+
+test("stage tools: risers by name; sizes and center passed through in meters", () => {
+  const calls: unknown[][] = [];
+  const fake = {
+    stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [], fixtures: [], positions: [], risers: [{ id: "k1", name: "Drum riser", x: 0, z: -2, width: 2.4, depth: 2.4, height: 0.6, yaw: 0 }, { id: "k2", name: "Keys riser", x: 3, z: -2, width: 2.4, depth: 1.2, height: 0.4, yaw: 0 }] }),
+    addRiser: (cfg: unknown) => { calls.push(["add", cfg]); return {}; },
+    editRiser: (id: string, change: unknown) => { calls.push(["edit", id, change]); return {}; },
+    deleteRiser: (id: string) => { calls.push(["delete", id]); return ""; },
+  };
+  (globalThis as { window?: unknown }).window = { stageChat: fake };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    run("add_riser", { name: "Vocal riser", center: { x: 0, z: 1 }, height: 0.2 });
+    run("edit_riser", { riser: "drum", center: { z: -3 }, yaw: 45 });
+    run("delete_riser", { riser: "Keys riser" });
+    assert.deepEqual(calls, [
+      ["add", { name: "Vocal riser", x: 0, z: 1, height: 0.2 }],
+      ["edit", "k1", { z: -3, yaw: 45 }],
+      ["delete", "k2"],
+    ]);
+    assert.throws(() => run("edit_riser", { riser: "riser", height: 1 }), /matches "Drum riser", "Keys riser"/);
+    assert.throws(() => run("edit_riser", { riser: "Drum riser" }), /Nothing to change/);
+    assert.throws(() => run("delete_riser", { riser: "lectern" }), /No riser "lectern" \(risers: Drum riser, Keys riser\)/);
+    assert.throws(() => run("add_riser", { center: { x: 0 } }), /center z must be a number/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});

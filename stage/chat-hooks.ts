@@ -2,8 +2,9 @@
 // (window.stageChat): the same functions as the stage's own controls, so its
 // edits are saved and shared the usual way. Fixtures and rigs are passed by id.
 import { MAX_FIXTURES, RIG_TYPES, aimAt, homeFixture, consoleTypeFromKey, createFixture, round, linkChannels, type RigType } from "./stage-model.ts";
-import { state, byId, positionById, rigById, rigOf, rigMembers, moveFixture, addRigAt, setRigField, serialize, save, RIG_FIELDS, type RigField } from "./state.ts";
-import { changed, deleteSelected, addPositionAt, deletePosition, setActivePosition } from "./actions.ts";
+import { state, byId, positionById, riserById, rigById, rigOf, rigMembers, moveFixture, addRigAt, setRigField, serialize, save, RIG_FIELDS, type RigField } from "./state.ts";
+import { changed, deleteSelected, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser, setRiserField, RISER_FIELDS, type RiserField } from "./actions.ts";
+import type { Riser } from "./risers.ts";
 import { renderInspector } from "./sidebar.ts";
 import { updateBox } from "./view3d.ts";
 import { syncBoxInputs } from "./dialogs.ts";
@@ -42,6 +43,12 @@ function showChanged(ids: string[]) {
   changed();
 }
 
+/** A riser as the chat sees it (meters, yaw in degrees). */
+const riserInfo = (r: Riser) => ({ name: r.name, x: r.x, z: r.z, width: r.w, depth: r.d, height: r.h, yaw: r.yaw });
+
+/** Riser sizes as the chat names them → the riser's own fields. */
+const RISER_SIZE_KEYS = { width: "w", depth: "d", height: "h" } as const;
+
 const stageChat = {
   /** The box, rigs and fixtures, for the model to read. */
   stage() {
@@ -61,6 +68,7 @@ const stageChat = {
         following: followingOf(f)?.name ?? null,
       })),
       positions: state.positions.map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z })),
+      risers: state.risers.map((r) => ({ id: r.id, ...riserInfo(r) })),
       maxFixtures: MAX_FIXTURES,
       /** The unit the person sees lengths in (the tools always use meters). */
       units: unitName(),
@@ -97,6 +105,42 @@ const stageChat = {
     if (!position) throw new Error("No such position");
     deletePosition(id);
     return position.name;
+  },
+
+  /** A new riser centered at (x, z) on the floor; sizes default to an 8 × 4 ft deck, 0.4 m high. */
+  addRiser(cfg: { name?: string; x: number; z: number; width?: number; depth?: number; height?: number; yaw?: number }) {
+    const n = cfg.name?.trim() ?? "";
+    if (n && state.risers.some((r) => r.name.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a riser called "${n}"`);
+    const riser = addRiserAt(cfg.x, cfg.z, {
+      name: n || undefined,
+      ...(cfg.width != null ? { w: cfg.width } : {}),
+      ...(cfg.depth != null ? { d: cfg.depth } : {}),
+      ...(cfg.height != null ? { h: cfg.height } : {}),
+      ...(cfg.yaw != null ? { yaw: cfg.yaw } : {}),
+    });
+    if (!riser) throw new Error("Riser limit reached");
+    return riserInfo(riser);
+  },
+
+  /** Rename, move (x / z), resize or turn a riser. */
+  editRiser(id: string, change: { name?: string; x?: number; z?: number; width?: number; depth?: number; height?: number; yaw?: number }) {
+    const riser = riserById(id);
+    if (!riser) throw new Error("No such riser");
+    const n = change.name?.trim();
+    if (n && state.risers.some((r) => r !== riser && r.name.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a riser called "${n}"`);
+    const fields: Partial<Record<RiserField, string | number>> = { name: n || undefined, x: change.x, z: change.z, yaw: change.yaw };
+    for (const [k, f] of Object.entries(RISER_SIZE_KEYS)) fields[f] = change[k as keyof typeof RISER_SIZE_KEYS];
+    for (const k of RISER_FIELDS) { const v = fields[k]; if (v != null) setRiserField(riser, k, v); }
+    setActiveRiser(riser.id);
+    changed();
+    return riserInfo(riser);
+  },
+
+  deleteRiser(id: string) {
+    const riser = riserById(id);
+    if (!riser) throw new Error("No such riser");
+    deleteRiser(id);
+    return riser.name;
   },
 
   /** New free fixtures at these points; `type` = a console type key or "none" (stage only). */

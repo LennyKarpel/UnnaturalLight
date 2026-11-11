@@ -6,6 +6,8 @@
   & {
     /* Named positions (list, plan, 3D): apart from selection cyan and audience amber. */
     --position: #c58cff;
+    /* Risers (list, plan, 3D edges): a sand color, apart from the positions' violet. */
+    --riser: #c9b58a;
     background: var(--bg);
     color: var(--ink);
     font-family: var(--font);
@@ -187,6 +189,12 @@
   .position-row .position-xyz { grid-column: 2 / -1; }
   .position-row button { padding: 2px 8px; font-size: var(--text-xs); }
   .position-mark { color: var(--position); font-size: 10px; text-align: center; cursor: pointer; }
+  /* Risers tab: the name and delete, with size and place under them. */
+  .list .riser-row { grid-template-columns: 12px 1fr auto; row-gap: 4px; cursor: default; }
+  .riser-row button { padding: 2px 8px; font-size: var(--text-xs); }
+  .riser-mark { color: var(--riser); font-size: 10px; text-align: center; cursor: pointer; }
+  .riser-fields { grid-column: 2 / -1; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 8px; }
+  .riser-fields label { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 
   /* Collapsed: only the heading shows (ids so this beats #plan's display). */
   :is(#planSection, #fixtures, #inspector).is-collapsed { padding-bottom: 0; }

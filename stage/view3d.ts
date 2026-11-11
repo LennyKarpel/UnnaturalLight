@@ -25,9 +25,10 @@ import {
   type Xyz,
 } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
-import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, ui } from "./state.ts";
+import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
+import { RISER_DEFAULTS, RISER_MIN, RISER_MAX_H, SIZE_HANDLES, TURN_HANDLE_GAP, resizeTo, yawToward, type Riser, type RiserHandle } from "./risers.ts";
 import { runFrameStart } from "./frame.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, openPositionMenu, showPositionSpot } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
@@ -87,6 +88,8 @@ const uniforms = {
   uFaceAlpha: { value: new Float32Array(6) },
   uPass: { value: 0 },
   uAlpha: { value: 0.03 },
+  /** The surface's own color (risers are a little lighter and warmer than the box). */
+  uBase: { value: new THREE.Vector3(0.075, 0.08, 0.095) },
 };
 
 const vertexShader = /* glsl */ `
@@ -114,6 +117,7 @@ const fragmentShader = /* glsl */ `
   uniform float uAlpha;
   uniform float uGrid;
   uniform float uMajor;
+  uniform vec3 uBase;
   varying vec3 vPos;
   varying vec3 vNormal;
 
@@ -154,7 +158,7 @@ const fragmentShader = /* glsl */ `
     vec2 fine = uv / uGrid;
     float crowd = smoothstep(0.12, 0.3, max(fwidth(fine).x, fwidth(fine).y));
     float grid = uMajor > 1.0 ? max(gridLine(fine / uMajor), gridLine(fine) * 0.6 * (1.0 - crowd)) : gridLine(fine);
-    vec3 base = vec3(0.075, 0.08, 0.095) + grid * 0.06;
+    vec3 base = uBase + grid * 0.06;
     vec3 col = base + light * 0.85 + vec3(edge) * 0.25;
     col = 1.0 - exp(-col * 1.4);
 
@@ -328,6 +332,184 @@ function makeLabel(text: string, height = 0.32, color = "#e8e4dc") {
   return sprite;
 }
 
+// Risers: solid boxes standing on the floor, lit by the beams like the box's
+// surfaces (the same shader), with sand-colored edges and the name on top.
+const RISER_COLOR = 0xc9b58a; // the same as --riser in stage.css
+const riserGeom = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+const riserEdgesGeom = new THREE.EdgesGeometry(riserGeom);
+const riserMat = new THREE.ShaderMaterial({
+  uniforms: { ...uniforms, uPass: { value: 0 }, uFaceAlpha: { value: new Float32Array(6).fill(1) }, uBase: { value: new THREE.Vector3(0.12, 0.11, 0.1) } },
+  vertexShader, fragmentShader, side: THREE.FrontSide,
+});
+riserMat.extensions.derivatives = true;
+type RiserVisual = { group: THREE.Group; mesh: THREE.Mesh; edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>; label: THREE.Sprite; text: string };
+const riserVisuals = new Map<string, RiserVisual>();
+
+/** Drop a label sprite and its texture. */
+function disposeLabel(label: THREE.Sprite) {
+  label.material.map?.dispose();
+  label.material.dispose();
+}
+
+// The picked-out riser's handles (one set, moved onto whichever riser is
+// picked out): boxes on its top corners and edges to resize it, a knob past
+// its upstage edge to turn it, an arrow above it for its height. Drawn over
+// everything, with bigger invisible targets for the mouse.
+const handleMat = new THREE.MeshBasicMaterial({ color: 0xe8e4dc, depthTest: false });
+const handleLineMat = new THREE.LineDashedMaterial({ color: 0xe8e4dc, dashSize: 0.08, gapSize: 0.06, depthTest: false });
+const handleGroup = new THREE.Group();
+const handlePickGeom = new THREE.SphereGeometry(0.22, 10, 8);
+/** A handle mesh, with a bigger invisible target; both carry the handle. */
+function makeHandle(geom: THREE.BufferGeometry, handle: RiserHandle) {
+  const mesh = new THREE.Mesh(geom, handleMat);
+  mesh.renderOrder = 12;
+  const pick = new THREE.Mesh(handlePickGeom, new THREE.MeshBasicMaterial({ visible: false }));
+  mesh.userData.handle = pick.userData.handle = handle;
+  mesh.add(pick);
+  handleGroup.add(mesh);
+  return mesh;
+}
+const sizeHandles = SIZE_HANDLES.map((h) => ({ h, mesh: makeHandle(new THREE.BoxGeometry(0.14, 0.14, 0.14), h) }));
+const turnHandle = makeHandle(new THREE.SphereGeometry(0.1, 16, 12), { kind: "turn" });
+const heightHandle = makeHandle(new THREE.ConeGeometry(0.09, 0.2, 16), { kind: "height" });
+const stemLine = () => {
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), handleLineMat);
+  line.renderOrder = 12;
+  handleGroup.add(line);
+  return line;
+};
+const turnStem = stemLine();
+const heightStem = stemLine();
+/** How far above the top the height arrow sits (clear of the name label). */
+const HEIGHT_HANDLE_RISE = 0.5;
+
+function setStem(line: THREE.Line, a: THREE.Vector3, b: THREE.Vector3) {
+  const pts = line.geometry.attributes.position;
+  pts.setXYZ(0, a.x, a.y, a.z);
+  pts.setXYZ(1, b.x, b.y, b.z);
+  pts.needsUpdate = true;
+  line.geometry.computeBoundingSphere();
+  line.computeLineDistances();
+}
+
+/** Put the handles on the picked-out riser (in its own turned frame), or take them off. */
+function syncHandles() {
+  const riser = riserById(ui.activeRiser);
+  const v = riser ? riserVisuals.get(riser.id) : null;
+  if (!riser || !v) { handleGroup.removeFromParent(); return; }
+  if (handleGroup.parent !== v.group) v.group.add(handleGroup);
+  const { w, d, h } = riser;
+  for (const { h: hd, mesh } of sizeHandles) mesh.position.set((hd.su * w) / 2, h, (hd.sv * d) / 2);
+  turnHandle.position.set(0, h, -(d / 2 + TURN_HANDLE_GAP));
+  setStem(turnStem, new THREE.Vector3(0, h, -d / 2), turnHandle.position);
+  heightHandle.position.set(0, h + HEIGHT_HANDLE_RISE, 0);
+  setStem(heightStem, new THREE.Vector3(0, h, 0), new THREE.Vector3(0, h + HEIGHT_HANDLE_RISE - 0.1, 0));
+  v.group.updateMatrixWorld(true);
+}
+
+/** The picked-out riser's handle under the pointer (uses the current ray), or null. */
+function pickHandle(e: MouseEvent): RiserHandle | null {
+  if (!handleGroup.parent) return null;
+  rayFromEvent(e);
+  const meshes = [...sizeHandles.map((s) => s.mesh), turnHandle, heightHandle];
+  return raycaster.intersectObjects(meshes, true)[0]?.object.userData.handle ?? null;
+}
+
+/** The mouse cursor over a handle. */
+const handleCursor = (h: RiserHandle) => (h.kind === "turn" ? "grab" : h.kind === "height" ? "ns-resize" : "move");
+
+/**
+ * Dragging a handle: on a level plane at the riser's top (size, turn), or an
+ * upright one facing the camera (height, with where the pointer was from the top).
+ */
+let dragHandle: { id: string; handle: RiserHandle; active: boolean; plane: THREE.Plane; offsetY: number } | null = null;
+
+function syncRisers() {
+  const ids = new Set(state.risers.map((r) => r.id));
+  for (const [id, v] of riserVisuals) {
+    if (ids.has(id)) continue;
+    scene.remove(v.group);
+    v.edges.material.dispose();
+    disposeLabel(v.label);
+    riserVisuals.delete(id);
+  }
+  for (const riser of state.risers) syncRiser(riser);
+  syncHandles();
+}
+
+function syncRiser(riser: Riser) {
+  let v = riserVisuals.get(riser.id);
+  if (!v) {
+    const group = new THREE.Group();
+    const mesh = new THREE.Mesh(riserGeom, riserMat);
+    mesh.userData.riserId = riser.id;
+    const edges = new THREE.LineSegments(riserEdgesGeom, new THREE.LineBasicMaterial({ color: RISER_COLOR }));
+    const label = makeLabel(riser.name, 0.26, "#c9b58a");
+    group.add(mesh, edges, label);
+    scene.add(group);
+    v = { group, mesh, edges, label, text: riser.name };
+    riserVisuals.set(riser.id, v);
+  }
+  if (v.text !== riser.name) {
+    v.group.remove(v.label);
+    disposeLabel(v.label);
+    v.label = makeLabel(riser.name, 0.26, "#c9b58a");
+    v.text = riser.name;
+    v.group.add(v.label);
+  }
+  v.group.position.set(riser.x, 0, riser.z);
+  v.group.rotation.y = riser.yaw * DEG;
+  v.mesh.scale.set(riser.w, riser.h, riser.d);
+  v.edges.scale.copy(v.mesh.scale);
+  const on = ui.activeRiser === riser.id;
+  v.edges.material.color.set(on ? 0xffffff : RISER_COLOR);
+  v.label.position.set(0, riser.h + 0.08, 0);
+  v.group.updateMatrixWorld();
+}
+
+/** Riser meshes, for picking and for what a click lands on. */
+const riserMeshes = () => [...riserVisuals.values()].map((v) => v.mesh);
+
+/** The riser under the pointer (uses the current ray), or null. */
+function pickRiser(e: MouseEvent): string | null {
+  rayFromEvent(e);
+  return raycaster.intersectObjects(riserMeshes())[0]?.object.userData.riserId ?? null;
+}
+
+/**
+ * The first surface the current ray hits: the box's inside or a riser.
+ * `normal` is the hit face's outward normal in the world (a riser's) or the
+ * box face's outward normal (the box's, which the ray sees from inside).
+ */
+function surfaceHit(): { point: THREE.Vector3; normal: THREE.Vector3; riser: Riser | null } | null {
+  const hit = raycaster.intersectObjects([boxInner, ...riserMeshes()])[0];
+  if (!hit?.face) return null;
+  const riser = riserById(hit.object.userData.riserId) ?? null;
+  const normal = riser ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : hit.face.normal.clone();
+  return { point: hit.point.clone(), normal, riser };
+}
+
+// Placing a riser: its outline where it would stand.
+const riserGhost = new THREE.LineSegments(riserEdgesGeom, new THREE.LineBasicMaterial({ color: 0x00dddd, depthTest: false }));
+riserGhost.renderOrder = 10;
+riserGhost.scale.set(RISER_DEFAULTS.w, RISER_DEFAULTS.h, RISER_DEFAULTS.d);
+riserGhost.visible = false;
+scene.add(riserGhost);
+
+/** Where a new riser's center would go (uses the current ray): the floor / ground under the pointer, snapped. */
+function riserSpot(): THREE.Vector3 | null {
+  const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
+  if (!g || Math.hypot(g.x, g.z) > 100) return null;
+  return g.set(snapLength(g.x), 0, snapLength(g.z));
+}
+
+/**
+ * Dragging a riser over the floor (only the picked-out one, so dragging
+ * elsewhere still turns the view): the plane at its top, and where the
+ * riser's center is from the pointer on it.
+ */
+let dragRiser: { id: string; active: boolean; plane: THREE.Plane; offset: THREE.Vector3 } | null = null;
+
 function syncPositions() {
   const ids = new Set(state.positions.map((p) => p.id));
   for (const [id, v] of positionVisuals) {
@@ -499,6 +681,7 @@ function showPositionPreview(p: THREE.Vector3 | null, surface: string | null, mo
 export function syncScene() {
   requestRender();
   syncPositions();
+  syncRisers();
   const ids = new Set(state.fixtures.map((i) => i.id));
   for (const [id, v] of visuals) {
     if (!ids.has(id)) {
@@ -681,14 +864,24 @@ function placePosition(outside: boolean) {
     const hit = raycaster.intersectObject(boxOuter)[0];
     if (hit?.face) return snap(hit.point.clone().addScaledVector(hit.face.normal, PLACE_OFFSET));
   }
-  const inner = raycaster.intersectObject(boxInner)[0];
-  if (inner?.face) return snap(inner.point.clone().addScaledVector(inner.face.normal, -PLACE_OFFSET));
+  const hit = surfaceHit();
+  // Into the box from its inside; off a riser's face, out from it.
+  if (hit) return snap(hit.point.addScaledVector(hit.normal, hit.riser ? PLACE_OFFSET : -PLACE_OFFSET));
   const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
   if (!g || Math.hypot(g.x, g.z) > 100) return null;
   return snap(g.setY(PLACE_OFFSET));
 }
 
 export function updateGhost(e: PointerEvent | null) {
+  if (ui.placingRiser) {
+    ghost.visible = ghostStem.visible = rigGhost.visible = false;
+    const p = e ? (rayFromEvent(e), riserSpot()) : null;
+    riserGhost.visible = !!p;
+    if (p) riserGhost.position.copy(p);
+    requestRender();
+    return;
+  }
+  if (riserGhost.visible) { riserGhost.visible = false; requestRender(); }
   // A position goes on the surface under the pointer, like an aim: show the target ring there.
   if (ui.placingPosition) {
     ghost.visible = ghostStem.visible = rigGhost.visible = false;
@@ -731,16 +924,23 @@ function surfaceName(n: THREE.Vector3): string {
  */
 function positionTarget(): { p: THREE.Vector3; surface: string } | null {
   const snap = (p: THREE.Vector3) => p.set(snapLength(p.x), snapLength(Math.max(0, p.y)), snapLength(p.z));
-  const hit = raycaster.intersectObject(boxInner)[0];
-  if (hit?.face) return { p: snap(hit.point.clone()), surface: surfaceName(hit.face.normal) };
+  const hit = surfaceHit();
+  if (hit?.riser) {
+    // On a riser's top: at its height exactly (snapping could sink it or lift it off).
+    const top = hit.normal.y > 0.5;
+    const p = snap(hit.point);
+    if (top) p.y = hit.riser.h;
+    return { p, surface: `${hit.riser.name} (${top ? "top" : "side"})` };
+  }
+  if (hit) return { p: snap(hit.point), surface: surfaceName(hit.normal) };
   const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
   return g && Math.hypot(g.x, g.z) <= 100 ? { p: snap(g), surface: "Ground, outside the box" } : null;
 }
 
 /** Aim target under the pointer (uses the current ray): a box surface, else the ground. */
 function aimPosition() {
-  const hit = raycaster.intersectObject(boxInner)[0];
-  if (hit) return hit.point.clone();
+  const hit = surfaceHit();
+  if (hit) return hit.point;
   const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
   return g && Math.hypot(g.x, g.z) <= 100 ? g : null;
 }
@@ -770,9 +970,34 @@ view.addEventListener("pointerdown", (e) => {
   if (e.target !== renderer.domElement || e.button !== 0) return;
   downAt = { x: e.clientX, y: e.clientY };
   if (ui.placing || ui.aiming) return;
+  // The picked-out riser's handles come first: they're small, and sit on its edges.
+  const handle = pickHandle(e);
+  const handleRiser = handle ? riserById(ui.activeRiser) : null;
+  if (handle && handleRiser) {
+    const top = new THREE.Vector3(handleRiser.x, handleRiser.h, handleRiser.z);
+    const plane = handle.kind === "height" ? dragPlane(top, true) : new THREE.Plane(new THREE.Vector3(0, 1, 0), -handleRiser.h);
+    const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+    dragHandle = { id: handleRiser.id, handle, active: false, plane, offsetY: hit ? handleRiser.h - hit.y : 0 };
+    controls.enabled = false;
+    renderer.domElement.setPointerCapture(e.pointerId);
+    return;
+  }
   const id = pickFixture(e);
   // No fixture there: a named position? Drag it over the surfaces.
   const positionId = id ? null : pickPosition(e);
+  // Nor a position: a riser? Pressing the picked-out one drags it; others are picked out on release.
+  const riserId = id || positionId ? null : pickRiser(e);
+  if (riserId && riserId === ui.activeRiser) {
+    const riser = riserById(riserId);
+    if (riser) {
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -riser.h);
+      const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+      dragRiser = { id: riserId, active: false, plane, offset: hit ? new THREE.Vector3(riser.x, 0, riser.z).sub(hit.setY(0)) : new THREE.Vector3() };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      return;
+    }
+  }
   if (positionId) {
     const position = positionById(positionId);
     // From where it's pressed (pickPosition just set the ray), as fixtures are.
@@ -791,6 +1016,40 @@ view.addEventListener("pointerdown", (e) => {
 
 view.addEventListener("pointermove", (e) => {
   if (e.target !== renderer.domElement) return;
+  if (dragHandle) {
+    if (!dragHandle.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    dragHandle.active = true;
+    const riser = riserById(dragHandle.id);
+    if (!riser) return;
+    rayFromEvent(e);
+    const hit = raycaster.ray.intersectPlane(dragHandle.plane, new THREE.Vector3());
+    if (!hit) return;
+    const h = dragHandle.handle;
+    const snap = (v: number) => snapLength(v, e.altKey);
+    if (h.kind === "size") Object.assign(riser, resizeTo(riser, h.su, h.sv, hit.x, hit.z, snap));
+    else if (h.kind === "turn") riser.yaw = yawToward(riser, hit.x, hit.z, e.altKey ? 1 : 15) ?? riser.yaw;
+    else riser.h = clamp(snap(hit.y + dragHandle.offsetY), RISER_MIN, RISER_MAX_H);
+    setBanner(`${riser.name}: ${describeRiser(riser)} · ⌥ = fine`);
+    changed({ list: false, inspector: false });
+    return;
+  }
+  if (dragRiser) {
+    if (!dragRiser.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    dragRiser.active = true;
+    renderer.domElement.style.cursor = "grabbing";
+    const riser = riserById(dragRiser.id);
+    if (!riser) return;
+    rayFromEvent(e);
+    const hit = raycaster.ray.intersectPlane(dragRiser.plane, new THREE.Vector3());
+    if (!hit) return;
+    hit.setY(0).add(dragRiser.offset);
+    const s = (v: number) => snapLength(clamp(v, -100, 100), e.altKey);
+    riser.x = s(hit.x);
+    riser.z = s(hit.z);
+    setBanner(`Moving ${riser.name}: ${describeSpot({ x: riser.x, y: riser.h, z: riser.z })} · ⌥ = fine`);
+    changed({ list: false, inspector: false });
+    return;
+  }
   if (dragPosition) {
     if (!dragPosition.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
     dragPosition.active = true;
@@ -817,7 +1076,9 @@ view.addEventListener("pointermove", (e) => {
       const fixture = pickFixture(e);
       const position = fixture ? null : pickPosition(e);
       setHoverPosition(position);
-      renderer.domElement.style.cursor = fixture || position ? "grab" : "";
+      const handle = pickHandle(e);
+      const riser = handle || fixture || position || !ui.activeRiser ? null : pickRiser(e);
+      renderer.domElement.style.cursor = handle ? handleCursor(handle) : fixture || position || (riser && riser === ui.activeRiser) ? "grab" : "";
     }
     return;
   }
@@ -868,12 +1129,30 @@ view.addEventListener("contextmenu", (e) => {
   const id = pickFixture(e);
   if (id) { openContextMenu(id, e.clientX, e.clientY); return; }
   const positionId = pickPosition(e);
-  if (positionId) openPositionMenu(positionId, e.clientX, e.clientY);
+  if (positionId) { openPositionMenu(positionId, e.clientX, e.clientY); return; }
+  const riserId = pickRiser(e);
+  if (riserId) openRiserMenu(riserId, e.clientX, e.clientY);
 }, true);
 
 view.addEventListener("pointerup", (e) => {
   if (e.target !== renderer.domElement || e.button !== 0) return;
   const moved = downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > DRAG_THRESHOLD;
+  const dh = dragHandle;
+  if (dh) {
+    dragHandle = null;
+    controls.enabled = true;
+    if (dh.active) { setBanner(null); changed(); }
+    return;
+  }
+  const dr = dragRiser;
+  if (dr) {
+    dragRiser = null;
+    controls.enabled = true;
+    renderer.domElement.style.cursor = "grab";
+    if (dr.active) { setBanner(null); changed(); }
+    else setActiveRiser(null); // a click on the picked-out riser puts it back
+    return;
+  }
   const dp = dragPosition;
   if (dp) {
     dragPosition = null;
@@ -900,6 +1179,11 @@ view.addEventListener("pointerup", (e) => {
   if (!downAt || moved) return;
   rayFromEvent(e);
 
+  if (ui.placingRiser) {
+    const p = riserSpot();
+    if (p) addRiserAt(p.x, p.z);
+    return;
+  }
   if (ui.placingPosition) {
     const t = positionTarget();
     if (t) addPositionAt(t.p.x, t.p.y, t.p.z);
@@ -915,7 +1199,11 @@ view.addEventListener("pointerup", (e) => {
     if (p) applyAim(p);
     return;
   }
+  // A riser clicked (not a fixture or position): pick it out.
+  const riserId = pickRiser(e);
+  if (riserId) { setActiveRiser(riserId); return; }
   if (!e.shiftKey) select(null);
+  if (ui.activeRiser) setActiveRiser(null);
 }, true);
 
 // Meters or feet: the grids follow.

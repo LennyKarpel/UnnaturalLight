@@ -1,7 +1,7 @@
 /**
  * The chat's stage tools (round 3): look at the stage, place fixtures and
  * rigs, move, aim (at a spot or a named position), rename, delete, named
- * positions, and the box's size. They call the stage
+ * positions, risers, and the box's size. They call the stage
  * (window.stageChat, stage/chat-hooks.ts) the same as its own controls.
  */
 
@@ -83,6 +83,34 @@ function findPosition(query: unknown) {
   throw new Error(positions.length ? `No position "${query}" (positions: ${positions.map((p) => p.name).join(", ")})` : "There are no named positions yet");
 }
 
+/** A riser by name (exact, else the one whose name contains it). */
+function findRiser(query: unknown) {
+  const risers = stage().stage().risers;
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) throw new Error("Which riser?");
+  const exact = risers.filter((r) => r.name.toLowerCase() === q);
+  if (exact.length === 1) return exact[0];
+  const partial = risers.filter((r) => r.name.toLowerCase().includes(q));
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) throw new Error(`"${query}" matches ${partial.map((r) => `"${r.name}"`).join(", ")}: which one?`);
+  throw new Error(risers.length ? `No riser "${query}" (risers: ${risers.map((r) => r.name).join(", ")})` : "There are no risers");
+}
+
+const RISER_SIZES = {
+  width: { type: "number", minimum: 0.1, maximum: 50, description: "Meters, along x before it's turned" },
+  depth: { type: "number", minimum: 0.1, maximum: 50, description: "Meters, along z before it's turned" },
+  height: { type: "number", minimum: 0.1, maximum: 10, description: "Meters" },
+  yaw: { type: "number", minimum: -180, maximum: 180, description: "Turn about the vertical, degrees (+ = counterclockwise seen from above)" },
+};
+const XZ = { type: "object", properties: { x: { type: "number" }, z: { type: "number" } }, additionalProperties: false };
+
+/** The riser size / turn fields given (as numbers). */
+const riserSizes = (a: Args) => {
+  const out: Partial<Record<keyof typeof RISER_SIZES, number>> = {};
+  for (const k of Object.keys(RISER_SIZES) as (keyof typeof RISER_SIZES)[]) if (a[k] != null) out[k] = num(a[k], k);
+  return out;
+};
+
 /** A rig by name (exact, else the one whose name contains it). */
 function findRig(query: unknown) {
   const rigs = stage().stage().rigs;
@@ -105,7 +133,7 @@ const xyzText = (p: unknown) => {
 export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "get_stage",
-    description: `The stage: the box's size, every rig (name, type, center, size, count, tilt, yaw), every fixture (name, position, rig, pan and tilt in degrees, whether it's in the console, whether it's selected) and the named positions (spots to aim at, with the fixtures following each). ${WHERE}`,
+    description: `The stage: the box's size, every rig (name, type, center, size, count, tilt, yaw), every fixture (name, position, rig, pan and tilt in degrees, whether it's in the console, whether it's selected), the named positions (spots to aim at, with the fixtures following each) and the risers (platforms standing on the floor: center x / z, width, depth, height, yaw). ${WHERE}`,
     schema: NO_ARGS,
     describe: () => "Looked at the stage",
     run: () => {
@@ -114,6 +142,7 @@ export const STAGE_TOOLS: ToolDef[] = [
         ...s,
         rigs: s.rigs.map(({ id: _id, ...r }) => r),
         positions: s.positions.map(({ id: _id, ...p }) => p),
+        risers: s.risers.map(({ id: _id, ...r }) => r),
         fixtures: s.fixtures.map(({ id: _id, ...f }) => f),
       };
     },
@@ -294,6 +323,58 @@ export const STAGE_TOOLS: ToolDef[] = [
     schema: { type: "object", properties: { position: { type: "string" } }, required: ["position"], additionalProperties: false },
     describe: (a) => `Delete position ${a.position}`,
     run: (a) => ({ deleted: stage().deletePosition(findPosition(a.position).id) }),
+  },
+  {
+    name: "add_riser",
+    description: `Put a riser on the stage: a box standing on the floor (a platform, drum riser, deck), centered at x / z. Defaults: 2.4 m wide, 1.2 m deep (an 8 × 4 ft deck), 0.4 m high, not turned. Beams light its top and sides. To aim at its top, add a named position there with y = its height (e.g. "Drum riser" at the riser's center, y = height + 1.2 for a performer's chest). ${WHERE}`,
+    schema: {
+      type: "object",
+      properties: { name: { type: "string", maxLength: 40, description: "Default: Riser 1, Riser 2, …" }, center: { ...XZ, required: ["x", "z"] }, ...RISER_SIZES },
+      required: ["center"],
+      additionalProperties: false,
+    },
+    describe: (a) => `Add riser${a.name ? ` "${a.name}"` : ""} at ${xyzText(a.center)}`,
+    run: (a) => {
+      const c = (a.center ?? {}) as Args;
+      return stage().addRiser({ name: a.name == null ? undefined : String(a.name), x: num(c.x, "center x"), z: num(c.z, "center z"), ...riserSizes(a) });
+    },
+  },
+  {
+    name: "edit_riser",
+    description: `Change a riser: rename it, move its center (x / z; the other stays), resize it or turn it. ${WHERE}`,
+    schema: {
+      type: "object",
+      properties: { riser: { type: "string", description: "The riser's name" }, name: { type: "string", maxLength: 40 }, center: XZ, ...RISER_SIZES },
+      required: ["riser"],
+      additionalProperties: false,
+    },
+    describe: (a) => {
+      const what = [
+        a.name != null && `name "${a.name}"`,
+        a.center != null && `center ${xyzText(a.center)}`,
+        ...Object.keys(RISER_SIZES).map((k) => a[k] != null && `${k} ${a[k]}`),
+      ].filter(Boolean);
+      return `${a.riser}: ${what.join(", ") || "no change"}`;
+    },
+    run: (a) => {
+      const r = findRiser(a.riser);
+      const c = (a.center ?? {}) as Args;
+      const change = {
+        ...(a.name != null ? { name: String(a.name) } : {}),
+        ...(c.x != null ? { x: num(c.x, "center x") } : {}),
+        ...(c.z != null ? { z: num(c.z, "center z") } : {}),
+        ...riserSizes(a),
+      };
+      if (!Object.keys(change).length) throw new Error("Nothing to change");
+      return stage().editRiser(r.id, change);
+    },
+  },
+  {
+    name: "delete_riser",
+    description: "Delete a riser from the stage.",
+    schema: { type: "object", properties: { riser: { type: "string" } }, required: ["riser"], additionalProperties: false },
+    describe: (a) => `Delete riser ${a.riser}`,
+    run: (a) => ({ deleted: stage().deleteRiser(findRiser(a.riser).id) }),
   },
   {
     name: "rename_stage_fixture",

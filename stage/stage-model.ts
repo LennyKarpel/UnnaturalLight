@@ -9,6 +9,7 @@ import { newId } from "../shared/ids.ts";
 import { isOneOf, isRecord } from "../shared/guards.ts";
 import { DMX_ATTRS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../shared/attributes.ts";
 import type { ColorMode, MountType } from "../console/fixtures.ts";
+import { MAX_RISERS, normalizeRiser, type Riser } from "./risers.ts";
 
 // ---------------------------------------------------------------------
 // Coordinates (meters): origin at floor center of the box.
@@ -639,8 +640,8 @@ export function normalizePosition(saved: unknown, i: number): StagePosition {
   };
 }
 
-/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs, positions }`. */
-export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; transparent: Transparent; rigs: Rig[]; positions: StagePosition[] } {
+/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs, positions, risers }`. */
+export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; transparent: Transparent; rigs: Rig[]; positions: StagePosition[]; risers: Riser[] } {
   const data = fields(saved);
   const raw = fields(data.box);
   const box: Box = {
@@ -664,12 +665,13 @@ export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; tra
   });
   const savedPositions = data?.positions ?? data?.points; // "points" before the rename
   const positions = (Array.isArray(savedPositions) ? savedPositions : []).slice(0, MAX_POSITIONS).map(normalizePosition);
-  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept, positions };
+  const risers = (Array.isArray(data?.risers) ? data.risers : []).slice(0, MAX_RISERS).map(normalizeRiser);
+  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept, positions, risers };
 }
 
 /** The stage as saved (with the show, and in the browser). */
 export type SavedStage = ReturnType<typeof serializeStage>;
 
-export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[], positions: StagePosition[] = []) {
-  return { box, transparent, rigs, positions, fixtures: fixtures.map(serializeFixture) };
+export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[], positions: StagePosition[] = [], risers: Riser[] = []) {
+  return { box, transparent, rigs, positions, risers, fixtures: fixtures.map(serializeFixture) };
 }

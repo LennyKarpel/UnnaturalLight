@@ -25,7 +25,8 @@ import { DMX_LABELS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../shared/attrib
 import { escapeHtml, el } from "../shared/html.ts";
 import { bindPanTiltPad } from "../shared/pan-tilt-pad.ts";
 import { COLOR_ROLES, emitterHex, isColorRole } from "../shared/color.ts";
-import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS, positionById, ui } from "./state.ts";
+import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS, positionById, riserById, ui } from "./state.ts";
+import { MAX_RISERS } from "./risers.ts";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import {
   flashing,
@@ -44,6 +45,11 @@ import {
   setActivePosition,
   setHoverPosition,
   setPlacing,
+  setActiveRiser,
+  setRiserField,
+  deleteRiser,
+  openRiserMenu,
+  RISER_FIELDS,
 } from "./actions.ts";
 import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
 import { showTrace } from "./stage.ts";
@@ -67,11 +73,14 @@ function inspectorHeading(note = "") {
 /** Selection the list last showed, to scroll a newly selected fixture into view. */
 let listSelectionKey = "";
 
-// The list part has two tabs: Fixtures and Positions (remembered in this browser).
+// The list part has three tabs: Fixtures, Positions and Risers (remembered in this browser).
 const LIST_TAB_KEY = "unnaturallight.stage.listTab";
-type ListTab = "fixtures" | "positions";
-let listTab: ListTab = readStored(LIST_TAB_KEY) === "positions" ? "positions" : "fixtures";
+const LIST_TABS = ["fixtures", "positions", "risers"] as const;
+type ListTab = (typeof LIST_TABS)[number];
+const savedTab = readStored(LIST_TAB_KEY);
+let listTab: ListTab = isOneOf(LIST_TABS, savedTab) ? savedTab : "fixtures";
 const positionListEl = elById("positionList");
+const riserListEl = elById("riserList");
 
 function setListTab(tab: ListTab) {
   listTab = tab;
@@ -79,7 +88,7 @@ function setListTab(tab: ListTab) {
   renderList();
 }
 document.querySelectorAll<HTMLElement>("[data-list-tab]").forEach((b) => {
-  b.addEventListener("click", () => { setListTab(b.dataset.listTab === "positions" ? "positions" : "fixtures"); b.blur(); });
+  b.addEventListener("click", () => { const tab = b.dataset.listTab; setListTab(isOneOf(LIST_TABS, tab) ? tab : "fixtures"); b.blur(); });
 });
 
 /** Show the Positions tab (`rename`: put the cursor in that position's name). */
@@ -93,6 +102,17 @@ export function showPositions({ rename }: { rename?: string } = {}) {
   }
 }
 
+/** Show the Risers tab (`rename`: put the cursor in that riser's name). */
+export function showRisers({ rename }: { rename?: string } = {}) {
+  if (listTab !== "risers") setListTab("risers");
+  else renderRiserList(true);
+  if (rename) {
+    const input = riserListEl.querySelector<HTMLInputElement>(`[data-riser-row="${rename}"] input[data-rk="name"]`);
+    input?.focus();
+    input?.select();
+  }
+}
+
 export function renderList() {
   document.querySelectorAll<HTMLElement>("[data-list-tab]").forEach((b) => {
     const on = b.dataset.listTab === listTab;
@@ -101,7 +121,9 @@ export function renderList() {
   });
   listEl.hidden = listTab !== "fixtures";
   positionListEl.hidden = listTab !== "positions";
+  riserListEl.hidden = listTab !== "risers";
   if (listTab === "positions") { renderPositionList(); return; }
+  if (listTab === "risers") { renderRiserList(); return; }
   elById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
   if (!state.fixtures.length) {
     listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Place fixture”.</div>`;
@@ -194,7 +216,7 @@ function renderPositionList(force = false) {
         }
         changed({ list: false, inspector: false });
       });
-      input.addEventListener("blur", () => { const p = positionById(position.id); if (p) input.value = String(p[k]); });
+      input.addEventListener("blur", () => { const p = positionById(position.id); if (p) input.value = k === "name" ? p.name : String(toShown(p[k])); });
       input.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Escape") input.blur(); });
     }
     row.querySelector("[data-aim]")?.addEventListener("click", () => aimAtPosition(position.id));
@@ -215,7 +237,93 @@ function renderPositionList(force = false) {
 elById("positionBtn").addEventListener("click", (e) => {
   (e.currentTarget as HTMLElement).blur();
   if (ui.placing && ui.placingPosition) setPlacing(false);
-  else setPlacing(true, null, true);
+  else setPlacing(true, null, "position");
+});
+
+/** What the riser list last showed (not rebuilt while unchanged, so typing in it keeps its place). */
+let riserListKey = "";
+
+/** Riser fields shown in the length unit (the rest: name, and yaw in degrees). */
+const isRiserLength = (k: string) => k !== "name" && k !== "yaw";
+
+/** The Risers tab: a row per riser with its name, size, place and turn. */
+function renderRiserList(force = false) {
+  elById("count").textContent = `${state.risers.length} / ${MAX_RISERS}`;
+  const key = JSON.stringify([state.risers, ui.activeRiser, lengthUnit()]);
+  if (!force && key === riserListKey) return;
+  // Typing in a field: leave the rows alone while the same risers are listed.
+  const ids = state.risers.map((r) => r.id).join();
+  const shownIds = [...riserListEl.querySelectorAll<HTMLElement>("[data-riser-row]")].map((r) => r.dataset.riserRow).join();
+  if (!force && ids === shownIds && riserListEl.contains(document.activeElement)) return;
+  riserListKey = key;
+  if (!state.risers.length) {
+    riserListEl.innerHTML = `<div class="empty">None yet: “+ Riser” puts an 8 × 4 ft deck (2.4 × 1.2 m, 0.4 m high) on the floor where you click. Drag it to move it; set its size and turn here.</div>`;
+    return;
+  }
+  const scrollTop = riserListEl.scrollTop;
+  riserListEl.innerHTML = "";
+  const u = lengthUnit();
+  for (const riser of state.risers) {
+    const row = el("div", "item riser-row" + (ui.activeRiser === riser.id ? " sel" : ""));
+    row.dataset.riserRow = riser.id;
+    row.innerHTML = `
+      <span class="riser-mark" aria-hidden="true">▬</span>
+      <input type="text" data-rk="name" maxlength="40" title="Riser name" />
+      <button type="button" data-del class="danger" title="Delete this riser (⌘Z to undo)">✕</button>
+      <div class="riser-fields">
+        <label>W · D · H ${u}</label>
+        <div class="xyz">
+          <input type="number" min="0" data-rk="w" title="width (stage right to left, before it's turned)" />
+          <input type="number" min="0" data-rk="d" title="depth (upstage to downstage, before it's turned)" />
+          <input type="number" min="0" data-rk="h" title="height" />
+        </div>
+        <label>x · z ${u} · turn °</label>
+        <div class="xyz">
+          <input type="number" data-rk="x" title="center x (− SR · + SL)" />
+          <input type="number" data-rk="z" title="center z (− upstage · + audience)" />
+          <input type="number" step="15" min="-180" max="180" data-rk="yaw" title="turn about the vertical, ° (+ = counterclockwise from above)" />
+        </div>
+      </div>`;
+    for (const input of row.querySelectorAll<HTMLInputElement>("[data-rk]")) {
+      const k = input.dataset.rk;
+      if (!isOneOf(RISER_FIELDS, k)) continue;
+      const shown = () => {
+        const r = riserById(riser.id);
+        if (!r) return "";
+        const v = r[k];
+        return typeof v === "string" ? v : String(isRiserLength(k) ? toShown(v) : v);
+      };
+      input.value = shown();
+      if (isRiserLength(k)) input.step = inputStep();
+      input.addEventListener("input", () => {
+        const r = riserById(riser.id);
+        if (!r) return;
+        if (k === "name") setRiserField(r, k, input.value);
+        else {
+          const v = numberFrom(input.value);
+          if (v == null) return;
+          setRiserField(r, k, isRiserLength(k) ? fromShown(v) : v);
+        }
+        changed({ list: false, inspector: false });
+      });
+      input.addEventListener("blur", () => { input.value = shown(); });
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Escape") input.blur(); });
+    }
+    row.querySelector("[data-del]")?.addEventListener("click", () => deleteRiser(riser.id));
+    row.addEventListener("contextmenu", (e) => { e.preventDefault(); openRiserMenu(riser.id, e.clientX, e.clientY); });
+    row.addEventListener("click", (e) => {
+      if (e.target instanceof Element && e.target.closest("input, button")) return;
+      setActiveRiser(ui.activeRiser === riser.id ? null : riser.id);
+    });
+    riserListEl.append(row);
+  }
+  riserListEl.scrollTop = scrollTop;
+}
+
+elById("riserBtn").addEventListener("click", (e) => {
+  (e.currentTarget as HTMLElement).blur();
+  if (ui.placing && ui.placingRiser) setPlacing(false);
+  else setPlacing(true, null, "riser");
 });
 
 /** Inspector block for editing a rig (shown when the selection is all one rig). */

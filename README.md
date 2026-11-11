@@ -101,7 +101,7 @@ The **Chat** button in the page header opens a panel on the right where you can 
   - *Playback:* see what's playing and what's in the show; play a song (from a given cue); make a cue LIVE (a jump, with no fade); GO; pause, resume or stop a transition; set the master and the crossfader.
   - *Cues and songs:* read a cue's levels (and which fixtures it aims at named positions); set faders in a cue; add a cue (empty or a copy of another), rename it or change its fade time, delete it; add or rename a song.
   - *Fixtures:* list the fixtures and their channels; set a fixture's (or a group's, e.g. "Ring 1") dimmer in %, color (any color name; it's mixed onto the fixture's emitters), pan, tilt, zoom, or any channel by its role. Unless you name a cue, edits go into the **LIVE cue**, so you see them at once.
-  - *Stage:* see the stage (box, rigs, fixtures and where they point); place fixtures at spots (each gets a console fixture with faders unless you say stage only); place a rig (circle, square or line: center, size, count, tilt, yaw); change a rig (its center moves it); move fixtures (to a spot or by an offset); aim fixtures (or a whole rig) at a named position (they follow it) or a spot, or home them; stop fixtures following; add, rename, move or delete named positions; rename or delete fixtures (a rig's fixture deletes its whole rig); set the box's size. What it changes is selected on the stage, so you can see it. Coordinates are in meters from the center of the stage floor (x: stage right − to left +, y: up, z: upstage − to downstage +), but plain words like "over center stage, 5 m up" work.
+  - *Stage:* see the stage (box, rigs, fixtures and where they point); place fixtures at spots (each gets a console fixture with faders unless you say stage only); place a rig (circle, square or line: center, size, count, tilt, yaw); change a rig (its center moves it); move fixtures (to a spot or by an offset); aim fixtures (or a whole rig) at a named position (they follow it) or a spot, or home them; stop fixtures following; add, rename, move or delete named positions; add, move, resize, turn, rename or delete risers; rename or delete fixtures (a rig's fixture deletes its whole rig); set the box's size. What it changes is selected on the stage, so you can see it. Coordinates are in meters from the center of the stage floor (x: stage right − to left +, y: up, z: upstage − to downstage +), but plain words like "over center stage, 5 m up" work.
   - DMX outputs aren't in the chat yet.
 - **Undo:** after a request that changed the show or the stage (cues, songs, fixture levels, fixtures placed, moved or aimed, rigs, the box), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show or the stage since. Playback (LIVE, GO, master) isn't undone.
 - **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran).
@@ -275,6 +275,24 @@ A **position** is a named spot on the stage (e.g. *DSC*, *drum riser*, *lectern*
 - **Hover over a position** (in 3D, the plan, or its row in the Positions list) to light it up: it grows, gets a glow, its name gets bigger, dashed lines run to it from the fixtures following it, and the banner says where it is and how many fixtures follow it. Handy when it's lost in a beam.
 - **Right-click a position** (in 3D, the plan or its row in the list) for its menu: **Delete position** for now. It stays lit up while the menu is open.
 
+### Risers
+
+A **riser** is a box standing on the stage floor: a platform, a drum riser, a deck. Beams light its top and sides like the floor and walls, so you can see what lands on it. Risers are saved with the stage, so they go with the show.
+
+- **+ Riser** (stage header), then click a spot on the floor in 3D (inside or outside the box) or in the plan, for its center. An outline shows where it will stand. It starts as an 8 × 4 ft deck (2.4 × 1.2 m), 0.4 m high. `Esc` cancels.
+- The new riser opens in the **Risers** tab (beside **Fixtures** and **Positions**) with its name ready to type. There you set its **W · D · H** (width, depth, height) and its **x · z** center and **turn** (degrees about the vertical; + is counterclockwise from above), or delete it (✕). Lengths are in the unit from **⚙ View**.
+- **Pick a riser out** by clicking it (in 3D, the plan or its row in the list): its edges and outline go white and its **handles** show. Click it again, or empty floor, to put it back.
+- **Resize, turn and raise it with the handles** (in 3D and the plan; the banner shows its size and turn as you drag):
+  - **Squares** on its corners and edge middles **resize** it: the opposite corner or edge stays put. A riser can't be dragged inside out; it stops at 0.1 m.
+  - The **round knob** past its upstage edge **turns** it: drag it around the riser. It snaps to 15° steps (hold `⌥` for 1°).
+  - The **arrow** above its top (in 3D), or the **triangle** on its top in the plan's Front / SR / SL views, sets its **height**: drag up or down.
+  - Sizes snap to 0.1 m, or 3 inches in feet; hold `⌥` for 1 cm / 1 inch. The plan's Top view shows the corner, edge and turn handles; Front / SR / SL show the height one.
+- **Move a riser** by dragging it across the floor. In 3D, drag the picked-out one; pressing on any other riser still turns the view, so a big riser doesn't get in the way of looking around. In the plan any riser drags straight away (Front / SR / SL move it along their one floor direction; they don't lift it). It snaps like everything else (⌥ for fine).
+- **On top of a riser:** clicking a riser's top while placing a fixture, placing a position or aiming lands on the riser, at its height. So for "aim at the drummer", put a position on the drum riser's top (the banner says e.g. *Drum riser (top)*), ⇧-drag it up to head height, and aim fixtures at it.
+- Risers show in the plan as sand-colored outlines with their name and height: their turned footprint in Top, and floor-to-top in the other views.
+- **Right-click a riser** (in 3D, the plan or its row in the list) for **Duplicate riser** (a copy beside it, to stage left) and **Delete riser**. **⌘Z** brings back a deleted riser.
+- Each riser stands on the floor; for levels, put risers of different heights side by side (or overlap them: the tallest one wins where they overlap).
+
 
 ### Following a position
 
@@ -317,11 +335,11 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 
 - **Duplicate** (right-click or inspector) copies the selected fixtures. If the original was set up in the console, the copy gets its own console fixture and faders too.
 - **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a rig removes the whole rig. Fixtures the stage set up in the console are removed there too, and their faders freed.
-- **⌘Z** brings back what you deleted: fixtures, rigs or a named position (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
+- **⌘Z** brings back what you deleted: fixtures, rigs, a named position or a riser (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
 
 ### The right-click menu
 
-Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item. Right-click a named position for **Delete position**.
+Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item. Right-click a named position for **Delete position**, and a riser for **Duplicate riser** and **Delete riser**.
 
 ### The inspector
 
@@ -550,6 +568,9 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | 3D: click / ⇧-click a fixture | select / add to selection |
 | 3D: drag a fixture · ⇧-drag | move it · change its height |
 | Plan: drag a fixture | move it (`⌥` for fine steps) |
+| 3D: click a riser · drag the picked-out one | pick it out · move it across the floor |
+| Plan: drag a riser | move it across the floor |
+| Drag a picked-out riser's squares · knob · arrow | resize it · turn it (15° steps, `⌥` 1°) · change its height |
 | Right-click a fixture | fixture menu |
 | ⌥-click a fixture | trace |
 
@@ -605,6 +626,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Rig** | a group of fixtures arranged in a circle, square or line |
 | **Zero** | the direction a fixture points at pan / tilt 128 |
 | **Position** | a named spot on the stage (e.g. *DSC*) that fixtures aim at and follow, like a console's position preset; cues remember aims at it |
+| **Riser** | a box standing on the stage floor (platform, drum riser, deck) |
 
 ---
 
@@ -619,7 +641,7 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), meters / feet (`stage/units.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), meters / feet (`stage/units.ts`), risers (`stage/risers.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The rest of the stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -630,7 +652,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop, Undo, the resize divider |
 | `page/chat/loop.ts` | One chat turn: POST `/chat`, stream the reply, run the tools it calls, send the results back, repeat |
 | `page/chat/tools.ts` | The chat's tools (playback, cues and songs, fixtures; which are deferred for tool search): name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
-| `page/chat/stage-tools.ts` | The chat's stage tools (place, move, aim and follow, rigs, named positions, box), through `window.stageChat` |
+| `page/chat/stage-tools.ts` | The chat's stage tools (place, move, aim and follow, rigs, named positions, risers, box), through `window.stageChat` |
 | `page/chat/find.ts` | Finding songs and fixtures by the names the model gives |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, the chat at `/chat`, 40 Hz fade / DMX loop, saving |
@@ -661,17 +683,18 @@ The console and the stage are one app: anything both use (and the page header, o
 | `console/aims.ts` | Cues that aim fixtures at named stage positions: recording an aim, re-aiming every cue when a position moves |
 | `stage/stage.css` | Stage styles, scoped to its pane (`:where(#stagePane)`; breakpoints are container queries on the pane) |
 | `stage/stage.ts` | Starts the stage; keeps up with other app windows and the show server; ⌥-click traces |
-| `stage/chat-hooks.ts` | The chat's hooks into the stage (`window.stageChat`): look, place, move, aim and follow, rigs, named positions, box, and edit snapshots for Undo |
-| `stage/state.ts` | The stage's data (box, fixtures, rigs, named positions, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
+| `stage/chat-hooks.ts` | The chat's hooks into the stage (`window.stageChat`): look, place, move, aim and follow, rigs, named positions, risers, box, and edit snapshots for Undo |
+| `stage/state.ts` | The stage's data (box, fixtures, rigs, named positions, risers, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
 | `stage/view3d.ts`, `plan.ts` | The 3D view and the plan view, with their mouse handling |
 | `stage/frame.ts` | Work done at the start of each 3D frame, before it's drawn (the console's latest levels are taken there, so they show in that frame) |
-| `stage/sidebar.ts` | Fixture list, inspector and key strip |
+| `stage/sidebar.ts` | Fixture, Positions and Risers lists, inspector and key strip |
 | `stage/panel.ts` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
 | `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo / redo; keyboard |
 | `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
 | `stage/units.ts` | Meters or feet: converting what's shown and typed (the data stays in meters), snapping steps, saying where a spot is |
 | `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
 | `stage/stage-model.ts` | Fixture, rig and named position data, DMX values ↔ angles / color / beam, aiming math, save format |
+| `stage/risers.ts` | Riser data and math (footprint, corners, what stands where); no three.js, so `npm test` covers it |
 | `stage/console-link.ts` | Stage side of its link with the console |
 | `stage/follow.ts` | Fixtures following named positions: aiming, re-aiming when a position or fixture moves (here and in the console's cues), what each one follows |
 | `stage/show-link.ts` | Stage side of the show-server link: keeps the stage with the show |
@@ -877,4 +900,4 @@ page runs the tools → sends the results in the next POST → repeat
 
 **Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. App layout: `unnaturallight.shell`. Console tab last open: `unnaturallight.console.tab`.
 
-**Stage (`stage` in the show file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).
+**Stage (`stage` in the show file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe), `positions` (`id`, `name`, `x`, `y`, `z`), `risers` (`id`, `name`, center `x` / `z`, `w` / `d` / `h` in m, `yaw` in degrees; a stage saved before risers has none) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

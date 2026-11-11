@@ -74,6 +74,7 @@
           <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (P)">+ Place fixture</button>
           <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
           <button id="positionBtn" title="Put a named position on the stage (floor, wall, ceiling) to aim fixtures at">+ Position</button>
+          <button id="riserBtn" title="Put a riser (a platform standing on the floor) on the stage">+ Riser</button>
           <button id="settingsBtn" title="View settings: units, transparent sides">⚙ View</button>
         </header>
 
@@ -113,11 +114,12 @@
           <div class="vdivider" data-resize="plan" title="Drag to resize · double-click to reset"><span class="grip"></span></div>
           <section id="fixtures">
             <h2>
-              <span class="h2-title"><span class="seg list-tabs" role="tablist" aria-label="List"><button type="button" role="tab" data-list-tab="fixtures" title="The fixtures on the stage">Fixtures</button><button type="button" role="tab" data-list-tab="positions" title="Named positions to aim fixtures at">Positions</button></span><button type="button" class="collapse-btn"></button></span>
+              <span class="h2-title"><span class="seg list-tabs" role="tablist" aria-label="List"><button type="button" role="tab" data-list-tab="fixtures" title="The fixtures on the stage">Fixtures</button><button type="button" role="tab" data-list-tab="positions" title="Named positions to aim fixtures at">Positions</button><button type="button" role="tab" data-list-tab="risers" title="Risers: platforms standing on the floor">Risers</button></span><button type="button" class="collapse-btn"></button></span>
               <span id="count"></span>
             </h2>
             <div class="list thin-scroll" id="list"></div>
             <div class="list thin-scroll" id="positionList" hidden></div>
+            <div class="list thin-scroll" id="riserList" hidden></div>
           </section>
           <div class="vdivider" data-resize="fixtures" title="Drag to resize · double-click to reset"><span class="grip"></span></div>
           <section id="inspector"></section>

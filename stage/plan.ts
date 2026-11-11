@@ -3,8 +3,9 @@ import * as THREE from "three";
 import { describeSpot, fmtLength, gridStep, onUnitChange, snapLength } from "./units.ts";
 import { round, beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
-import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, ui } from "./state.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, openPositionMenu, showPositionSpot } from "./actions.ts";
+import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
+import { riserCorners, handleSpot, resizeTo, yawToward, SIZE_HANDLES, RISER_MIN, RISER_MAX_H, type Riser, type RiserHandle } from "./risers.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
@@ -81,7 +82,9 @@ let planFit: Fit | null = null;
 /** Fit computed on first use (kept while dragging so the plan doesn't rescale under the pointer). */
 const fit = (): Fit => (planFit ??= computeFit());
 /** Dragging a fixture or a position: which one, and where it sits relative to the pointer. */
-let planDrag: { kind: "fixture" | "position"; id: string; da: number; db: number; moved?: boolean } | null = null;
+let planDrag: { kind: "fixture" | "position" | "riser" | "riserHandle"; id: string; da: number; db: number; moved?: boolean; handle?: RiserHandle } | null = null;
+/** Risers' color (the same as --riser in stage.css). */
+const RISER_COLOR = "#c9b58a";
 /** Named positions' color (the same as --position in stage.css). */
 const POSITION_COLOR = "#c58cff";
 /** The dotted axes through a new position's preview (as in 3D: x red, height green, z blue). */
@@ -138,7 +141,8 @@ function computeFit(): Fit {
   let [minA, maxA] = boxRangeA();
   let [minB, maxB] = boxRangeB();
   minA -= margin; maxA += margin; minB -= margin; maxB += margin;
-  for (const i of [...state.fixtures, ...state.positions]) {
+  const riserPoints = state.risers.flatMap((r) => riserCorners(r).map((c) => ({ x: c.x, y: r.h, z: c.z })));
+  for (const i of [...state.fixtures, ...state.positions, ...riserPoints]) {
     const [a, b] = toAB(i);
     minA = Math.min(minA, a - 1); maxA = Math.max(maxA, a + 1);
     minB = Math.min(minB, b - 1); maxB = Math.max(maxB, b + 1);
@@ -152,6 +156,64 @@ function computeFit(): Fit {
 const toPlan = (a: number, b: number): [number, number] => { const f = fit(); return [(a - f.minA) * f.scale, (b - f.minB) * f.scale]; };
 const fromPlan = (px: number, py: number): [number, number] => { const f = fit(); return [px / f.scale + f.minA, py / f.scale + f.minB]; };
 const fixturePlan = (p: Xyz) => toPlan(...toAB(p));
+
+/**
+ * A riser's outline on the plan (canvas px): its turned footprint from above,
+ * or in an elevation the rectangle it covers from the floor to its top.
+ */
+function riserOutline(r: Riser): [number, number][] {
+  const corners = riserCorners(r);
+  if (pv().v !== "y") return corners.map((c) => fixturePlan({ x: c.x, y: r.h, z: c.z }));
+  const as = corners.map((c) => toAB({ x: c.x, y: 0, z: c.z })[0]);
+  const a0 = Math.min(...as), a1 = Math.max(...as);
+  const [, b0] = toAB({ x: 0, y: 0, z: 0 }), [, b1] = toAB({ x: 0, y: r.h, z: 0 });
+  return [toPlan(a0, b0), toPlan(a1, b0), toPlan(a1, b1), toPlan(a0, b1)];
+}
+
+/** Is a plan-canvas point inside a polygon (canvas px)? */
+function inPolygon(px: number, py: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * The picked-out riser's handles on the plan (canvas px). From above: its
+ * corners and edge middles (resize) and the turn knob past its upstage edge.
+ * In an elevation: one on the middle of its top (height).
+ */
+function riserHandles(r: Riser): { handle: RiserHandle; px: number; py: number }[] {
+  if (pv().v !== "y") {
+    return [...SIZE_HANDLES, { kind: "turn" } as const].map((handle) => {
+      const p = handleSpot(r, handle);
+      const [px, py] = fixturePlan({ x: p.x, y: r.h, z: p.z });
+      return { handle, px, py };
+    });
+  }
+  const poly = riserOutline(r);
+  return [{ handle: { kind: "height" }, px: (poly[2][0] + poly[3][0]) / 2, py: poly[2][1] }];
+}
+
+/** A handle of the picked-out riser under a plan-canvas point (within 8 px), or null. */
+function planHandleAt(px: number, py: number): RiserHandle | null {
+  const riser = riserById(ui.activeRiser);
+  if (!riser) return null;
+  let best: RiserHandle | null = null, bestD = 8;
+  for (const h of riserHandles(riser)) {
+    const d = Math.hypot(h.px - px, h.py - py);
+    if (d < bestD) { bestD = d; best = h.handle; }
+  }
+  return best;
+}
+
+/** The riser under a plan-canvas point (the one drawn on top: the last), or null. */
+function planRiserAt(px: number, py: number): Riser | null {
+  for (let i = state.risers.length - 1; i >= 0; i--) if (inPolygon(px, py, riserOutline(state.risers[i]))) return state.risers[i];
+  return null;
+}
 
 export function drawPlan() {
   const size = plan.clientWidth;
@@ -229,6 +291,53 @@ export function drawPlan() {
   ctx.textAlign = "left";
   ctx.fillStyle = "#6c7280";
   ctx.fillText(V.caption, 6, 13);
+
+  // Risers: their outline, filled, with the name and height.
+  for (const riser of state.risers) {
+    const poly = riserOutline(riser);
+    const on = ui.activeRiser === riser.id;
+    ctx.beginPath();
+    poly.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = on ? "#c9b58a33" : "#c9b58a1c";
+    ctx.fill();
+    ctx.strokeStyle = on ? "#e8e4dc" : RISER_COLOR;
+    ctx.lineWidth = on ? 2 : 1.2;
+    ctx.stroke();
+    const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+    // From above: in the middle. In an elevation: above its top, clear of the height handle.
+    const cy = V.v === "y" ? Math.min(...poly.map((p) => p[1])) - 15 : poly.reduce((s, p) => s + p[1], 0) / poly.length;
+    ctx.fillStyle = on ? "#e8e4dc" : RISER_COLOR;
+    ctx.textAlign = "center";
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.fillText(`${riser.name} · ${fmtLength(riser.h, 2)}`, cx, cy + 3);
+  }
+
+  // The picked-out riser's handles: squares to resize, a knob to turn, a triangle for height.
+  const activeRiser = riserById(ui.activeRiser);
+  if (activeRiser) {
+    for (const { handle, px, py } of riserHandles(activeRiser)) {
+      ctx.fillStyle = "#e8e4dc";
+      ctx.strokeStyle = "#0c0e11";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      if (handle.kind === "turn") {
+        const edge = handleSpot(activeRiser, { kind: "size", su: 0, sv: -1 });
+        const [ex, ey] = fixturePlan({ x: edge.x, y: activeRiser.h, z: edge.z });
+        ctx.save();
+        ctx.strokeStyle = "#e8e4dc";
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(px, py); ctx.stroke();
+        ctx.restore();
+        ctx.beginPath();
+        ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+      } else if (handle.kind === "height") {
+        ctx.moveTo(px, py - 7); ctx.lineTo(px + 6, py + 3); ctx.lineTo(px - 6, py + 3); ctx.closePath();
+      } else ctx.rect(px - 4, py - 4, 8, 8);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
 
   // Rig outlines
   const selRigIds = new Set(selectedFixtures().map((i) => i.rigId).filter(isPresent));
@@ -361,7 +470,7 @@ export function drawPlan() {
     ctx.fillStyle = ui.aiming ? "#ffffff" : "#00dddd";
     ctx.textAlign = "center";
     ctx.font = "11px system-ui, sans-serif";
-    const msg = ui.aiming ? V.aimHint : ui.placingPosition ? V.positionHint : `click inside or outside the box · ${V.placeHint(state.box)}`;
+    const msg = ui.aiming ? V.aimHint : ui.placingPosition ? V.positionHint : ui.placingRiser ? "click where the riser's center goes" : `click inside or outside the box · ${V.placeHint(state.box)}`;
     ctx.fillText(msg, size / 2, size - 8);
   }
 }
@@ -408,16 +517,25 @@ function planPositionAt(px: number, py: number): StagePosition | null {
 plan.addEventListener("contextmenu", (e) => {
   const fixture = planFixtureAt(...planPosition(e));
   const position = fixture ? null : planPositionAt(...planPosition(e));
-  if (!fixture && !position) return;
+  const riser = fixture || position ? null : planRiserAt(...planPosition(e));
+  if (!fixture && !position && !riser) return;
   e.preventDefault();
   if (fixture) openContextMenu(fixture.id, e.clientX, e.clientY);
   else if (position) openPositionMenu(position.id, e.clientX, e.clientY);
+  else if (riser) openRiserMenu(riser.id, e.clientX, e.clientY);
 });
 
 plan.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return;
   const [px, py] = planPosition(e);
   const [a, b] = fromPlan(px, py);
+  if (ui.placing && ui.placingRiser) {
+    // On the floor: in an elevation, the depth this view can't show is the center line.
+    const p = { x: 0, y: 0, z: 0 };
+    setAB(p, a, b);
+    addRiserAt(snapLength(p.x), snapLength(p.z));
+    return;
+  }
   if (ui.placing && ui.placingPosition) {
     const p = positionSpotAt(a, b);
     positionHover = null;
@@ -437,6 +555,17 @@ plan.addEventListener("pointerdown", (e) => {
     applyAim(new THREE.Vector3(p.x, p.y, p.z));
     return;
   }
+  // The picked-out riser's handles come first: they're small, and sit on its edge.
+  const handle = planHandleAt(px, py);
+  const handleRiser = handle ? riserById(ui.activeRiser) : null;
+  if (handle && handleRiser) {
+    // From where the handle is, so it doesn't jump to the pointer.
+    const spot = handleSpot(handleRiser, handle);
+    const [ha, hb] = toAB({ x: spot.x, y: handleRiser.h, z: spot.z });
+    planDrag = { kind: "riserHandle", id: handleRiser.id, da: ha - a, db: hb - b, handle };
+    plan.setPointerCapture(e.pointerId);
+    return;
+  }
   const best = planFixtureAt(px, py);
   if (e.altKey && best) { showTrace({ kind: "stageFixture", id: best.id }, e); return; }
   // A position (fixtures win when they overlap): click to pick it out, drag to move it.
@@ -447,7 +576,19 @@ plan.addEventListener("pointerdown", (e) => {
     plan.setPointerCapture(e.pointerId);
     return;
   }
-  if (!best) { if (!e.shiftKey) select(null); return; }
+  // A riser (under fixtures and positions): click to pick it out, drag to move it over the floor.
+  const riser = best ? null : planRiserAt(px, py);
+  if (riser) {
+    const [ia, ib] = toAB({ x: riser.x, y: 0, z: riser.z });
+    planDrag = { kind: "riser", id: riser.id, da: ia - a, db: ib - b };
+    plan.setPointerCapture(e.pointerId);
+    return;
+  }
+  if (!best) {
+    if (!e.shiftKey) select(null);
+    if (ui.activeRiser) setActiveRiser(null);
+    return;
+  }
   if (e.shiftKey) { select(best.id, true); return; }
   if (!state.selected.includes(best.id)) select(best.id);
   const [ia, ib] = toAB(best);
@@ -474,11 +615,40 @@ plan.addEventListener("pointermove", (e) => {
     if (!e.buttons && !ui.aiming && !ui.placing) {
       const [px, py] = planPosition(e);
       setHoverPosition(planFixtureAt(px, py) ? null : planPositionAt(px, py)?.id ?? null);
+      const handle = planHandleAt(px, py);
+      plan.style.cursor = !handle ? "" : handle.kind === "turn" ? "grab" : handle.kind === "height" ? "ns-resize" : "move";
     }
     return;
   }
   const [a, b] = fromPlan(...planPosition(e));
   const s = (v: number) => snapLength(v, e.altKey);
+  if (planDrag.kind === "riserHandle" && planDrag.handle) {
+    const riser = riserById(planDrag.id);
+    if (!riser) return;
+    planDrag.moved = true;
+    const p = { x: riser.x, y: 0, z: riser.z };
+    setAB(p, a + planDrag.da, b + planDrag.db);
+    const h = planDrag.handle;
+    if (h.kind === "size") Object.assign(riser, resizeTo(riser, h.su, h.sv, p.x, p.z, s));
+    else if (h.kind === "turn") riser.yaw = yawToward(riser, p.x, p.z, e.altKey ? 1 : 15) ?? riser.yaw;
+    else riser.h = clamp(s(p.y), RISER_MIN, RISER_MAX_H);
+    setBanner(`${riser.name}: ${describeRiser(riser)} · ⌥ = fine`);
+    changed({ list: false, inspector: false });
+    return;
+  }
+  if (planDrag.kind === "riser") {
+    const riser = riserById(planDrag.id);
+    if (!riser) return;
+    planDrag.moved = true;
+    // Only along the floor: an elevation's up / down doesn't lift it.
+    const p = { x: riser.x, y: 0, z: riser.z };
+    setAB(p, s(a + planDrag.da), s(b + planDrag.db));
+    riser.x = clamp(p.x, -100, 100);
+    riser.z = clamp(p.z, -100, 100);
+    setBanner(`Moving ${riser.name}: ${describeSpot({ x: riser.x, y: riser.h, z: riser.z })} · ⌥ = fine`);
+    changed({ list: false, inspector: false });
+    return;
+  }
   if (planDrag.kind === "position") {
     const position = positionById(planDrag.id);
     if (!position) return;
@@ -503,6 +673,12 @@ const endDrag = () => {
   const d = planDrag;
   if (!d) return;
   planDrag = null;
+  if (d.kind === "riserHandle") { setBanner(null); changed(); return; }
+  if (d.kind === "riser") {
+    if (d.moved) { setBanner(null); ui.activeRiser = d.id; changed(); }
+    else setActiveRiser(ui.activeRiser === d.id ? null : d.id);
+    return;
+  }
   // A position clicked without moving: pick it out (or put it back).
   if (d.kind === "position" && !d.moved) setActivePosition(ui.activePosition === d.id ? null : d.id);
   else if (d.kind === "position") { positionHover = null; showPositionSpot(null, ""); setActivePosition(d.id); changed(); }

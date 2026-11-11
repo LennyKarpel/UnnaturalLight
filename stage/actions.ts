@@ -19,6 +19,8 @@ import {
   type SavedStage,
 } from "./stage-model.ts";
 import { newId } from "../shared/ids.ts";
+import { MAX_RISERS, RISER_DEFAULTS, RISER_MAX_H, RISER_MAX_SIDE, RISER_MIN, normalizeRiser, wrapYaw, type Riser } from "./risers.ts";
+import { clamp, numberFrom } from "../shared/numbers.ts";
 import {
   state,
   save,
@@ -29,18 +31,19 @@ import {
   rigMembers,
   syncRig,
   positionById,
+  riserById,
   ui,
   type RigSettings,
 } from "./state.ts";
 import { view, syncScene, updateGhost, showAimPreview } from "./view3d.ts";
 import { drawPlan } from "./plan.ts";
-import { inspectorEl, renderList, renderInspector, syncInspector, renderHud, showPositions } from "./sidebar.ts";
+import { inspectorEl, renderList, renderInspector, syncInspector, renderHud, showPositions, showRisers } from "./sidebar.ts";
 import { placeType, placeFixture, placeUniverse } from "./dialogs.ts";
 import { consoleLink, pushToConsole, requestRegistrations } from "./link.ts";
 import { aimAndFollow, followingOf, stopFollowing, syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
 import * as THREE from "three";
-import { describeSpot } from "./units.ts";
+import { describeSpot, lengthUnit, toShown } from "./units.ts";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import { elById } from "../shared/query.ts";
 import { readStoredJson, storeJson } from "../shared/storage.ts";
@@ -138,6 +141,7 @@ const bannerEl = elById("banner");
 const PLACE_HINT = bannerEl.textContent;
 const RIG_PLACE_HINT = "Click where the rig's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
 const POSITION_PLACE_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to put a position there · Esc cancels";
+const RISER_PLACE_HINT = "Click a spot on the floor (or in the plan) for the riser's center · Esc cancels";
 const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected fixtures at it · Esc cancels";
 let bannerTimer = 0;
 
@@ -149,16 +153,20 @@ export function setBanner(text: string | null, ms = 0) {
   if (ms) bannerTimer = window.setTimeout(() => setBanner(null), ms);
 }
 
-export function setPlacing(on: boolean, rigCfg: RigSettings | null = null, position = false) {
+/** Start (`on`) or stop placing: a fixture, a rig (`rigCfg`), or (`kind`) a named position or a riser. */
+export function setPlacing(on: boolean, rigCfg: RigSettings | null = null, kind: "position" | "riser" | null = null) {
   if (on && ui.aiming) setAiming(false);
+  const position = kind === "position", riser = kind === "riser";
   ui.placing = on;
   ui.placingRig = on ? rigCfg : null;
   ui.placingPosition = on && position;
+  ui.placingRiser = on && riser;
   view.classList.toggle("placing", on);
-  setBanner(on ? (position ? POSITION_PLACE_HINT : rigCfg ? RIG_PLACE_HINT : PLACE_HINT) : null);
-  elById("addBtn").classList.toggle("active", on && !rigCfg && !position);
+  setBanner(on ? (position ? POSITION_PLACE_HINT : riser ? RISER_PLACE_HINT : rigCfg ? RIG_PLACE_HINT : PLACE_HINT) : null);
+  elById("addBtn").classList.toggle("active", on && !rigCfg && !kind);
   elById("rigBtn").classList.toggle("active", on && !!rigCfg);
   elById("positionBtn").classList.toggle("active", on && position);
+  elById("riserBtn").classList.toggle("active", on && riser);
   if (!on) { updateGhost(null); showAimPreview(null); }
   drawPlan();
 }
@@ -294,6 +302,85 @@ export function aimAtPosition(id: string, fixtures: Fixture[] = selectedFixtures
   return missed;
 }
 
+// ---------------------------------------------------------------------
+// Risers: boxes standing on the floor
+// ---------------------------------------------------------------------
+
+/** Riser picked out (highlighted in the list, plan and 3D), or null. */
+export function setActiveRiser(id: string | null) {
+  ui.activeRiser = id;
+  syncScene();
+  drawPlan();
+  showRisers();
+}
+
+/** A name like "Riser 3" that isn't taken yet. */
+function nextRiserName() {
+  const taken = new Set(state.risers.map((r) => r.name.toLowerCase()));
+  let n = state.risers.length + 1;
+  while (taken.has(`riser ${n}`)) n++;
+  return `Riser ${n}`;
+}
+
+/** Add a riser centered at (x, z) (a click while placing one, or the chat); returns it. */
+export function addRiserAt(x: number, z: number, opts: Partial<Omit<Riser, "id" | "x" | "z">> = {}) {
+  setPlacing(false);
+  if (state.risers.length >= MAX_RISERS) {
+    setBanner(`Riser limit reached (${MAX_RISERS})`, 2500);
+    return null;
+  }
+  const riser = normalizeRiser({ ...RISER_DEFAULTS, ...opts, id: newId("riser"), name: opts.name?.trim() || nextRiserName(), x, z }, state.risers.length);
+  state.risers.push(riser);
+  ui.activeRiser = riser.id;
+  changed();
+  showRisers({ rename: riser.id });
+  return riser;
+}
+
+/** A riser's size and turn for the banner: "2.4 × 1.2 × 0.4 m · turn 30°". */
+export function describeRiser(r: Riser) {
+  return `${toShown(r.w)} × ${toShown(r.d)} × ${toShown(r.h)} ${lengthUnit()} · turn ${r.yaw}°`;
+}
+
+/** The riser fields the Risers list edits (its inputs' `data-rk`). */
+export const RISER_FIELDS = ["name", "x", "z", "w", "d", "h", "yaw"] as const;
+export type RiserField = (typeof RISER_FIELDS)[number];
+
+/** Set one riser field (lengths in meters). False if the value wasn't usable. */
+export function setRiserField(riser: Riser, k: RiserField, raw: string | number): boolean {
+  if (k === "name") {
+    const name = String(raw).trim();
+    if (name) riser.name = name;
+    return !!name;
+  }
+  const v = numberFrom(raw);
+  if (v == null) return false;
+  if (k === "yaw") riser.yaw = round(wrapYaw(v), 1);
+  else if (k === "h") riser.h = round(clamp(v, RISER_MIN, RISER_MAX_H), 3);
+  else if (k === "w" || k === "d") riser[k] = round(clamp(v, RISER_MIN, RISER_MAX_SIDE), 3);
+  else riser[k] = round(clamp(v, -100, 100), 3);
+  return true;
+}
+
+export function deleteRiser(id: string, { redoing = false } = {}) {
+  const index = state.risers.findIndex((r) => r.id === id);
+  if (index < 0) return;
+  const [riser] = state.risers.splice(index, 1);
+  writeUndo([...readUndo(), { riserIndex: index, data: serializeStage(state.box, [], state.transparent, [], [], [riser]) }]);
+  if (!redoing) writeRedo([]);
+  setBanner(`Deleted ${riser.name} · ⌘Z to undo`, 4000);
+  if (ui.activeRiser === id) ui.activeRiser = null;
+  changed();
+  showRisers();
+}
+
+/** Copy a riser beside it (to stage left, by its width), and pick out the copy. */
+export function duplicateRiser(id: string) {
+  const riser = riserById(id);
+  if (!riser) return;
+  addRiserAt(riser.x + riser.w, riser.z, { name: `${riser.name} copy`, w: riser.w, d: riser.d, h: riser.h, yaw: riser.yaw });
+}
+
 export function addFixtureAt(x: number, y: number, z: number) {
   if (state.fixtures.length >= MAX_FIXTURES) { setPlacing(false); return; }
   const fixture = createFixture(x, y, z, state.fixtures.length, state.box);
@@ -396,6 +483,20 @@ export function openPositionMenu(id: string, x: number, y: number) {
   setHoverPosition(id);
 }
 
+/** The right-click menu for a riser (it's picked out while the menu is open). */
+export function openRiserMenu(id: string, x: number, y: number) {
+  const riser = riserById(id);
+  if (!riser) return;
+  menuPosition = null;
+  ctxMenu.innerHTML = `<div class="menu-title"></div>
+    <button type="button" data-dup-riser="${riser.id}" class="menu-item"><span>Duplicate riser</span></button>
+    <button type="button" data-delete-riser="${riser.id}" class="menu-item danger"><span>Delete riser</span></button>`;
+  const titleEl = ctxMenu.querySelector(".menu-title");
+  if (titleEl) titleEl.textContent = riser.name;
+  if (ui.activeRiser !== id) setActiveRiser(id);
+  showMenuAt(x, y);
+}
+
 /** Show the menu at (x, y), kept on screen. */
 function showMenuAt(x: number, y: number) {
   ctxMenu.hidden = false;
@@ -420,6 +521,13 @@ const menuCmd = (e: PointerEvent) => (e.target instanceof Element ? e.target.clo
 ctxMenu.addEventListener("click", (e) => {
   const doomed = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-delete-position]")?.dataset.deletePosition : null;
   if (doomed) { closeContextMenu(); deletePosition(doomed); return; }
+  const riserCmd = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-delete-riser], [data-dup-riser]") : null;
+  if (riserCmd) {
+    closeContextMenu();
+    if (riserCmd.dataset.deleteRiser) deleteRiser(riserCmd.dataset.deleteRiser);
+    else if (riserCmd.dataset.dupRiser) duplicateRiser(riserCmd.dataset.dupRiser);
+    return;
+  }
   const positionId = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-position]")?.dataset.position : null;
   if (positionId) { closeContextMenu(); aimAtPosition(positionId); return; }
   const sub = e.target instanceof Element ? e.target.closest(".submenu-wrap") : null;
@@ -478,8 +586,8 @@ function duplicateSelected() {
  */
 const UNDO_KEY = `${STORAGE_KEY}.undo`;
 const MAX_UNDO = 50;
-/** One delete: where the fixtures (or a named position) were in their list, and them (as a stage file). */
-type UndoEntry = { indexes?: number[]; positionIndex?: number; data: SavedStage };
+/** One delete: where the fixtures (or a named position, or a riser) were in their list, and them (as a stage file). */
+type UndoEntry = { indexes?: number[]; positionIndex?: number; riserIndex?: number; data: SavedStage };
 let undoMemory: UndoEntry[] = [];
 
 function readUndo(): UndoEntry[] {
@@ -499,14 +607,14 @@ function writeUndo(list: UndoEntry[]) {
  * delete clears it.
  */
 const REDO_KEY = `${STORAGE_KEY}.redo`;
-type RedoEntry = { fixtures: string[]; positions: string[] };
+type RedoEntry = { fixtures: string[]; positions: string[]; risers: string[] };
 let redoMemory: RedoEntry[] = [];
 
 const isIds = (v: unknown): v is string[] => Array.isArray(v) && v.every((id) => typeof id === "string");
 function readRedo(): RedoEntry[] {
   const list = readStoredJson(REDO_KEY) ?? redoMemory;
   if (!Array.isArray(list)) return [];
-  return list.flatMap((e) => (e && typeof e === "object" && isIds(e.fixtures) && isIds(e.positions) ? [{ fixtures: e.fixtures, positions: e.positions }] : []));
+  return list.flatMap((e) => (e && typeof e === "object" && isIds(e.fixtures) && isIds(e.positions) ? [{ fixtures: e.fixtures, positions: e.positions, risers: isIds(e.risers) ? e.risers : [] }] : []));
 }
 
 function writeRedo(list: RedoEntry[]) {
@@ -551,14 +659,27 @@ export function undoDelete() {
   const list = readUndo();
   const entry = list.pop();
   if (!entry) return;
-  const { fixtures, rigs, positions } = parseStage(entry.data);
+  const { fixtures, rigs, positions, risers } = parseStage(entry.data);
+  // A deleted riser: put it back where it was in the list.
+  if (entry.riserIndex != null) {
+    writeUndo(list);
+    const back = risers.filter((r) => !riserById(r.id));
+    if (!back.length) return;
+    state.risers.splice(Math.min(entry.riserIndex, state.risers.length), 0, ...back);
+    writeRedo([...readRedo(), { fixtures: [], positions: [], risers: back.map((r) => r.id) }]);
+    ui.activeRiser = back[0].id;
+    changed();
+    showRisers();
+    setBanner(`Restored ${back[0].name} · ⇧⌘Z to delete again`, 2500);
+    return;
+  }
   // A deleted named position: put it back where it was in the list.
   if (entry.positionIndex != null) {
     writeUndo(list);
     const back = positions.filter((p) => !positionById(p.id));
     if (!back.length) return;
     state.positions.splice(Math.min(entry.positionIndex, state.positions.length), 0, ...back);
-    writeRedo([...readRedo(), { fixtures: [], positions: back.map((p) => p.id) }]);
+    writeRedo([...readRedo(), { fixtures: [], positions: back.map((p) => p.id), risers: [] }]);
     changed();
     showPositions();
     setBanner(`Restored ${back[0].name} · ⇧⌘Z to delete again`, 2500);
@@ -587,7 +708,7 @@ export function undoDelete() {
   state.selected = removed.map((r) => r.fixture.id).filter((id) => byId(id));
   renderInspector();
   changed();
-  writeRedo([...readRedo(), { fixtures: removed.map((r) => r.fixture.id), positions: [] }]);
+  writeRedo([...readRedo(), { fixtures: removed.map((r) => r.fixture.id), positions: [], risers: [] }]);
   const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
   setBanner(`Restored ${what} · ⇧⌘Z to delete again`, 2500);
 }
@@ -599,6 +720,7 @@ export function redoDelete() {
   if (!entry) return;
   writeRedo(list);
   for (const id of entry.positions) if (positionById(id)) deletePosition(id, { redoing: true });
+  for (const id of entry.risers) if (riserById(id)) deleteRiser(id, { redoing: true });
   // Only those still on the stage (another window may have deleted them since).
   const still = entry.fixtures.filter((id) => byId(id));
   if (!still.length) return;

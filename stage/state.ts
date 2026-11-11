@@ -24,6 +24,7 @@ import {
   type StagePosition,
 } from "./stage-model.ts";
 import type { FixtureProfile } from "./fixture-library.ts";
+import type { Riser } from "./risers.ts";
 import type { createShowLink } from "./show-link.ts";
 import { clamp, numberFrom } from "../shared/numbers.ts";
 import { COLOR_ROLES } from "../shared/color.ts";
@@ -46,6 +47,8 @@ export const state: {
   rigs: Rig[];
   /** Named spots to aim at. */
   positions: StagePosition[];
+  /** Boxes standing on the floor (platforms, drum risers). */
+  risers: Riser[];
 } = {
   box: { w: 12, d: 8, h: 6 },
   fixtures: [],
@@ -53,6 +56,7 @@ export const state: {
   transparent: { ...DEFAULT_TRANSPARENT },
   rigs: [],
   positions: [],
+  risers: [],
 };
 
 /** A rig's settings from the Place rig dialog. */
@@ -72,6 +76,8 @@ export const ui: {
   placing: boolean;
   /** Placing a position (with `placing`): a click puts a position on the surface it lands on. */
   placingPosition: boolean;
+  /** Placing a riser (with `placing`): a click puts a riser's center there, on the floor. */
+  placingRiser: boolean;
   /** While placing a rig: its settings from the Place rig dialog (else null). */
   placingRig: RigSettings | null;
   aiming: boolean;
@@ -79,29 +85,34 @@ export const ui: {
   activePosition: string | null;
   /** The position under the pointer (3D, plan or its row in the list), or null: it's lit up. */
   hoverPosition: string | null;
+  /** The riser picked out (list, plan, 3D), or null. */
+  activeRiser: string | null;
   /** Set up at boot (stage.ts): keeps the stage with the show on the show server. */
   showLink: ReturnType<typeof createShowLink> | null;
 } = {
   placing: false,
   placingPosition: false,
+  placingRiser: false,
   placingRig: null,
   aiming: false,
   activePosition: null,
   hoverPosition: null,
+  activeRiser: null,
   showLink: null,
 };
 
 export function loadData(data: unknown) {
-  const { box, fixtures, transparent, rigs, positions } = parseStage(data);
+  const { box, fixtures, transparent, rigs, positions, risers } = parseStage(data);
   state.box = box;
   state.positions = positions;
+  state.risers = risers;
   state.transparent = transparent;
   state.rigs = rigs;
   state.fixtures = fixtures;
   state.selected = fixtures.length ? [fixtures[0].id] : [];
 }
 
-export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs, state.positions);
+export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs, state.positions, state.risers);
 
 let saveTimer = 0;
 let shareQueued = false;
@@ -146,6 +157,8 @@ export function restore() {
 }
 
 export const positionById = (id: string | null | undefined): StagePosition | undefined => state.positions.find((p) => p.id === id);
+
+export const riserById = (id: string | null | undefined): Riser | undefined => state.risers.find((r) => r.id === id);
 
 export const byId = (id: string | null | undefined): Fixture | undefined => state.fixtures.find((i) => i.id === id);
 export const selectedFixtures = (): Fixture[] => state.selected.map(byId).filter((f) => f != null);
