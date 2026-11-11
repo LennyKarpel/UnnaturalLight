@@ -6,6 +6,9 @@
  * comes from, and the console's fixtures — on every output change and when
  * the stage starts.
  *
+ * Stage → console: "aim fixture F at stage position P" (in the cue(s) on the
+ * output) and "position P moved" (every cue aiming at it), see aims.ts.
+ *
  * Stage → console: "set channel N to V" requests. The fader(s) patched to N
  * are moved (in the cue(s) currently on the output) so the output
  * becomes V, allowing for the patch max, master, submasters and crossfade.
@@ -21,7 +24,7 @@
 
 import { UNIVERSE_SIZE, type FaderPatch } from "./patch.ts";
 import { createTracePopover, provideTrace, type FaderInfo, type MixInfo, type TracePopover, type TraceTarget } from "../shared/trace.ts";
-import { joinLink, type ConsoleEnd, type RegisterRequest, type RegisterResult, type StageEnd, type StageLevels } from "../shared/console-stage.ts";
+import { joinLink, type AimPair, type ConsoleEnd, type RegisterRequest, type RegisterResult, type StageEnd, type StageLevels } from "../shared/console-stage.ts";
 import { setChannelLevels, type ChannelValue, type Mix } from "../shared/engine.ts";
 import type { Fixture, FixtureGroup } from "./fixtures.ts";
 
@@ -44,6 +47,11 @@ export type StageLinkApi = {
   adoptRoles: ConsoleEnd["layouts"];
   reveal: ConsoleEnd["select"];
   hold: ConsoleEnd["hold"];
+  aim: ConsoleEnd["aim"];
+  reaim: ConsoleEnd["reaim"];
+  /** Every aim at a named stage position in the show / in the cue on the output. */
+  aims: () => AimPair[];
+  liveAims: () => AimPair[];
 };
 
 /** Call the stage (null until the link starts). */
@@ -90,6 +98,8 @@ function send() {
     })(),
     groups: api.groups().map(({ id, name }) => ({ id, name })),
     universes: api.universes(),
+    aims: api.aims(),
+    liveAims: api.liveAims(),
   };
   toStage((stage) => stage.levels(data));
 }
@@ -120,6 +130,8 @@ export function startStageLink(api: StageLinkApi) {
     select: (consoleIds) => api.reveal(consoleIds),
     layouts: (list) => api.adoptRoles(list),
     hold: (kind, channel, on) => api.hold(kind, channel, on),
+    aim: (list) => api.aim(list),
+    reaim: (list) => api.reaim(list),
   });
   toStage = call;
   send();

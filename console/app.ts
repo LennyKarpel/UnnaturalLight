@@ -50,6 +50,7 @@ import {
   normalizeRoles,
 } from "./fixtures.ts";
 import { normalizeSets, playbackCue } from "./sets.ts";
+import { allAims, applyAims, applyReaims } from "./aims.ts";
 import {
   currentCueTitle,
   channelsCueMenuBtn,
@@ -165,7 +166,7 @@ import {
   renderFixtures,
   addFixtureGroup,
 } from "./fixtures-tab.ts";
-import { errorMessage } from "../shared/guards.ts";
+import { errorMessage, isPresent } from "../shared/guards.ts";
 import { el } from "../shared/html.ts";
 import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
 
@@ -852,11 +853,12 @@ const consoleChat = {
   // Each edit goes through the same state and redraws as the console's own
   // controls, then pushToDmx syncs it to the show server.
 
-  /** A cue's name, In time and every fader's level (index = fader − 1). */
+  /** A cue's name, In time, every fader's level (index = fader − 1) and its aims at named stage positions (position = the stage's id). */
   cue(songId: string | null, index: number) {
     const c = chatSong(songId).cues[index];
     if (!c) throw new Error("No such cue");
-    return { name: c.name, fadeSeconds: c.fadeTime, levels: [...c.levels] };
+    const fixtureName = (id: string) => state.fixtures.find((f) => f.id === id)?.name ?? null;
+    return { name: c.name, fadeSeconds: c.fadeTime, levels: [...c.levels], aims: c.aims.map((a) => ({ fixture: fixtureName(a.fixture), position: a.position })) };
   },
   /** Every fader: number (1-based), name, and whether it's patched to a channel. */
   faders: () => Array.from({ length: FADER_COUNT }, (_, i) => ({ fader: i + 1, name: faderName(i), patched: !isUnpatched(state.patch[i]) })),
@@ -875,7 +877,7 @@ const consoleChat = {
     const source = opts.copyOf == null ? null : song.cues[opts.copyOf];
     if (opts.copyOf != null && !source) throw new Error("No such cue to copy");
     const at = opts.after == null ? song.cues.length : clampInt(opts.after + 1, 0, song.cues.length);
-    song.cues.splice(at, 0, createCue({ name: opts.name ?? "", levels: source?.levels, fadeTime: opts.fadeSeconds ?? source?.fadeTime }));
+    song.cues.splice(at, 0, createCue({ name: opts.name ?? "", levels: source?.levels, fadeTime: opts.fadeSeconds ?? source?.fadeTime, aims: source?.aims }));
     afterCueListChange(song, (i) => (i >= at ? i + 1 : i));
     return at;
   },
@@ -1029,6 +1031,23 @@ startStageLink({
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
   hold: holdFromStage,
+  // Aims at named stage positions (aims.ts): the stage aims fixtures in the
+  // cue(s) on the output, and re-aims every cue when a position moves.
+  aim(list) {
+    const t = state.cross / 100;
+    const on = [t < 1 && state.fromSub > 0 ? state.fromCue : null, t > 0 && state.toSub > 0 ? state.toCue : null];
+    const cues = [...new Set(on.flatMap((i) => (i == null ? [] : [playbackCue(state, i)])).filter(isPresent))];
+    applyAims(cues, state.patch, list);
+    syncSlidersFromState();
+    pushToDmx();
+  },
+  reaim(list) {
+    if (!applyReaims(state.songs, state.patch, list)) return;
+    syncSlidersFromState();
+    pushToDmx();
+  },
+  aims: () => allAims(state.songs),
+  liveAims: () => playbackCue(state, state.cross >= 50 ? state.toCue : state.fromCue)?.aims ?? [],
 });
 
 // ---------------------------------------------------------------------

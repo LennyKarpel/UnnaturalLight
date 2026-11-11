@@ -52,7 +52,7 @@ async function stream(history: ChatMessage[], view: TurnView, signal: AbortSigna
   const res = await fetch(chatUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: history, tools: TOOLS.map(({ name, description, schema }) => ({ name, description, schema })) }),
+    body: JSON.stringify({ messages: history, tools: TOOLS.map(({ name, description, schema, deferred }) => ({ name, description, schema, deferred })) }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(res.status === 404 ? "This show server has no chat (restart it to update)" : `Chat failed: ${await res.text()}`);

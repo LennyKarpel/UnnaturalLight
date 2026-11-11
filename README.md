@@ -99,14 +99,16 @@ The **Chat** button in the page header opens a panel on the right where you can 
 
 - **What it can do so far:**
   - *Playback:* see what's playing and what's in the show; play a song (from a given cue); make a cue LIVE (a jump, with no fade); GO; pause, resume or stop a transition; set the master and the crossfader.
-  - *Cues and songs:* read a cue's levels; set faders in a cue; add a cue (empty or a copy of another), rename it or change its fade time, delete it; add or rename a song.
+  - *Cues and songs:* read a cue's levels (and which fixtures it aims at named positions); set faders in a cue; add a cue (empty or a copy of another), rename it or change its fade time, delete it; add or rename a song.
   - *Fixtures:* list the fixtures and their channels; set a fixture's (or a group's, e.g. "Ring 1") dimmer in %, color (any color name; it's mixed onto the fixture's emitters), pan, tilt, zoom, or any channel by its role. Unless you name a cue, edits go into the **LIVE cue**, so you see them at once.
-  - The stage and DMX outputs aren't in the chat yet.
-- **Undo:** after a request that changed the show (cues, songs, fixture levels), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show since. Playback (LIVE, GO, master) isn't undone.
+  - *Stage:* see the stage (box, rigs, fixtures and where they point); place fixtures at spots (each gets a console fixture with faders unless you say stage only); place a rig (circle, square or line: center, size, count, tilt, yaw); change a rig (its center moves it); move fixtures (to a spot or by an offset); aim fixtures (or a whole rig) at a named position (they follow it) or a spot, or home them; stop fixtures following; add, rename, move or delete named positions; rename or delete fixtures (a rig's fixture deletes its whole rig); set the box's size. What it changes is selected on the stage, so you can see it. Coordinates are in meters from the center of the stage floor (x: stage right − to left +, y: up, z: upstage − to downstage +), but plain words like "over center stage, 5 m up" work.
+  - DMX outputs aren't in the chat yet.
+- **Undo:** after a request that changed the show or the stage (cues, songs, fixture levels, fixtures placed, moved or aimed, rigs, the box), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show or the stage since. Playback (LIVE, GO, master) isn't undone.
 - **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran).
 - **It does what you ask straight away**, GO included: it never asks you to confirm. Word requests carefully during a show.
 - **Resize it** by dragging its left edge (the grip in the middle marks it); double-click the edge for the default width. With the edge focused, ← / → resize it too (⇧ for bigger steps). The width is remembered.
 - **Stop** (the Send button while it's working; click it) stops it; anything it hasn't done yet isn't done (– in the chat). Enter does nothing while it's working, so it never stops a turn by surprise. **New** starts a new conversation. **Esc** closes the panel.
+- **↑ / ↓ in the message box** step back and forth through the prompts you sent before (the last 50, kept across **New** and reloads), as in a terminal; past the newest is what you were typing. In a longer prompt, ↑ works from its first line and ↓ from its last, so the arrows still move the cursor inside it.
 - The conversation is kept in this browser, so a reload doesn't lose it. App windows in the same browser share it, so use the chat in one of them at a time.
 - **Long chats are summed up:** past 20 of your prompts, the oldest 10 are summed up in a few lines (one short extra model call) and the summary takes their place: it keeps what you asked for, what was done and any names you gave things. It shows as *Earlier messages, summed up* (click to read it).
 - **A prompt that fails before anything is done** is crossed out and left out of the conversation, so typing it again means it once, not twice.
@@ -253,12 +255,37 @@ Library fixtures get these roles from their channels automatically (warm and col
 ### Aiming
 
 - **Aim at spot** (`A`): select one or more fixtures, press `A`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected fixture points at it. Great for focusing several fixtures on one spot.
+- **Aim at a position:** select fixtures (double-click a rig's fixture for the whole rig), then right-click and pick **Aim at position ▸** and the position (pointing at one in that sub-menu lights it up on the stage), or click **Aim** beside the position in the Positions list (see [Named positions](#named-positions)). The fixtures then **follow** the position: see [Following a position](#following-a-position).
 - **Each fixture has its own "zero"**: the direction it points at pan / tilt 128, and which way is "up" for it. It's shown as a dashed cyan line on the selected fixture.
   - **Set zero here** (`Z`): make the current direction the new zero.
   - **Aim zero at stage**: point the zero at the center of the stage.
   - Fine-tune it as yaw / pitch / roll in the inspector's **Zero frame** (roll matters for fixtures hung upside down).
 - The inspector's readout tells you which wall the beam's center hits, where, and how far away.
 
+### Named positions
+
+A **position** is a named spot on the stage (e.g. *DSC*, *drum riser*, *lectern*) to aim fixtures at by name, here or in the [chat](#the-chat): the stage's version of a console's *position presets*, but a place on the stage rather than pan / tilt values, so each fixture works out its own pan / tilt to hit it. Positions are saved with the stage, so they go with the show.
+
+- **+ Position** (stage header), then click a spot on the floor, a wall or the ceiling in 3D, or in the plan (the floor in Top; the back or side wall in the other views). `Esc` cancels.
+- **Before you click**, a violet diamond shows where the position will go (to the 0.1 m it will land on), with dotted lines through it across the stage (red: stage right to left, green: floor to ceiling, blue: upstage to downstage) and its position and surface beside it and in the banner, e.g. *x 2.4 (SL) · height 0 · z 0.4 (DS) · Floor*. The plan shows the same for its two axes.
+- The new position opens in the **Positions** tab (beside **Fixtures** above the inspector) with its name ready to type. There you can rename it, set x / height / z, **Aim** the selected fixtures at it, or delete it (✕).
+- **Move a position** by dragging it: in 3D it slides level, at the height it's at (a floor position stays on the floor, also past the walls); hold **⇧** while dragging to move it **straight up or down** (e.g. to head height over the floor spot). Let go of ⇧ mid-drag and it slides level at its new height. In the plan it moves in that view's two directions (Front / SR / SL change its height too). The same dotted lines and x / height / z show while you drag. Fixtures following it re-aim as it moves. Or type its x / height / z in the list.
+- Positions show as violet diamonds with their names, in 3D (with a dashed line down to the floor when raised) and in the plan. Click one (in 3D, the plan or the list) to pick it out.
+- **Hover over a position** (in 3D, the plan, or its row in the Positions list) to light it up: it grows, gets a glow, its name gets bigger, dashed lines run to it from the fixtures following it, and the banner says where it is and how many fixtures follow it. Handy when it's lost in a beam.
+
+
+### Following a position
+
+Fixtures aimed at a named position **follow** it: move the position (or the fixtures, or their rig) and they re-aim to stay on it.
+
+- **Fixtures in the console** (pan / tilt on faders): the aim goes into the **cue on stage** (both cues while the crossfader is between them), like recording a position preset into it. The cue keeps the pan / tilt values, and remembers that they aim at the position. Move the position later and **every cue that aims at it** re-aims, played or not, in every song. So *"Lead → DSC"* in cue 3 still finds DSC after you move it, when cue 3 comes round.
+- **Other cues are untouched:** a cue that sets its own pan / tilt plays those. The fixture follows the position only while a cue that aims it there is on stage.
+- **Changing pan / tilt any other way lets go**, in that cue only: moving the pan or tilt fader, the ✥ pad, the inspector, **Aim at spot**, **Home**, or the chat. The fixture stays where it is; it just stops following.
+- **Fixtures only on the stage** follow the same way, without cues, until their pan / tilt are changed some other way.
+- **You can see it:** the inspector shows **Following ‹position›** (for several fixtures, *8 of 8 following*), and the fixture list shows *→ ‹position›* after the name.
+- **Change it in the inspector:** the position is a dropdown: pick another and the selected fixtures aim at it and follow it instead (*(several)* when they follow different ones). When none follow, the same line reads **Aim at** *Choose a position…*. **Stop following** keeps them aimed where they are but stops following.
+- **Deleting a position** leaves the fixtures and cues aimed where they are (Undo brings it back, still followed). Copying a cue copies its aims.
+- Aims use the pan nearest the fixture's home, so a position always gives a fixture the same pan / tilt.
 ### Rigs: circles, squares and lines of fixtures
 
 A **rig** is a group of fixtures in a fixed arrangement that you place and move as one:
@@ -292,7 +319,7 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 
 ### The right-click menu
 
-Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item.
+Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item.
 
 ### The inspector
 
@@ -574,6 +601,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Mode** | one of a real fixture's channel layouts (e.g. 5-channel or 14-channel) |
 | **Rig** | a group of fixtures arranged in a circle, square or line |
 | **Zero** | the direction a fixture points at pan / tilt 128 |
+| **Position** | a named spot on the stage (e.g. *DSC*) that fixtures aim at and follow, like a console's position preset; cues remember aims at it |
 
 ---
 
@@ -588,7 +616,7 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -598,7 +626,9 @@ The console and the stage are one app: anything both use (and the page header, o
 | `page/page.ts`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
 | `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop, Undo, the resize divider |
 | `page/chat/loop.ts` | One chat turn: POST `/chat`, stream the reply, run the tools it calls, send the results back, repeat |
-| `page/chat/tools.ts` | The chat's tools (playback, cues and songs, fixtures): name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
+| `page/chat/tools.ts` | The chat's tools (playback, cues and songs, fixtures; which are deferred for tool search): name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
+| `page/chat/stage-tools.ts` | The chat's stage tools (place, move, aim and follow, rigs, named positions, box), through `window.stageChat` |
+| `page/chat/find.ts` | Finding songs and fixtures by the names the model gives |
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, the chat at `/chat`, 40 Hz fade / DMX loop, saving |
 | `server/chat/chat.ts` | `POST /chat`: checks the request, asks the model, streams the reply; the system prompt. `POST /chat/summary`: sums up older messages |
@@ -625,9 +655,11 @@ The console and the stage are one app: anything both use (and the page header, o
 | `console/patch.ts` | Fader patch; the show's universe count (channel addresses for the current show) |
 | `console/fixtures.ts`, `show.ts`, `songs.ts`, `sets.ts` | Fixtures, show save / load, songs and cues, sets (and what's UP NEXT across set songs) |
 | `console/stage-link.ts` | Console side of its link with the stage |
+| `console/aims.ts` | Cues that aim fixtures at named stage positions: recording an aim, re-aiming every cue when a position moves |
 | `stage/stage.css` | Stage styles, scoped to its pane (`:where(#stagePane)`; breakpoints are container queries on the pane) |
 | `stage/stage.ts` | Starts the stage; keeps up with other app windows and the show server; ⌥-click traces |
-| `stage/state.ts` | The stage's data (box, fixtures, rigs, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
+| `stage/chat-hooks.ts` | The chat's hooks into the stage (`window.stageChat`): look, place, move, aim and follow, rigs, named positions, box, and edit snapshots for Undo |
+| `stage/state.ts` | The stage's data (box, fixtures, rigs, named positions, selection), saving it, rig helpers, and what the stage is in the middle of (placing, aiming) |
 | `stage/view3d.ts`, `plan.ts` | The 3D view and the plan view, with their mouse handling |
 | `stage/frame.ts` | Work done at the start of each 3D frame, before it's drawn (the console's latest levels are taken there, so they show in that frame) |
 | `stage/sidebar.ts` | Fixture list, inspector and key strip |
@@ -635,8 +667,9 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
 | `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
 | `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
-| `stage/stage-model.ts` | Fixture and rig data, DMX values ↔ angles / color / beam, aiming math, save format |
+| `stage/stage-model.ts` | Fixture, rig and named position data, DMX values ↔ angles / color / beam, aiming math, save format |
 | `stage/console-link.ts` | Stage side of its link with the console |
+| `stage/follow.ts` | Fixtures following named positions: aiming, re-aiming when a position or fixture moves (here and in the console's cues), what each one follows |
 | `stage/show-link.ts` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.ts` | Open Fixture Library browsing, picker, fixture mode → channel profile |
 | `shared/engine.ts` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
@@ -699,7 +732,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 
 `console/stage-link.ts` ↔ `stage/console-link.ts`, over `shared/console-stage.ts`. The console and the stage are one page, so this link is always there: there's no "console offline", no tab to reopen, and nothing between browser tabs. Each app window has its own console and stage; other windows follow through the show server (links 1 and 2). Each side joins the link with the functions the other may call; a call runs as soon as the caller's current update is done.
 
-- **Console → stage: `levels`.** Output levels for every universe (whole numbers, as DMX sends them, plus `exact`: the same unrounded, which the stage draws so a fade brightens smoothly rather than in DMX's whole steps; the fixtures' DMX values stay whole), which faders feed each channel, and the console's fixtures. It's called on every output change, and when the stage starts (its `hello`).
+- **Console → stage: `levels`.** Output levels for every universe (whole numbers, as DMX sends them, plus `exact`: the same unrounded, which the stage draws so a fade brightens smoothly rather than in DMX's whole steps; the fixtures' DMX values stay whole), which faders feed each channel, the console's fixtures, and the cues' aims at named positions (every one in the show, and those in the cue on the output). It's called on every output change, and when the stage starts (its `hello`).
 - **Stage → console:**
 
   | Call | What |
@@ -708,6 +741,8 @@ There are three links; the first two share the window's one WebSocket (`shared/s
   | `register` / `unregister` | for fixtures it places or deletes (the console answers with the stage's `registered`) |
   | `layouts` | each fixture's console fixture and channel layout, so the console fills in roles a console fixture is missing (e.g. a library fixture's amber) |
   | `select` | which fixtures are selected, so the console highlights them |
+  | `aim` | aim console fixtures at a named position (their pan / tilt values) in the cue(s) on the output, which remember it; position `null` forgets it |
+  | `reaim` | a position or fixture moved: each cue that aims that fixture at that position and still has the old pan / tilt (`from`) gets the new ones (`to`) |
 
 - **Hello.** Whichever side starts second gets the other's state at once: the stage's `hello` gets the console's levels, the console's `hello` gets the stage's layouts.
 - **Registering once.** A fixture another window placed (it arrives with the stage from the server, still waiting to register) is left to that window, so it isn't registered twice. If that window closes first, this one registers it after 5 s.
@@ -777,7 +812,7 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 | `showName` | the show's name |
 | `navOrder` | the console's tab order (`show`, `set`, `run`, `channels`, `fixtures`, `patch`); unknown names are dropped, and a missing tab goes in at its default place (after the tab before it in that list) |
 | `universes` | 1–8 |
-| `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s |
+| `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime, aims }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s; `aims` is `[{ fixture, position }]`: console fixtures whose pan / tilt in this cue aim at a named stage position (by id) |
 | `activeSongId` | the song playing |
 | `sets` | `[{ id, name, entries: [{ id, songId }] }]`: each entry points at a song; a song can appear more than once |
 | `activeSetId` | the set the Run tab runs |
@@ -823,10 +858,11 @@ page runs the tools → sends the results in the next POST → repeat
 | `UNNATURALLIGHT_CHAT_EFFORT` | `low` | How hard it thinks (`low` … `max`); low keeps replies quick |
 
 - **Anthropic adapter:** streams with prompt caching on, and opts into the API's server-side fallbacks (`fallbacks: "default"`), so a request the model declines is retried on a fallback model in the same call. Claude's thinking blocks are tied to the system prompt, tools and earlier messages they were made with; a saved conversation can outlive those (an update changes the prompt or tools, or the panel drops its oldest messages), so the adapter asks the API to drop blocks that no longer match (`prefix_mismatch_behavior: "drop_block"`) rather than fail with *“bound to a different conversation”*. Only the model's past reasoning is lost; the conversation itself is kept.
-- **No confirming:** tools run as soon as the model calls them; the panel's **Undo** is the safety net instead. Before each prompt it takes `consoleChat.editSnapshot()` (the show as saved, minus playback and live fields) and, if the turn changed it, offers `restoreEdits(before)`, only while the snapshot still equals the one after the turn. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
+- **No confirming:** tools run as soon as the model calls them; the panel's **Undo** is the safety net instead. Before each prompt it takes `consoleChat.editSnapshot()` (the show as saved, minus playback and live fields) and `stageChat.editSnapshot()` (the stage as saved, minus the values linked fixtures take from the console, which change with playback) and, if the turn changed them, offers `restoreEdits(before)` for each that changed (the show first: it has the console fixtures the stage's fixtures link to), only while the snapshots still equal the ones after the turn.
+- **Tool search:** a tool is `deferred` unless it's playback (`TOOLS` in `page/chat/tools.ts`). The Anthropic adapter (`toApiTools`) declares deferred tools with `defer_loading` and adds the API's tool search tool, so each request carries the few playback tools in full and the model looks up the rest (cue editing, fixtures, the stage) when a request needs them. That keeps requests small as tools are added, and keeps the model choosing well among many. A reply the API pauses in its own tool loop (`pause_turn`) is resumed in the same call. Another provider's adapter can ignore `deferred` and send every tool. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
 - **Long chats:** past 20 prompts the panel sends the oldest 10 (and any earlier summary) to `POST /chat/summary`, which has the model sum them up in plain text (`transcript` and `SUMMARY_PROMPT` in `server/chat/chat.ts`, no tools); the summary replaces them as a `summary` message at the start (to Claude: a user message marked as a summary). It runs in the background after a turn, and only if those messages are still there unchanged. If summing up keeps failing, the oldest prompts are dropped past 40. A prompt whose turn failed or was stopped before anything was done is taken back out of the conversation.
 - **Saved conversations are repaired** on load and before each turn (`repairHistory` in `page/chat/loop.ts`): a reload or server restart mid-turn can leave a tool call without a result, which the API refuses, so it gets a *not run* result.
-- **Adding a tool:** add it to `TOOLS` in `page/chat/tools.ts`, and a hook in `consoleChat` (`console/app.ts`) if it needs one. Nothing on the server changes.
+- **Adding a tool:** add it to `TOOLS` in `page/chat/tools.ts` (stage tools: `page/chat/stage-tools.ts`), and a hook in `consoleChat` (`console/app.ts`) or `stageChat` (`stage/chat-hooks.ts`) if it needs one. It's deferred (found by tool search) unless it's in the playback list. Nothing on the server changes.
 
 ### Other details
 

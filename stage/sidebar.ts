@@ -1,6 +1,8 @@
 // Sidebar: the fixture list, the inspector and the key strip (HUD).
+import { followingOf } from "./follow.ts";
 import {
   MAX_FIXTURES,
+  MAX_POSITIONS,
   round,
   beamDir,
   isInside,
@@ -19,8 +21,8 @@ import { DMX_LABELS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../shared/attrib
 import { escapeHtml, el } from "../shared/html.ts";
 import { bindPanTiltPad } from "../shared/pan-tilt-pad.ts";
 import { COLOR_ROLES, emitterHex, isColorRole } from "../shared/color.ts";
-import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS } from "./state.ts";
-import { isOneOf } from "../shared/guards.ts";
+import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS, positionById, ui } from "./state.ts";
+import { isOneOf, isPresent } from "../shared/guards.ts";
 import {
   flashing,
   startFlash,
@@ -32,11 +34,17 @@ import {
   openContextMenu,
   act,
   ACTIONS,
+  aimAtPosition,
+  deletePosition,
+  setActivePosition,
+  setHoverPosition,
+  setPlacing,
 } from "./actions.ts";
 import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
 import { showTrace } from "./stage.ts";
 import type { Vector3 } from "three";
 import { elById } from "../shared/query.ts";
+import { readStored, store } from "../shared/storage.ts";
 
 // ---------------------------------------------------------------------
 // Sidebar: list + inspector
@@ -54,7 +62,41 @@ function inspectorHeading(note = "") {
 /** Selection the list last showed, to scroll a newly selected fixture into view. */
 let listSelectionKey = "";
 
+// The list part has two tabs: Fixtures and Positions (remembered in this browser).
+const LIST_TAB_KEY = "unnaturallight.stage.listTab";
+type ListTab = "fixtures" | "positions";
+let listTab: ListTab = readStored(LIST_TAB_KEY) === "positions" ? "positions" : "fixtures";
+const positionListEl = elById("positionList");
+
+function setListTab(tab: ListTab) {
+  listTab = tab;
+  store(LIST_TAB_KEY, tab);
+  renderList();
+}
+document.querySelectorAll<HTMLElement>("[data-list-tab]").forEach((b) => {
+  b.addEventListener("click", () => { setListTab(b.dataset.listTab === "positions" ? "positions" : "fixtures"); b.blur(); });
+});
+
+/** Show the Positions tab (`rename`: put the cursor in that position's name). */
+export function showPositions({ rename }: { rename?: string } = {}) {
+  if (listTab !== "positions") setListTab("positions");
+  else renderPositionList(true);
+  if (rename) {
+    const input = positionListEl.querySelector<HTMLInputElement>(`[data-position-row="${rename}"] input[data-pk="name"]`);
+    input?.focus();
+    input?.select();
+  }
+}
+
 export function renderList() {
+  document.querySelectorAll<HTMLElement>("[data-list-tab]").forEach((b) => {
+    const on = b.dataset.listTab === listTab;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-selected", String(on));
+  });
+  listEl.hidden = listTab !== "fixtures";
+  positionListEl.hidden = listTab !== "positions";
+  if (listTab === "positions") { renderPositionList(); return; }
   elById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
   if (!state.fixtures.length) {
     listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Place fixture”.</div>`;
@@ -70,7 +112,8 @@ export function renderList() {
       <span></span>
       <div class="bar"><div style="width:${Math.round(fixture.intensity * 100)}%"></div></div>
       <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
-    row.children[1].textContent = fixture.name + (isInside(fixture, state.box) ? "" : "  ·  outside");
+    const follows = followingOf(fixture);
+    row.children[1].textContent = fixture.name + (follows ? `  → ${follows.name}` : "") + (isInside(fixture, state.box) ? "" : "  ·  outside");
     row.addEventListener("click", (e) => {
       if (e.altKey) showTrace({ kind: "stageFixture", id: fixture.id }, e);
       // A double-click on a rig's fixture selects the whole rig. (Not "dblclick": the first click rebuilds the rows.)
@@ -93,6 +136,79 @@ export function renderList() {
     }
   }
 }
+
+/** What the position list last showed (it isn't rebuilt while that's unchanged, so typing in it keeps its place). */
+let positionListKey = "";
+
+const POSITION_FIELDS = ["name", "x", "y", "z"] as const;
+
+function renderPositionList(force = false) {
+  elById("count").textContent = `${state.positions.length} / ${MAX_POSITIONS}`;
+  const hasSel = state.selected.length > 0;
+  const key = JSON.stringify([state.positions, ui.activePosition, hasSel]);
+  if (!force && key === positionListKey) return;
+  // Typing in a field: leave the rows alone while the same positions are listed
+  // (the field already shows what's typed; rebuilding would drop the cursor).
+  const ids = state.positions.map((p) => p.id).join();
+  const shownIds = [...positionListEl.querySelectorAll<HTMLElement>("[data-position-row]")].map((r) => r.dataset.positionRow).join();
+  if (!force && ids === shownIds && positionListEl.contains(document.activeElement)) return;
+  positionListKey = key;
+  if (!state.positions.length) {
+    positionListEl.innerHTML = `<div class="empty">None yet: “+ Position” puts one on the floor, a wall or the ceiling. Then aim fixtures at it by name (right-click a fixture, or the chat).</div>`;
+    return;
+  }
+  const scrollTop = positionListEl.scrollTop;
+  positionListEl.innerHTML = "";
+  for (const position of state.positions) {
+    const row = el("div", "item position-row" + (ui.activePosition === position.id ? " sel" : ""));
+    row.dataset.positionRow = position.id;
+    row.innerHTML = `
+      <span class="position-mark" aria-hidden="true">◆</span>
+      <input type="text" data-pk="name" maxlength="40" title="Position name" />
+      <button type="button" data-aim ${hasSel ? 'title="Aim the selected fixtures at this position"' : 'disabled title="Select fixtures first"'}>Aim</button>
+      <button type="button" data-del class="danger" title="Delete this position">✕</button>
+      <div class="xyz position-xyz">
+        <input type="number" step="0.1" data-pk="x" title="x (− SR · + SL)" />
+        <input type="number" step="0.1" min="0" data-pk="y" title="height" />
+        <input type="number" step="0.1" data-pk="z" title="z (− upstage · + audience)" />
+      </div>`;
+    for (const input of row.querySelectorAll<HTMLInputElement>("[data-pk]")) {
+      const k = input.dataset.pk;
+      if (!isOneOf(POSITION_FIELDS, k)) continue;
+      input.value = String(position[k]);
+      input.addEventListener("input", () => {
+        const p = positionById(position.id);
+        if (!p) return;
+        if (k === "name") { if (input.value.trim()) p.name = input.value.trim(); }
+        else {
+          const v = numberFrom(input.value);
+          if (v == null) return;
+          p[k] = k === "y" ? clamp(v, 0, 100) : clamp(v, -100, 100);
+        }
+        changed({ list: false, inspector: false });
+      });
+      input.addEventListener("blur", () => { const p = positionById(position.id); if (p) input.value = String(p[k]); });
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Escape") input.blur(); });
+    }
+    row.querySelector("[data-aim]")?.addEventListener("click", () => aimAtPosition(position.id));
+    row.querySelector("[data-del]")?.addEventListener("click", () => deletePosition(position.id));
+    // Hovering the row lights the position up in 3D and the plan, to find it.
+    row.addEventListener("pointerenter", () => setHoverPosition(position.id));
+    row.addEventListener("pointerleave", () => setHoverPosition(null));
+    row.addEventListener("click", (e) => {
+      if (e.target instanceof Element && e.target.closest("input, button")) return;
+      setActivePosition(ui.activePosition === position.id ? null : position.id);
+    });
+    positionListEl.append(row);
+  }
+  positionListEl.scrollTop = scrollTop;
+}
+
+elById("positionBtn").addEventListener("click", (e) => {
+  (e.currentTarget as HTMLElement).blur();
+  if (ui.placing && ui.placingPosition) setPlacing(false);
+  else setPlacing(true, null, true);
+});
 
 /** Inspector block for editing a rig (shown when the selection is all one rig). */
 function rigSectionHtml(rig: Rig) {
@@ -189,6 +305,7 @@ export function renderInspector() {
       </div>
       <p class="hint">Sets every selected fixture. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
       ${selRig ? rigSectionHtml(selRig) + rigLinkHtml() : ""}
+      <div class="follow-note" data-follow hidden><span></span><select data-follow-pick title="Aim at a named position (they follow it)"></select><button type="button" data-act="unfollow" title="Stay aimed where it is, but stop following the position">Stop following</button></div>
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
         <button data-act="aimSpot" title="Point all selected beams at one spot (A)">Aim at spot</button>
@@ -243,6 +360,7 @@ export function renderInspector() {
     </div>
     ${linkSectionHtml(sel[0])}
     ${rig ? rigSectionHtml(rig) + rigLinkHtml() : ""}
+    <div class="follow-note" data-follow hidden><span></span><select data-follow-pick title="Aim at a named position (they follow it)"></select><button type="button" data-act="unfollow" title="Stay aimed where it is, but stop following the position">Stop following</button></div>
     <div class="buttons">
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
       <button data-act="aimSpot" title="Point the beam at a spot you click (A)">Aim at spot</button>
@@ -255,6 +373,40 @@ export function renderInspector() {
     </div>`;
   bindInspector();
   syncInspector();
+}
+
+/**
+ * The position line (when there are named positions): what the selected
+ * fixtures follow, with a dropdown to aim them at another (or, when none
+ * follow, at one), and Stop following.
+ */
+function syncFollowNote(sel: Fixture[]) {
+  const note = inspectorEl.querySelector<HTMLElement>("[data-follow]");
+  const pick = note?.querySelector<HTMLSelectElement>("[data-follow-pick]");
+  const text = note?.querySelector("span");
+  const stop = note?.querySelector<HTMLElement>('[data-act="unfollow"]');
+  if (!note || !pick || !text || !stop) return;
+  note.hidden = !state.positions.length;
+  if (note.hidden) return;
+  const ids = sel.map((f) => followingOf(f)?.id ?? null);
+  const n = ids.filter(isPresent).length;
+  const one = n === sel.length && new Set(ids).size === 1 ? ids[0] : null;
+  text.textContent = !n ? "Aim at" : sel.length === 1 ? "Following" : `${n} of ${sel.length} following`;
+  stop.hidden = !n;
+  if (!pick.dataset.bound) {
+    pick.dataset.bound = "1";
+    pick.addEventListener("change", () => {
+      if (pick.value) aimAtPosition(pick.value, selectedFixtures());
+      pick.blur();
+    });
+  }
+  // Rebuilt only when it would show something else (and not while it's open).
+  const key = JSON.stringify([state.positions.map((p) => [p.id, p.name]), one, n > 0]);
+  if (pick.dataset.key === key || pick === document.activeElement) return;
+  pick.dataset.key = key;
+  pick.innerHTML = "";
+  if (!one) pick.append(new Option(n ? "(several)" : "Choose a position…", "", true, true));
+  for (const p of state.positions) pick.append(new Option(p.name, p.id, false, p.id === one));
 }
 
 /** The fixture fields the inspector edits (its inputs' `data-k`). */
@@ -422,6 +574,7 @@ export function syncInspector() {
   const sel = selectedFixtures();
   const rig = commonRig(sel);
   if (rig) syncRigFields(rig);
+  syncFollowNote(sel);
   if (sel.length > 1) {
     for (const attr of ["dimmer", "zoom"] as const) {
       const avg = Math.round(sel.reduce((s, i) => s + i.dmx[attr], 0) / sel.length);

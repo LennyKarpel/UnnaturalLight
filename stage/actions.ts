@@ -3,6 +3,7 @@
 import {
   STORAGE_KEY,
   MAX_FIXTURES,
+  MAX_POSITIONS,
   round,
   defaultTarget,
   aimZeroAt,
@@ -14,6 +15,7 @@ import {
   homeFixture,
   applyFixture,
   linkChannels,
+  describeSpot,
   type Fixture,
   type SavedStage,
 } from "./stage-model.ts";
@@ -27,16 +29,18 @@ import {
   rigOf,
   rigMembers,
   syncRig,
+  positionById,
   ui,
   type RigSettings,
 } from "./state.ts";
 import { view, syncScene, updateGhost, showAimPreview } from "./view3d.ts";
 import { drawPlan } from "./plan.ts";
-import { inspectorEl, renderList, renderInspector, syncInspector, renderHud } from "./sidebar.ts";
+import { inspectorEl, renderList, renderInspector, syncInspector, renderHud, showPositions } from "./sidebar.ts";
 import { placeType, placeFixture, placeUniverse } from "./dialogs.ts";
 import { consoleLink, pushToConsole, requestRegistrations } from "./link.ts";
+import { aimAndFollow, followingOf, stopFollowing, syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
-import type * as THREE from "three";
+import * as THREE from "three";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import { elById } from "../shared/query.ts";
 import { readStoredJson, storeJson } from "../shared/storage.ts";
@@ -90,6 +94,7 @@ export function stopFlash() {
 let lastSelectionKey = "";
 
 export function changed({ list = true, inspector = true, persist = true } = {}) {
+  syncFollowing();
   pushToConsole();
   publishStage();
   // A new selection: have the console scroll to the selected fixtures' faders
@@ -132,6 +137,7 @@ export function selectRigOf(id: string): boolean {
 const bannerEl = elById("banner");
 const PLACE_HINT = bannerEl.textContent;
 const RIG_PLACE_HINT = "Click where the rig's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
+const POSITION_PLACE_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to put a position there · Esc cancels";
 const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected fixtures at it · Esc cancels";
 let bannerTimer = 0;
 
@@ -143,15 +149,17 @@ export function setBanner(text: string | null, ms = 0) {
   if (ms) bannerTimer = window.setTimeout(() => setBanner(null), ms);
 }
 
-export function setPlacing(on: boolean, rigCfg: RigSettings | null = null) {
+export function setPlacing(on: boolean, rigCfg: RigSettings | null = null, position = false) {
   if (on && ui.aiming) setAiming(false);
   ui.placing = on;
   ui.placingRig = on ? rigCfg : null;
+  ui.placingPosition = on && position;
   view.classList.toggle("placing", on);
-  setBanner(on ? (rigCfg ? RIG_PLACE_HINT : PLACE_HINT) : null);
-  elById("addBtn").classList.toggle("active", on && !rigCfg);
+  setBanner(on ? (position ? POSITION_PLACE_HINT : rigCfg ? RIG_PLACE_HINT : PLACE_HINT) : null);
+  elById("addBtn").classList.toggle("active", on && !rigCfg && !position);
   elById("rigBtn").classList.toggle("active", on && !!rigCfg);
-  if (!on) updateGhost(null);
+  elById("positionBtn").classList.toggle("active", on && position);
+  if (!on) { updateGhost(null); showAimPreview(null); }
   drawPlan();
 }
 
@@ -172,6 +180,7 @@ export function setAiming(on: boolean) {
 /** Point every selected fixture's beam at `p` (world, meters). */
 export function applyAim(p: THREE.Vector3) {
   const sel = selectedFixtures();
+  stopFollowing(sel);
   const missed = sel.filter((fixture) => !aimAt(fixture, p));
   setAiming(false);
   changed();
@@ -179,6 +188,100 @@ export function applyAim(p: THREE.Vector3) {
     const names = missed.map((i) => i.name).join(", ");
     setBanner(`Out of pan/tilt range, aimed as close as possible: ${names}`, 4000);
   }
+}
+
+// ---------------------------------------------------------------------
+// Positions: named spots to aim at
+// ---------------------------------------------------------------------
+
+/**
+ * Say where a position would go in the banner: while placing one, or (`moving`:
+ * its name) while dragging one. null: the plain hint while placing, else
+ * no banner.
+ */
+export function showPositionSpot(text: string | null, moving?: string) {
+  if (moving != null) { setBanner(text ? `Moving ${moving}: ${text} · ⇧ = straight up / down` : null); return; }
+  if (!ui.placingPosition) return;
+  setBanner(text ? `New position: ${text} · click to put it here (then ⇧-drag it to raise it) · Esc cancels` : POSITION_PLACE_HINT);
+}
+
+/** Position being looked at (highlighted in the list, plan and 3D), or null. */
+export function setActivePosition(id: string | null) {
+  ui.activePosition = id;
+  syncScene();
+  drawPlan();
+  showPositions();
+}
+
+/** Whether the banner shows a hovered position (so leaving it clears only that). */
+let hoverBanner = false;
+
+/**
+ * Light up the position under the pointer (3D, plan or the list; null:
+ * none): bigger, with a halo and lines from the fixtures following it, and
+ * where it is in the banner.
+ */
+export function setHoverPosition(id: string | null) {
+  if (ui.hoverPosition === id) return;
+  ui.hoverPosition = id;
+  syncScene();
+  drawPlan();
+  const position = positionById(id);
+  if (position && !ui.placing && !ui.aiming) {
+    const n = state.fixtures.filter((f) => followingOf(f)?.id === position.id).length;
+    const follow = n ? ` · ${n} fixture${n > 1 ? "s" : ""} following` : "";
+    setBanner(`${position.name}: ${describeSpot(position)}${follow} · drag to move (⇧ up / down)`);
+    hoverBanner = true;
+  } else if (hoverBanner) {
+    hoverBanner = false;
+    if (!ui.placing && !ui.aiming) setBanner(null);
+  }
+}
+
+/** A name like "Position 3" that isn't taken yet. */
+function nextPositionName() {
+  const taken = new Set(state.positions.map((p) => p.name.toLowerCase()));
+  let n = state.positions.length + 1;
+  while (taken.has(`position ${n}`)) n++;
+  return `Position ${n}`;
+}
+
+/** Add a position (from a click while placing one, or the chat); returns it. */
+export function addPositionAt(x: number, y: number, z: number, name?: string) {
+  setPlacing(false);
+  if (state.positions.length >= MAX_POSITIONS) {
+    setBanner(`Position limit reached (${MAX_POSITIONS})`, 2500);
+    return null;
+  }
+  const position = { id: newId("position"), name: name?.trim() || nextPositionName(), x: round(x), y: round(Math.max(0, y)), z: round(z) };
+  state.positions.push(position);
+  ui.activePosition = position.id;
+  changed();
+  showPositions({ rename: position.id });
+  return position;
+}
+
+export function deletePosition(id: string) {
+  state.positions = state.positions.filter((p) => p.id !== id);
+  if (ui.activePosition === id) ui.activePosition = null;
+  if (ui.hoverPosition === id) setHoverPosition(null);
+  changed();
+  showPositions();
+}
+
+/** Aim the given fixtures (default: the selected ones) at a position, to follow it (follow.ts). Returns the ones out of reach. */
+export function aimAtPosition(id: string, fixtures: Fixture[] = selectedFixtures()) {
+  const position = positionById(id);
+  if (!position) return [];
+  if (!fixtures.length) {
+    setBanner("Select one or more fixtures first, then aim them at a position", 2500);
+    return [];
+  }
+  if (ui.aiming) setAiming(false);
+  const missed = aimAndFollow(fixtures, id);
+  changed();
+  if (missed.length) setBanner(`Out of pan/tilt range, aimed as close as possible: ${missed.map((i) => i.name).join(", ")}`, 4000);
+  return missed;
 }
 
 export function addFixtureAt(x: number, y: number, z: number) {
@@ -237,8 +340,18 @@ export function openContextMenu(id: string, x: number, y: number) {
   const delLabel = rig ? `Delete rig${delCount > 1 ? ` (${delCount})` : ""}` : `Delete${count}`;
   const item = (cmd: Action | "flash", label: string, key = "", cls = "") =>
     `<button type="button" data-cmd="${cmd}" class="menu-item ${cls}"><span>${label}</span><kbd>${key}</kbd></button>`;
+  // Named positions in a sub-menu (opens on hover, focus or a click on it).
+  const positions = state.positions.length
+    ? `<div class="submenu-wrap">
+        <button type="button" class="menu-item" data-submenu aria-haspopup="menu"><span>Aim at position</span><kbd>▸</kbd></button>
+        <div class="menu submenu thin-scroll" role="menu">${state.positions.map((p) => `<button type="button" data-position="${p.id}" class="menu-item"><span></span></button>`).join("")}</div>
+      </div>`
+    : "";
+  const following = selectedFixtures().some((f) => followingOf(f));
   ctxMenu.innerHTML = `<div class="menu-title"></div>
     ${item("aimSpot", "Aim at spot…", "A")}
+    ${positions}
+    ${following ? item("unfollow", "Stop following") : ""}
     ${item("home", "Home", "H")}
     ${rig ? item("selectRig", "Select whole rig") : `${item("zero", "Set zero here", "Z")}${item("aim", "Aim zero at stage")}`}
     ${item("flash", "Flash (hold)", "F")}
@@ -246,22 +359,44 @@ export function openContextMenu(id: string, x: number, y: number) {
     ${item("dup", `Duplicate${count}`)}
     ${item("del", delLabel, "⌫", "danger")}`;
   ctxMenu.querySelectorAll<HTMLElement>("kbd:empty").forEach((k) => k.remove());
+  ctxMenu.querySelectorAll<HTMLElement>("[data-position]").forEach((b) => {
+    const span = b.querySelector("span");
+    if (span) span.textContent = positionById(b.dataset.position)?.name ?? "";
+    // Pointing at one lights it up on the stage.
+    b.addEventListener("pointerenter", () => setHoverPosition(b.dataset.position ?? null));
+    b.addEventListener("focus", () => setHoverPosition(b.dataset.position ?? null));
+    b.addEventListener("pointerleave", () => setHoverPosition(null));
+  });
   const titleEl = ctxMenu.querySelector(".menu-title");
   if (titleEl) titleEl.textContent = title;
   ctxMenu.hidden = false;
   const r = ctxMenu.getBoundingClientRect();
   ctxMenu.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`;
   ctxMenu.style.top = `${Math.min(y, window.innerHeight - r.height - 8)}px`;
+  // The sub-menu opens to the left when there's no room on the right.
+  const placed = ctxMenu.getBoundingClientRect();
+  ctxMenu.querySelector(".submenu-wrap")?.classList.toggle("left", placed.right + 200 > window.innerWidth);
   ctxMenu.querySelector("button")?.focus();
 }
 
 export function closeContextMenu() {
+  if (ctxMenu.hidden) return;
   ctxMenu.hidden = true;
+  setHoverPosition(null);
 }
 
 const menuCmd = (e: PointerEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>("[data-cmd]")?.dataset.cmd : null);
 
 ctxMenu.addEventListener("click", (e) => {
+  const positionId = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-position]")?.dataset.position : null;
+  if (positionId) { closeContextMenu(); aimAtPosition(positionId); return; }
+  const sub = e.target instanceof Element ? e.target.closest(".submenu-wrap") : null;
+  if (sub && e.target instanceof Element && e.target.closest("[data-submenu]")) {
+    // Click (or Enter) on "Aim at position": open it and go to its first position.
+    sub.classList.add("open");
+    sub.querySelector<HTMLElement>("[data-position]")?.focus();
+    return;
+  }
   const cmd = menuCmd(e);
   if (!isOneOf(ACTIONS, cmd)) return; // flash works while held (below)
   closeContextMenu();
@@ -291,7 +426,7 @@ function duplicateSelected() {
   // Copies are free fixtures, even when copied from a rig.
   const copies = src.map((fixture) => ({
     ...structuredClone(fixture), id: newId("fixture"), name: `${fixture.name} copy`, x: round(fixture.x + 0.5),
-    rigId: null, rigIndex: 0,
+    rigId: null, rigIndex: 0, follow: null,
     // Copies get their own console fixture if the original came from the stage.
     link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.owned ? fixture.link.type : fixture.link.register, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
   }));
@@ -391,12 +526,13 @@ export function undoDelete() {
 }
 
 /** What the inspector's buttons and the right-click menu do (their `data-act` / `data-cmd`). */
-export const ACTIONS = ["home", "zero", "aimSpot", "aim", "selectRig", "dup", "del"] as const;
+export const ACTIONS = ["home", "zero", "aimSpot", "aim", "selectRig", "dup", "del", "unfollow"] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export function act(name: Action) {
   const sel = selectedFixtures();
-  if (name === "home") sel.forEach(homeFixture);
+  if (name === "home") { stopFollowing(sel); sel.forEach(homeFixture); }
+  if (name === "unfollow") stopFollowing(sel);
   // A rig member's zero is set by its rig, so these skip rig members.
   const free = sel.filter((i) => !i.rigId);
   if (name === "zero") free.forEach(setZeroHere);

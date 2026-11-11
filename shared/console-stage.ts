@@ -38,6 +38,22 @@ export type RegisterResult =
 export type StageLayout = { consoleId: string | null; layout: (ChannelRole | null)[] };
 
 /**
+ * Aim a console fixture at a named stage position (as a position preset):
+ * the stage's values for its pan / tilt channels, written into the cue(s) on
+ * the output, which remember the aim. position null: they forget it.
+ */
+export type AimRequest = { consoleId: string; position: string | null; values: ChannelValue[] };
+
+/**
+ * A position (or the fixture) moved: every cue that aims `consoleId` at
+ * `position` and still has `from` on those channels gets `to`.
+ */
+export type Reaim = { consoleId: string; position: string; from: ChannelValue[]; to: ChannelValue[] };
+
+/** A console fixture aimed at a named stage position. */
+export type AimPair = { fixture: string; position: string };
+
+/**
  * What the stage may call on the console:
  *   hello       the stage started (the console sends its levels now)
  *   set         set channels to values (moves the faders patched to them)
@@ -47,6 +63,8 @@ export type StageLayout = { consoleId: string | null; layout: (ChannelRole | nul
  *   select      console fixtures selected on the stage (the console highlights them)
  *   layouts     the stage's channel layouts (the console takes color roles its fixtures lack)
  *   hold        the stage's B / F held (on) or released on a dimmer channel
+ *   aim         aim fixtures at positions in the cue(s) on the output
+ *   reaim       positions or fixtures moved: update the cues that aim at them
  */
 export type ConsoleEnd = {
   hello: () => void;
@@ -56,6 +74,8 @@ export type ConsoleEnd = {
   select: (consoleIds: string[]) => void;
   layouts: (list: StageLayout[]) => void;
   hold: (kind: "blackout" | "flash", channel: number, on: boolean) => void;
+  aim: (list: AimRequest[]) => void;
+  reaim: (list: Reaim[]) => void;
 };
 
 /** What the console sends the stage on every output change. */
@@ -69,6 +89,10 @@ export type StageLevels = {
   fixtures: (Fixture & { outline: string | null })[];
   groups: FixtureGroup[];
   universes: number;
+  /** Every aim at a named position, in any cue of the show. */
+  aims: AimPair[];
+  /** The aims in the cue on the output (during a crossfade: the one past halfway). */
+  liveAims: AimPair[];
 };
 
 /**

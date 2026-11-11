@@ -4,6 +4,7 @@
 //   console → stage   output levels (0–255 per DMX channel), which fader(s)
 //                     drive each channel, and the console's fixtures
 //   stage → console   "set channel N to V" when a linked value is changed here,
+//                     aims at named positions (follow.ts),
 //                     and the stage's channel layouts (the console takes
 //                     color roles its fixtures lack)
 //
@@ -12,7 +13,7 @@
 // a console fader; and a value just sent is held briefly against the
 // console's older broadcasts so dragging a slider doesn't jitter.
 
-import { joinLink, type RegisterRequest, type RegisterResult, type StageLayout, type StageLevels } from "../shared/console-stage.ts";
+import { joinLink, type AimPair, type AimRequest, type Reaim, type RegisterRequest, type RegisterResult, type StageLayout, type StageLevels } from "../shared/console-stage.ts";
 import type { ChannelValue } from "../shared/engine.ts";
 
 /** How long a value sent from the stage wins over the console's updates (e.g. an older one from the show server). */
@@ -40,6 +41,9 @@ export function createConsoleLink({
   let fixtures: ConsoleFixture[] = [];
   /** The console set's universe count (channel 513 = universe 2/1). */
   let universes = 1;
+  /** Aims at named positions: in any cue / in the cue on the output. */
+  let aims: AimPair[] = [];
+  let liveAims: AimPair[] = [];
   /** channel → the value the console and stage agree on (heard or sent) */
   const synced = new Map<number, number>();
   /** channel → { value, until }: just sent from the stage */
@@ -54,6 +58,8 @@ export function createConsoleLink({
       faders = new Map(data.faders);
       fixtures = data.fixtures;
       universes = data.universes;
+      aims = data.aims;
+      liveAims = data.liveAims;
       onLevels();
     },
   });
@@ -122,6 +128,18 @@ export function createConsoleLink({
     /** Hold (on) or release the console's blackout / flash on the dimmer fader(s) patched to `channel`. */
     hold(kind: "blackout" | "flash", channel: number, on: boolean) {
       toConsole((c) => c.hold(kind, channel, on));
+    },
+    /** Every console fixture → position aim in the show's cues. */
+    aims: () => aims,
+    /** The aims in the cue on the output. */
+    liveAims: () => liveAims,
+    /** Aim console fixtures at positions in the cue(s) on the output (position null: stop). */
+    aim(list: AimRequest[]) {
+      toConsole((c) => c.aim(list));
+    },
+    /** Positions or fixtures moved: update the cues that aim at them. */
+    reaim(list: Reaim[]) {
+      toConsole((c) => c.reaim(list));
     },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
     setChannel(channel: number, value: number) {

@@ -1,6 +1,7 @@
 /**
  * The chat's tools: what the model may look at and do. Each runs here in
- * the page and calls the console (window.consoleChat, console/app.ts), the
+ * the page and calls the console (window.consoleChat, console/app.ts) or the
+ * stage (window.stageChat, stage/chat-hooks.ts, tools in ./stage-tools.ts), the
  * same as its own controls, so changes reach the show server and the other
  * windows the usual way.
  *
@@ -13,6 +14,10 @@ import type { ChatTool } from "../../shared/chat-protocol.ts";
 import type { ConsoleChat } from "../../console/app.ts";
 import { DMX_ATTRS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../../shared/attributes.ts";
 import { COLOR_ROLES, isColorRole, levelsFromColor } from "../../shared/color.ts";
+import { STAGE_TOOLS } from "./stage-tools.ts";
+import { findFixtures, findSong } from "./find.ts";
+
+export { findFixtures, findSong };
 
 export type Args = Record<string, unknown>;
 
@@ -28,6 +33,9 @@ function api(): ConsoleChat {
   return c;
 }
 
+/** A named stage position's name from its id (the stage holds them). */
+const positionName = (id: string) => window.stageChat?.stage().positions.find((p) => p.id === id)?.name ?? "(deleted)";
+
 const percent = (v: unknown, what: string): number => {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error(`${what} must be 0–100`);
@@ -40,23 +48,6 @@ const number = (v: unknown, max: number, what: string): number => {
   if (!Number.isInteger(n) || n < 1 || n > max) throw new Error(`${what} must be 1–${max}`);
   return n;
 };
-
-/** A song by its number (1 = first in the show) or name (exact, else the one whose name contains it). */
-export function findSong(songs: { id: string; name: string; cues: number }[], query: unknown) {
-  const q = String(query ?? "").trim();
-  if (/^\d+$/.test(q)) {
-    const n = Number(q);
-    if (n >= 1 && n <= songs.length) return songs[n - 1];
-  }
-  const lower = q.toLowerCase();
-  if (!lower) throw new Error("Which song? Give its number or name");
-  const exact = songs.filter((s) => s.name.toLowerCase() === lower);
-  if (exact.length === 1) return exact[0];
-  const partial = songs.filter((s) => s.name.toLowerCase().includes(lower));
-  if (partial.length === 1) return partial[0];
-  const names = (exact.length > 1 ? exact : partial).map((s) => `"${s.name}"`);
-  throw new Error(names.length > 1 ? `"${q}" matches ${names.join(", ")}: which one?` : `No song "${q}"`);
-}
 
 /** Where playback is after an action: what the model is told. */
 const playing = () => api().show().playing;
@@ -209,7 +200,7 @@ const CUE_TOOLS: ToolDef[] = [
   {
     name: "get_cue",
     description:
-      "A cue's name, fade time (seconds) and the level (0–255) of every fader that's patched or not at 0, with the fader's number and name. Default: the LIVE cue.",
+      "A cue's name, fade time (seconds), the level (0–255) of every fader that's patched or not at 0, with the fader's number and name, and which fixtures it aims at named stage positions. Default: the LIVE cue.",
     schema: { type: "object", properties: { song: SONG, cue: CUE }, additionalProperties: false },
     describe: (a) => `Looked at ${a.cue ? `cue ${a.cue}` : "the LIVE cue"}${inSong(a)}`,
     run: (a) => {
@@ -223,13 +214,14 @@ const CUE_TOOLS: ToolDef[] = [
         name: cue.name,
         fadeSeconds: cue.fadeSeconds,
         levels: faders.filter((f) => f.patched || cue.levels[f.fader - 1] > 0).map((f) => ({ fader: f.fader, name: f.name, level: cue.levels[f.fader - 1] })),
+        ...(cue.aims.length ? { aimedAtPositions: cue.aims.map((a) => ({ fixture: a.fixture, position: positionName(a.position) })) } : {}),
       };
     },
   },
   {
     name: "set_cue_levels",
     description:
-      "Set fader levels (0–255; 255 = full) in a cue. Default: the LIVE cue, so the lights change at once. Use list_fixtures or get_cue to find fader numbers; set_fixture is easier for a fixture's dimmer, color or position.",
+      "Set fader levels (0–255; 255 = full) in a cue. Default: the LIVE cue, so the lights change at once. Use list_fixtures or get_cue to find fader numbers; set_fixture is easier for a fixture's dimmer, color or pan / tilt.",
     schema: {
       type: "object",
       properties: {
@@ -349,29 +341,6 @@ const CUE_TOOLS: ToolDef[] = [
 // --- fixtures (round 2) ---------------------------------------------------------
 
 export type FixtureInfo = ReturnType<ConsoleChat["fixtures"]>[number];
-
-/**
- * Fixtures by name: each query is a fixture's name, a group's name or "all"
- * (exact, ignoring case), else the one fixture whose name contains it.
- */
-export function findFixtures(all: FixtureInfo[], queries: unknown): FixtureInfo[] {
-  const list = (Array.isArray(queries) ? queries : [queries]).map((q) => String(q ?? "").trim()).filter(Boolean);
-  if (!list.length) throw new Error("Which fixtures? Give names, group names or \"all\"");
-  const found = new Set<FixtureInfo>();
-  for (const q of list) {
-    const lower = q.toLowerCase();
-    let hits = lower === "all" ? all : all.filter((f) => f.name.toLowerCase() === lower);
-    if (!hits.length) hits = all.filter((f) => f.group?.toLowerCase() === lower);
-    if (!hits.length) {
-      const partial = all.filter((f) => f.name.toLowerCase().includes(lower));
-      if (partial.length > 1) throw new Error(`"${q}" matches ${partial.map((f) => `"${f.name}"`).join(", ")}: which one(s)?`);
-      hits = partial;
-    }
-    if (!hits.length) throw new Error(`No fixture or group "${q}"`);
-    for (const f of hits) found.add(f);
-  }
-  return [...found];
-}
 
 /** What a fader does from its name ("Ring 1 Dim", "Par R"), for fixtures made by hand without channel roles. */
 export function roleFromName(name: string): DmxAttr | null {
@@ -510,5 +479,13 @@ const FIXTURE_TOOLS: ToolDef[] = [
   },
 ];
 
-export const TOOLS: ToolDef[] = [...PLAYBACK_TOOLS, ...CUE_TOOLS, ...FIXTURE_TOOLS];
+/**
+ * Every tool. Playback is always in the model's view (it's what a show
+ * needs, quickly); the rest are deferred: found by the model's tool search
+ * when a request needs them (see ChatTool.deferred).
+ */
+export const TOOLS: ToolDef[] = [
+  ...PLAYBACK_TOOLS,
+  ...[...CUE_TOOLS, ...FIXTURE_TOOLS, ...STAGE_TOOLS].map((t) => ({ ...t, deferred: true })),
+];
 export const toolByName = new Map(TOOLS.map((t) => [t.name, t]));

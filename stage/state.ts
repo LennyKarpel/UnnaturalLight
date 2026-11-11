@@ -21,6 +21,7 @@ import {
   type Rig,
   type RigType,
   type Transparent,
+  type StagePosition,
 } from "./stage-model.ts";
 import type { FixtureProfile } from "./fixture-library.ts";
 import type { createShowLink } from "./show-link.ts";
@@ -43,12 +44,15 @@ export const state: {
   /** Which box sides are transparent (floor is always solid). */
   transparent: Transparent;
   rigs: Rig[];
+  /** Named spots to aim at. */
+  positions: StagePosition[];
 } = {
   box: { w: 12, d: 8, h: 6 },
   fixtures: [],
   selected: [],
   transparent: { ...DEFAULT_TRANSPARENT },
   rigs: [],
+  positions: [],
 };
 
 /** A rig's settings from the Place rig dialog. */
@@ -66,28 +70,38 @@ export type RigSettings = {
 /** What the stage is in the middle of, shared by its modules. */
 export const ui: {
   placing: boolean;
+  /** Placing a position (with `placing`): a click puts a position on the surface it lands on. */
+  placingPosition: boolean;
   /** While placing a rig: its settings from the Place rig dialog (else null). */
   placingRig: RigSettings | null;
   aiming: boolean;
+  /** The position being looked at (list, plan, 3D), or null. */
+  activePosition: string | null;
+  /** The position under the pointer (3D, plan or its row in the list), or null: it's lit up. */
+  hoverPosition: string | null;
   /** Set up at boot (stage.ts): keeps the stage with the show on the show server. */
   showLink: ReturnType<typeof createShowLink> | null;
 } = {
   placing: false,
+  placingPosition: false,
   placingRig: null,
   aiming: false,
+  activePosition: null,
+  hoverPosition: null,
   showLink: null,
 };
 
 export function loadData(data: unknown) {
-  const { box, fixtures, transparent, rigs } = parseStage(data);
+  const { box, fixtures, transparent, rigs, positions } = parseStage(data);
   state.box = box;
+  state.positions = positions;
   state.transparent = transparent;
   state.rigs = rigs;
   state.fixtures = fixtures;
   state.selected = fixtures.length ? [fixtures[0].id] : [];
 }
 
-export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs);
+export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs, state.positions);
 
 let saveTimer = 0;
 let shareQueued = false;
@@ -120,6 +134,8 @@ export function restore() {
   state.fixtures[2].name = "FOH";
   state.selected = [state.fixtures[0].id];
 }
+
+export const positionById = (id: string | null | undefined): StagePosition | undefined => state.positions.find((p) => p.id === id);
 
 export const byId = (id: string | null | undefined): Fixture | undefined => state.fixtures.find((i) => i.id === id);
 export const selectedFixtures = (): Fixture[] => state.selected.map(byId).filter((f) => f != null);
@@ -159,7 +175,7 @@ function makeRigMember(rig: Rig, k: number, like: MemberLook): Fixture {
   const fixture = createFixture(0, 0, 0, state.fixtures.length, state.box);
   Object.assign(fixture, {
     name: `${rig.name} · ${k + 1}`,
-    rigId: rig.id, rigIndex: k,
+    rigId: rig.id, rigIndex: k, follow: null,
     panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax,
   });
   for (const a of ["dimmer", "zoom", ...COLOR_ROLES] as const) fixture.dmx[a] = like.dmx[a] ?? 0;

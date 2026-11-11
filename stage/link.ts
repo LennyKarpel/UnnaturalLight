@@ -28,6 +28,7 @@ import { onFrameStart } from "./frame.ts";
 import { drawPlan } from "./plan.ts";
 import { inspectorEl, renderList, renderInspector, syncInspector, renderHud } from "./sidebar.ts";
 import { changed, setBanner } from "./actions.ts";
+import { syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
 import { readStored, store } from "../shared/storage.ts";
 
@@ -105,6 +106,7 @@ function applyConsoleLevels() {
       looked = true;
     }
   }
+  syncFollowing(); // the cues' aims may be new
   requestRegistrations();
   if (moved) { syncScene(); drawPlan(); renderList(); save({ share: false }); publishStage(); }
   else if (looked) { syncScene(); drawPlan(); }

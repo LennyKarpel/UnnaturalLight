@@ -18,7 +18,21 @@ export type Cue = {
   name: string;
   levels: number[];
   fadeTime: number;
+  /** Fixtures this cue aims at named stage positions (see aims.ts). */
+  aims: CueAim[];
 };
+/** In a cue: console fixture `fixture`'s pan / tilt aim at stage position `position`. */
+export type CueAim = { fixture: string; position: string };
+
+function normalizeAims(value: unknown): CueAim[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((a) => {
+    if (!isRecord(a) || typeof a.fixture !== "string" || typeof a.position !== "string" || seen.has(a.fixture)) return [];
+    seen.add(a.fixture);
+    return [{ fixture: a.fixture, position: a.position }];
+  });
+}
 export type Song = {
   id: string;
   name: string;
@@ -86,6 +100,7 @@ function normalizeCue(
     name: normalizeCueName(obj.name),
     levels,
     fadeTime: normalizeCueFadeTime(obj.fadeTime, defaultFadeTime),
+    aims: normalizeAims(obj.aims),
   };
 }
 
@@ -107,6 +122,7 @@ function normalizeCues(
       name: raw.name,
       levels: raw.levels,
       fadeTime: raw.fadeTime,
+      aims: raw.aims,
     });
   }
   while (out.length < MIN_CUES) {
@@ -115,6 +131,7 @@ function normalizeCues(
       name: "",
       levels: blankLevels(),
       fadeTime: normalizeCueFadeTime(undefined, defaultFadeTime),
+      aims: [],
     });
   }
   return out;
@@ -190,12 +207,13 @@ export function createSong(opts: {
   };
 }
 
-export function createCue(opts: { name?: string; levels?: number[]; fadeTime?: number } = {}): Cue {
+export function createCue(opts: { name?: string; levels?: number[]; fadeTime?: number; aims?: CueAim[] } = {}): Cue {
   return {
     id: newCueId(),
     name: normalizeCueName(opts.name),
     levels: Array.from({ length: FADER_COUNT }, (_, i) => clampByte(opts.levels?.[i] ?? 0)),
     fadeTime: normalizeCueFadeTime(opts.fadeTime),
+    aims: (opts.aims ?? []).map((a) => ({ ...a })),
   };
 }
 

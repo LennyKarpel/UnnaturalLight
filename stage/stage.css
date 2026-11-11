@@ -4,6 +4,8 @@
 
 :where(#stagePane) {
   & {
+    /* Named positions (list, plan, 3D): apart from selection cyan and audience amber. */
+    --position: #c58cff;
     background: var(--bg);
     color: var(--ink);
     font-family: var(--font);
@@ -168,6 +170,7 @@
     margin: 0 -0.9rem; padding: 0.6rem 0.9rem 0.75rem;
   }
   .list { display: flex; flex-direction: column; gap: 2px; }
+  .list[hidden] { display: none; }
   .list .item {
     display: grid; grid-template-columns: 12px 1fr 70px 34px; align-items: center; gap: 8px;
     padding: 4px 6px; border-radius: 4px; cursor: pointer; border: 1px solid transparent;
@@ -178,6 +181,12 @@
   .swatch { width: 10px; height: 10px; border-radius: 50%; }
   .bar { height: 4px; background: var(--track); border-radius: 2px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--accent); }
+  /* Positions tab: a row is the name, Aim and delete, with x / height / z under them. */
+  .list-tabs button { letter-spacing: 0.06em; }
+  .list .position-row { grid-template-columns: 12px 1fr auto auto; row-gap: 4px; cursor: default; }
+  .position-row .position-xyz { grid-column: 2 / -1; }
+  .position-row button { padding: 2px 8px; font-size: var(--text-xs); }
+  .position-mark { color: var(--position); font-size: 10px; text-align: center; cursor: pointer; }
 
   /* Collapsed: only the heading shows (ids so this beats #plan's display). */
   :is(#planSection, #fixtures, #inspector).is-collapsed { padding-bottom: 0; }
@@ -287,6 +296,16 @@
   /* Right-click menu: a .menu (../shared/theme.css). */
   .ctx-menu { position: fixed; z-index: 20; min-width: 160px; }
   .ctx-menu .menu-title { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  /* "Aim at position ▸": the named positions beside it. */
+  .ctx-menu .submenu-wrap { position: relative; }
+  .ctx-menu .submenu { display: none; position: absolute; top: -5px; left: calc(100% + 2px); min-width: 140px; max-width: 240px; max-height: 60vh; overflow-y: auto; }
+  .ctx-menu .submenu-wrap.left .submenu { left: auto; right: calc(100% + 2px); }
+  .ctx-menu .submenu-wrap:hover .submenu,
+  .ctx-menu .submenu-wrap:focus-within .submenu,
+  .ctx-menu .submenu-wrap.open .submenu { display: block; }
+  .ctx-menu .submenu-wrap:hover > [data-submenu],
+  .ctx-menu .submenu-wrap:focus-within > [data-submenu] { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .ctx-menu .submenu .menu-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hud-swatch { display: inline-block; margin-right: 6px; vertical-align: -1px; }
   button.flash { border-color: #e8e4dc66; font-weight: 600; touch-action: none; }
   button.flash:active { background: #fff; color: #111; border-color: #fff; }
@@ -300,6 +319,12 @@
   .slider { display: grid; grid-template-columns: 1fr 64px; gap: 6px; align-items: center; }
   .subhead { grid-column: 1 / -1; margin-top: 6px; color: var(--accent); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
   .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  /* "Following ‹position›" in the inspector, in the positions' violet. */
+  .follow-note { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 4px 4px 4px 8px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--position) 50%, transparent); color: var(--position); font-size: var(--text-sm); }
+  .follow-note[hidden] { display: none; }
+  .follow-note span { flex: none; white-space: nowrap; }
+  .follow-note select { flex: 1; min-width: 0; }
+  .follow-note [hidden] { display: none; }
   .readout { grid-column: 1 / -1; font-family: var(--mono); color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
   .readout b { color: var(--ink); font-weight: 500; }
 

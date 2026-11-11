@@ -429,7 +429,7 @@ function duplicateCueAt(index: number) {
   if (song.cues.length >= MAX_CUES) return false;
   const cue = song.cues[index];
   if (!cue) return false;
-  song.cues.splice(index + 1, 0, createCue({ name: state.cueNames[index], levels: cue.levels, fadeTime: cue.fadeTime }));
+  song.cues.splice(index + 1, 0, createCue({ name: state.cueNames[index], levels: cue.levels, fadeTime: cue.fadeTime, aims: cue.aims }));
   bindActiveSong();
   state.selectedCue = index + 1;
   state.fromCue = state.selectedCue;

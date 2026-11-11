@@ -9,8 +9,13 @@
  * wants made.
  */
 
-/** A tool the model may call: its JSON Schema says what `args` it takes. */
-export type ChatTool = { name: string; description: string; schema: Record<string, unknown> };
+/**
+ * A tool the model may call: its JSON Schema says what `args` it takes.
+ * `deferred`: not needed often, so a provider that can may keep it out of the
+ * model's view until the model searches for it (Claude's tool search);
+ * others just send it with the rest.
+ */
+export type ChatTool = { name: string; description: string; schema: Record<string, unknown>; deferred?: boolean };
 
 export type ChatToolCall = { id: string; name: string; args: Record<string, unknown> };
 

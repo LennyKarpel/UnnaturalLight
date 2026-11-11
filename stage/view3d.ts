@@ -17,11 +17,15 @@ import {
   rigOutline,
   type Fixture,
   type RigShape,
+  type StagePosition,
+  type Xyz,
+  describeSpot,
 } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
-import { state, byId, selectedFixtures, moveFixture, addRigAt, ui } from "./state.ts";
+import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, ui } from "./state.ts";
 import { runFrameStart } from "./frame.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, openContextMenu } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, showPositionSpot } from "./actions.ts";
+import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
 import { elById } from "../shared/query.ts";
@@ -263,6 +267,115 @@ scene.add(aimMarker, aimLines);
 
 const visuals = new Map<string, ReturnType<typeof makeVisual>>();
 
+// Named positions: a small diamond, a dashed stem down to the floor, and the
+// name on a label that always faces the camera.
+const POSITION_COLOR = 0xc58cff; // the same as --position in stage.css
+const positionGeom = new THREE.OctahedronGeometry(0.12);
+const positionVisuals = new Map<string, { group: THREE.Group; mark: THREE.Mesh; halo: THREE.Mesh; stem: THREE.Line; label: THREE.Sprite; pick: THREE.Mesh; text: string }>();
+/** Hovered: a soft glow around the diamond. */
+const positionHaloGeom = new THREE.SphereGeometry(0.32, 20, 12);
+/** Hovered: dashed lines from the fixtures following the position to it. */
+const followLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineDashedMaterial({ color: POSITION_COLOR, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.85, depthTest: false }),
+);
+followLines.renderOrder = 9;
+scene.add(followLines);
+/** Invisible: a bigger target than a position's diamond, for click / drag. */
+const positionPickGeom = new THREE.SphereGeometry(0.25, 12, 8);
+
+/** A camera-facing text label (canvas texture), about `height` meters tall. */
+function makeLabel(text: string, height = 0.32, color = "#e8e4dc") {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const font = "600 44px system-ui, sans-serif";
+  if (ctx) ctx.font = font;
+  const w = Math.ceil((ctx?.measureText(text).width ?? 100) + 24);
+  canvas.width = w;
+  canvas.height = 64;
+  if (ctx) {
+    ctx.font = font;
+    ctx.fillStyle = "rgba(12, 14, 17, 0.75)";
+    ctx.beginPath(); ctx.roundRect(0, 0, w, 64, 12); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 12, 34);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.scale.set((height * w) / 64, height, 1);
+  sprite.center.set(0, 0);
+  sprite.renderOrder = 11;
+  return sprite;
+}
+
+function syncPositions() {
+  const ids = new Set(state.positions.map((p) => p.id));
+  for (const [id, v] of positionVisuals) {
+    if (ids.has(id)) continue;
+    scene.remove(v.group);
+    v.label.material.map?.dispose();
+    v.label.material.dispose();
+    v.stem.geometry.dispose();
+    positionVisuals.delete(id);
+  }
+  for (const position of state.positions) syncPosition(position);
+  // Lines from the hovered position's followers to it.
+  const hovered = positionById(ui.hoverPosition);
+  const ends = hovered ? state.fixtures.filter((f) => followingOf(f)?.id === hovered.id).flatMap((f) => [f.x, f.y, f.z, hovered.x, hovered.y, hovered.z]) : [];
+  followLines.geometry.setAttribute("position", new THREE.Float32BufferAttribute(ends, 3));
+  followLines.geometry.computeBoundingSphere();
+  followLines.computeLineDistances();
+  followLines.visible = ends.length > 0;
+}
+
+function syncPosition(position: StagePosition) {
+  let v = positionVisuals.get(position.id);
+  if (!v) {
+    const group = new THREE.Group();
+    const mark = new THREE.Mesh(positionGeom, new THREE.MeshBasicMaterial({ color: POSITION_COLOR, depthTest: false }));
+    mark.renderOrder = 10;
+    const stem = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineDashedMaterial({ color: POSITION_COLOR, dashSize: 0.1, gapSize: 0.08, transparent: true, opacity: 0.6 }),
+    );
+    const label = makeLabel(position.name);
+    const halo = new THREE.Mesh(positionHaloGeom, new THREE.MeshBasicMaterial({ color: POSITION_COLOR, transparent: true, opacity: 0.25, depthTest: false, depthWrite: false }));
+    halo.renderOrder = 9;
+    const pick = new THREE.Mesh(positionPickGeom, new THREE.MeshBasicMaterial({ visible: false }));
+    pick.userData.positionId = position.id;
+    group.add(mark, halo, stem, label, pick);
+    scene.add(group);
+    v = { group, mark, halo, stem, label, pick, text: position.name };
+    positionVisuals.set(position.id, v);
+  }
+  if (v.text !== position.name) {
+    v.group.remove(v.label);
+    v.label.material.map?.dispose();
+    v.label.material.dispose();
+    v.label = makeLabel(position.name);
+    v.text = position.name;
+    v.group.add(v.label);
+  }
+  v.group.position.set(position.x, position.y, position.z);
+  const on = ui.activePosition === position.id;
+  const hover = ui.hoverPosition === position.id;
+  v.mark.scale.setScalar(hover ? 2 : on ? 1.6 : 1);
+  (v.mark.material as THREE.MeshBasicMaterial).color.set(hover ? 0xf1e3ff : POSITION_COLOR);
+  v.halo.visible = hover;
+  const labelScale = hover ? 1.4 : 1;
+  if (v.label.userData.base == null) v.label.userData.base = v.label.scale.x;
+  v.label.scale.set(v.label.userData.base * labelScale, 0.32 * labelScale, 1);
+  v.label.position.set(hover ? 0.3 : 0.15, hover ? 0.25 : 0.15, 0);
+  const pts = v.stem.geometry.attributes.position;
+  pts.setXYZ(1, 0, -position.y, 0);
+  pts.needsUpdate = true;
+  v.stem.geometry.computeBoundingSphere();
+  v.stem.computeLineDistances();
+  v.stem.visible = position.y > 0.05;
+}
+
 function makeVisual(fixture: Fixture) {
   const group = new THREE.Group();
   const aim = new THREE.Group();
@@ -306,8 +419,68 @@ function makeVisual(fixture: Fixture) {
   return v;
 }
 
+// Placing a position: a preview of it (a violet diamond) on the spot under the
+// pointer, three dotted lines through it across the box (x red, height
+// green, z blue), and a label saying where it is.
+const positionPreview = new THREE.Group();
+const previewMark = new THREE.Mesh(positionGeom, new THREE.MeshBasicMaterial({ color: POSITION_COLOR, depthTest: false, transparent: true, opacity: 0.9 }));
+previewMark.scale.setScalar(1.4);
+previewMark.renderOrder = 12;
+const axisLine = (color: number) => {
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+    new THREE.LineDashedMaterial({ color, dashSize: 0.2, gapSize: 0.1, depthTest: false }),
+  );
+  line.renderOrder = 11;
+  return line;
+};
+const previewAxes = { x: axisLine(0xff7a7a), y: axisLine(0x7ee08a), z: axisLine(0x7aaaff) };
+let previewLabel: THREE.Sprite | null = null;
+let previewText = "";
+positionPreview.add(previewMark, previewAxes.x, previewAxes.y, previewAxes.z);
+positionPreview.visible = false;
+scene.add(positionPreview);
+
+/**
+ * Show where a new position would go (null hides it); `surface` names what it
+ * sits on. `moving`: the name of a position being dragged (its own diamond
+ * shows, so the preview's doesn't).
+ */
+function showPositionPreview(p: THREE.Vector3 | null, surface: string | null, moving?: string) {
+  requestRender();
+  positionPreview.visible = !!p;
+  previewMark.visible = moving == null;
+  if (!p) { showPositionSpot(null, moving); return; }
+  previewMark.position.copy(p);
+  // Each axis spans the box, and reaches the position if it's outside.
+  const { w, d, h } = state.box;
+  const span = (lo: number, hi: number, v: number) => [Math.min(lo, v), Math.max(hi, v)];
+  const [x0, x1] = span(-w / 2, w / 2, p.x), [y0, y1] = span(0, h, p.y), [z0, z1] = span(-d / 2, d / 2, p.z);
+  const set = (line: THREE.Line, a: THREE.Vector3, b: THREE.Vector3) => {
+    const pts = line.geometry.attributes.position;
+    pts.setXYZ(0, a.x, a.y, a.z);
+    pts.setXYZ(1, b.x, b.y, b.z);
+    pts.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+    line.computeLineDistances();
+  };
+  set(previewAxes.x, new THREE.Vector3(x0, p.y, p.z), new THREE.Vector3(x1, p.y, p.z));
+  set(previewAxes.y, new THREE.Vector3(p.x, y0, p.z), new THREE.Vector3(p.x, y1, p.z));
+  set(previewAxes.z, new THREE.Vector3(p.x, p.y, z0), new THREE.Vector3(p.x, p.y, z1));
+  const text = describeSpot(p, surface);
+  if (text !== previewText) {
+    if (previewLabel) { positionPreview.remove(previewLabel); previewLabel.material.map?.dispose(); previewLabel.material.dispose(); }
+    previewLabel = makeLabel(text, 0.3, "#c58cff");
+    previewText = text;
+    positionPreview.add(previewLabel);
+  }
+  previewLabel?.position.set(p.x + 0.2, p.y + 0.2, p.z);
+  showPositionSpot(text, moving);
+}
+
 export function syncScene() {
   requestRender();
+  syncPositions();
   const ids = new Set(state.fixtures.map((i) => i.id));
   for (const [id, v] of visuals) {
     if (!ids.has(id)) {
@@ -436,14 +609,28 @@ function rayFromEvent(e: MouseEvent) {
   return raycaster.ray;
 }
 
+/** The named position under the pointer, or null. */
+function pickPosition(e: MouseEvent): string | null {
+  rayFromEvent(e);
+  const targets = [...positionVisuals.values()].map((v) => v.pick);
+  return raycaster.intersectObjects(targets)[0]?.object.userData.positionId ?? null;
+}
+
+/**
+ * Dragging a named position: level, at the height it's at (a floor position stays
+ * on the floor), or with ⇧ straight up and down. `move`: the plane it moves
+ * on now (re-made from where it is when ⇧ is pressed or let go).
+ */
+let dragPosition: { id: string; active: boolean; move: null | { vertical: boolean; plane: THREE.Plane; offset: THREE.Vector3 } } | null = null;
+
 function pickFixture(e: MouseEvent) {
   rayFromEvent(e);
   const targets = [...visuals.values()].map((v) => v.pick);
   return raycaster.intersectObjects(targets)[0]?.object.userData.fixtureId ?? null;
 }
 
-/** Horizontal plane through the fixture, or (⇧) a vertical one facing the camera. */
-function dragPlane(fixture: Fixture, vertical: boolean) {
+/** Horizontal plane through the fixture (or position), or (⇧) a vertical one facing the camera. */
+function dragPlane(fixture: Xyz, vertical: boolean) {
   const p = new THREE.Vector3(fixture.x, fixture.y, fixture.z);
   if (!vertical) return new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), p);
   const n = new THREE.Vector3();
@@ -454,7 +641,7 @@ function dragPlane(fixture: Fixture, vertical: boolean) {
 }
 
 /** Start dragging `fixture` along its drag plane from the current ray: the plane, and where on it the fixture sits relative to the pointer. */
-function dragFrom(fixture: Fixture, vertical: boolean) {
+function dragFrom(fixture: Xyz, vertical: boolean) {
   const plane = dragPlane(fixture, vertical);
   const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
   const offset = hit ? new THREE.Vector3(fixture.x, fixture.y, fixture.z).sub(hit) : new THREE.Vector3();
@@ -470,7 +657,7 @@ export const PLACE_OFFSET = 0.3;
  *   ⌥-click a wall               on the outside of the nearest wall
  *   click the ground off the box  standing on the ground, outside
  */
-function placePoint(outside: boolean) {
+function placePosition(outside: boolean) {
   const snap = (p: THREE.Vector3) => p.set(round(p.x, 1), round(p.y, 1), round(p.z, 1));
   if (outside) {
     const hit = raycaster.intersectObject(boxOuter)[0];
@@ -484,7 +671,15 @@ function placePoint(outside: boolean) {
 }
 
 export function updateGhost(e: PointerEvent | null) {
-  const p = ui.placing && e ? (rayFromEvent(e), placePoint(e.altKey)) : null;
+  // A position goes on the surface under the pointer, like an aim: show the target ring there.
+  if (ui.placingPosition) {
+    ghost.visible = ghostStem.visible = rigGhost.visible = false;
+    const t = e ? (rayFromEvent(e), positionTarget()) : null;
+    showPositionPreview(t?.p ?? null, t?.surface ?? null);
+    return;
+  }
+  if (positionPreview.visible) { positionPreview.visible = false; requestRender(); }
+  const p = ui.placing && e ? (rayFromEvent(e), placePosition(e.altKey)) : null;
   ghost.visible = ghostStem.visible = !!p;
   rigGhost.visible = !!p && !!ui.placingRig;
   if (!p) return;
@@ -505,17 +700,38 @@ export function updateGhost(e: PointerEvent | null) {
   ghostStem.computeLineDistances();
 }
 
+/** Box surfaces by the (outward) normal of the face a ray hits from inside. */
+function surfaceName(n: THREE.Vector3): string {
+  if (Math.abs(n.y) > 0.5) return n.y < 0 ? "Floor" : "Ceiling";
+  if (Math.abs(n.x) > 0.5) return n.x < 0 ? "Stage-right wall" : "Stage-left wall";
+  return n.z < 0 ? "Upstage wall" : "Downstage edge";
+}
+
+/**
+ * Where a new position would go (uses the current ray): the box surface under
+ * the pointer, else the ground outside; snapped to 0.1 m, as the click puts it.
+ */
+function positionTarget(): { p: THREE.Vector3; surface: string } | null {
+  const snap = (p: THREE.Vector3) => p.set(round(p.x, 1), round(Math.max(0, p.y), 1), round(p.z, 1));
+  const hit = raycaster.intersectObject(boxInner)[0];
+  if (hit?.face) return { p: snap(hit.point.clone()), surface: surfaceName(hit.face.normal) };
+  const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
+  return g && Math.hypot(g.x, g.z) <= 100 ? { p: snap(g), surface: "Ground, outside the box" } : null;
+}
+
 /** Aim target under the pointer (uses the current ray): a box surface, else the ground. */
-function aimPoint() {
+function aimPosition() {
   const hit = raycaster.intersectObject(boxInner)[0];
   if (hit) return hit.point.clone();
   const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
   return g && Math.hypot(g.x, g.z) <= 100 ? g : null;
 }
 
-/** Show the aim marker at `p` (or hide it) with lines from the selected fixtures. */
-export function showAimPreview(p: THREE.Vector3 | null) {
-  aimMarker.visible = aimLines.visible = !!p;
+/** Show the aim marker at `p` (or hide it), with lines from the selected fixtures unless `lines` is false. */
+export function showAimPreview(p: THREE.Vector3 | null, lines = true) {
+  requestRender();
+  aimMarker.visible = !!p;
+  aimLines.visible = !!p && lines;
   if (!p) return;
   aimMarker.position.copy(p);
   // Face the camera so the ring always reads as a target.
@@ -537,6 +753,16 @@ view.addEventListener("pointerdown", (e) => {
   downAt = { x: e.clientX, y: e.clientY };
   if (ui.placing || ui.aiming) return;
   const id = pickFixture(e);
+  // No fixture there: a named position? Drag it over the surfaces.
+  const positionId = id ? null : pickPosition(e);
+  if (positionId) {
+    const position = positionById(positionId);
+    // From where it's pressed (pickPosition just set the ray), as fixtures are.
+    dragPosition = { id: positionId, active: false, move: position ? dragFrom(position, e.shiftKey) : null };
+    controls.enabled = false;
+    renderer.domElement.setPointerCapture(e.pointerId);
+    return;
+  }
   if (!id) return;
   const fixture = byId(id);
   if (!fixture) return;
@@ -547,10 +773,34 @@ view.addEventListener("pointerdown", (e) => {
 
 view.addEventListener("pointermove", (e) => {
   if (e.target !== renderer.domElement) return;
+  if (dragPosition) {
+    if (!dragPosition.active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= DRAG_THRESHOLD) return;
+    dragPosition.active = true;
+    renderer.domElement.style.cursor = "grabbing";
+    const position = positionById(dragPosition.id);
+    if (!position) return;
+    rayFromEvent(e);
+    if (dragPosition.move?.vertical !== e.shiftKey) dragPosition.move = dragFrom(position, e.shiftKey);
+    const hit = raycaster.ray.intersectPlane(dragPosition.move.plane, new THREE.Vector3());
+    if (!hit) return;
+    hit.add(dragPosition.move.offset);
+    // ⇧: up and down only; else level (kept near the stage at grazing angles).
+    if (e.shiftKey) position.y = round(clamp(hit.y, 0, 50), 1);
+    else { position.x = round(clamp(hit.x, -100, 100), 1); position.z = round(clamp(hit.z, -100, 100), 1); }
+    const where = position.y < 0.05 ? "Floor" : "raised";
+    showPositionPreview(new THREE.Vector3(position.x, position.y, position.z), isInside(position, state.box) ? where : `${where}, outside the box`, position.name);
+    changed({ list: false, inspector: false });
+    return;
+  }
   if (!drag3d) {
     if (ui.placing) updateGhost(e);
-    else if (ui.aiming) { rayFromEvent(e); showAimPreview(aimPoint()); }
-    else if (!e.buttons) renderer.domElement.style.cursor = pickFixture(e) ? "grab" : "";
+    else if (ui.aiming) { rayFromEvent(e); showAimPreview(aimPosition()); }
+    else if (!e.buttons) {
+      const fixture = pickFixture(e);
+      const position = fixture ? null : pickPosition(e);
+      setHoverPosition(position);
+      renderer.domElement.style.cursor = fixture || position ? "grab" : "";
+    }
     return;
   }
   if (!drag3d.active) {
@@ -585,7 +835,7 @@ view.addEventListener("dblclick", (e) => {
   if (id) selectRigOf(id);
 }, true);
 
-renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); });
+renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); if (!dragPosition) setHoverPosition(null); });
 
 let rightDownAt: { x: number; y: number } | null = null;
 view.addEventListener("pointerdown", (e) => {
@@ -605,6 +855,19 @@ view.addEventListener("contextmenu", (e) => {
 view.addEventListener("pointerup", (e) => {
   if (e.target !== renderer.domElement || e.button !== 0) return;
   const moved = downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > DRAG_THRESHOLD;
+  const dp = dragPosition;
+  if (dp) {
+    dragPosition = null;
+    controls.enabled = true;
+    renderer.domElement.style.cursor = "grab";
+    if (dp.active) {
+      const position = positionById(dp.id);
+      showPositionPreview(null, null, position?.name ?? "");
+      setActivePosition(dp.id);
+      changed();
+    } else setActivePosition(ui.activePosition === dp.id ? null : dp.id);
+    return;
+  }
   const d = drag3d;
   drag3d = null;
   controls.enabled = true;
@@ -618,13 +881,18 @@ view.addEventListener("pointerup", (e) => {
   if (!downAt || moved) return;
   rayFromEvent(e);
 
+  if (ui.placingPosition) {
+    const t = positionTarget();
+    if (t) addPositionAt(t.p.x, t.p.y, t.p.z);
+    return;
+  }
   if (ui.placing) {
-    const p = placePoint(e.altKey);
+    const p = placePosition(e.altKey);
     if (p) (ui.placingRig ? addRigAt(ui.placingRig, p.x, p.y, p.z) : addFixtureAt(p.x, p.y, p.z));
     return;
   }
   if (ui.aiming) {
-    const p = aimPoint();
+    const p = aimPosition();
     if (p) applyAim(p);
     return;
   }

@@ -9,6 +9,7 @@ import { planView, setPlanView } from "./plan.ts";
 import { inspectorEl, renderInspector } from "./sidebar.ts";
 import { changed } from "./actions.ts";
 import "./keys.ts";
+import "./chat-hooks.ts"; // window.stageChat, for the chat panel
 import { syncBoxInputs } from "./dialogs.ts";
 import { consoleLink, consoleFixtureById, leaveToOtherWindow } from "./link.ts";
 
@@ -24,7 +25,7 @@ import { consoleLink, consoleFixtureById, leaveToOtherWindow } from "./link.ts";
 // moves don't redraw the inspector under your cursor.
 
 /** @param data a stage another window saved */
-function takeStage(data: unknown) {
+export function takeStage(data: unknown) {
   const before = JSON.stringify(serialize());
   const mine = new Map(state.fixtures.map((i) => [i.id, i]));
   const selected = state.selected;

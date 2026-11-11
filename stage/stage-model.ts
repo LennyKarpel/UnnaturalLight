@@ -59,7 +59,14 @@ export type Fixture = {
   link: Link;
   color: string; pan: number; tilt: number; intensity: number; beam: number;
   rigId: string | null; rigIndex: number;
+  /**
+   * Following a named position (fixtures the console doesn't drive: for
+   * those, cues hold the aim): the pan / tilt it was last aimed with. It
+   * follows while its pan / tilt still have those values.
+   */
+  follow: FixtureFollow | null;
 };
+export type FixtureFollow = { position: string; pan: number; tilt: number };
 
 // ---------------------------------------------------------------------
 // DMX attributes (each 0–255)
@@ -211,30 +218,41 @@ export function setZeroHere(fixture: Fixture) {
 }
 
 /**
- * Set pan/tilt (inside the fixture's zero frame) so the beam's center
- * points at `target`. The zero frame is left alone. Pan picks whichever
- * equivalent angle (±360°) is closest to the current pan. Clamped to the
- * limits; returns false if the target is out of reach. The result is
- * stored as DMX 0–255, so it lands on the nearest step.
+ * The pan / tilt (DMX 0–255, inside the fixture's zero frame) that point the
+ * beam's center at `target`; the zero frame is left alone. Pan picks
+ * whichever equivalent angle (±360°) is closest to `nearPan` (degrees).
+ * Clamped to the limits; `reached` is false if the target is out of reach.
+ * Changes nothing.
  */
-export function aimAt(fixture: Fixture, target: THREE.Vector3): boolean {
-  const v = target.clone().sub(new THREE.Vector3(fixture.x, fixture.y, fixture.z));
-  if (v.lengthSq() < 1e-6) return false;
+export function aimDmx(fixture: Fixture, target: Xyz, nearPan = fixture.pan): { pan: number; tilt: number; reached: boolean } | null {
+  const v = new THREE.Vector3(target.x - fixture.x, target.y - fixture.y, target.z - fixture.z);
+  if (v.lengthSq() < 1e-6) return null;
   v.applyQuaternion(baseQuat(fixture).invert());
   const want = frameFacing(v); // in the zero frame: yaw = pan, pitch = tilt
   let pan: number | null = null;
   for (const p of [want.yaw - 360, want.yaw, want.yaw + 360]) {
     if (Math.abs(p) > fixture.panLimit + 1e-6) continue;
-    if (pan === null || Math.abs(p - fixture.pan) < Math.abs(pan - fixture.pan)) pan = p;
+    if (pan === null || Math.abs(p - nearPan) < Math.abs(pan - nearPan)) pan = p;
   }
   let reached = pan !== null;
   if (pan === null) pan = clamp(want.yaw, -fixture.panLimit, fixture.panLimit);
   const tilt = clamp(want.pitch, -fixture.tiltLimit, fixture.tiltLimit);
   if (tilt !== want.pitch) reached = false;
-  fixture.dmx.pan = dmxFromAngle(pan, fixture.panLimit);
-  fixture.dmx.tilt = dmxFromAngle(tilt, fixture.tiltLimit);
+  return { pan: dmxFromAngle(pan, fixture.panLimit), tilt: dmxFromAngle(tilt, fixture.tiltLimit), reached };
+}
+
+/**
+ * Set pan/tilt so the beam's center points at `target` (see aimDmx). The
+ * result is stored as DMX 0–255, so it lands on the nearest step. Returns
+ * false if the target is out of reach.
+ */
+export function aimAt(fixture: Fixture, target: Xyz, nearPan = fixture.pan): boolean {
+  const aim = aimDmx(fixture, target, nearPan);
+  if (!aim) return false;
+  fixture.dmx.pan = aim.pan;
+  fixture.dmx.tilt = aim.tilt;
   deriveFromDmx(fixture);
-  return reached;
+  return aim.reached;
 }
 
 export function isInside(p: Xyz, box: Box): boolean {
@@ -292,7 +310,7 @@ export function createFixture(x: number, y: number, z: number, n: number, box: B
     dmx: { ...(Object.fromEntries(DMX_ATTRS.map((a) => [a, 0])) as DmxValues), dimmer: 255, pan: DMX_CENTER, tilt: DMX_CENTER, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
     link: { consoleId: null, start: null, layout: [] },
-    rigId: null, rigIndex: 0,
+    rigId: null, rigIndex: 0, follow: null,
     // Derived (set by deriveFromDmx just below).
     color: "#ffffff", pan: 0, tilt: 0, intensity: 1, beam: 0,
   };
@@ -380,6 +398,7 @@ export function normalizeFixture(saved: unknown, i: number): Fixture {
     link: normalizeLink(raw.link),
     rigId: typeof raw.rigId === "string" ? raw.rigId : null,
     rigIndex: typeof raw.rigIndex === "number" && Number.isInteger(raw.rigIndex) ? raw.rigIndex : 0,
+    follow: normalizeFollow(raw.follow),
     // Derived (set by deriveFromDmx just below).
     color: "#ffffff", pan: 0, tilt: 0, intensity: 0, beam: 0,
   };
@@ -388,6 +407,13 @@ export function normalizeFixture(saved: unknown, i: number): Fixture {
 }
 
 /** What gets saved for a fixture (the derived look is left out). */
+function normalizeFollow(saved: unknown): FixtureFollow | null {
+  const raw = fields(saved);
+  const pan = numberFrom(raw.pan);
+  const tilt = numberFrom(raw.tilt);
+  return typeof raw.position === "string" && pan != null && tilt != null ? { position: raw.position, pan: clampByte(pan), tilt: clampByte(tilt) } : null;
+}
+
 function serializeFixture(fixture: Fixture) {
   const { color, pan, tilt, intensity, beam, ...saved } = fixture;
   return saved;
@@ -595,8 +621,34 @@ function normalizeTransparent(saved: unknown): Transparent {
   return out;
 }
 
-/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs }`. */
-export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; transparent: Transparent; rigs: Rig[] } {
+// ---------------------------------------------------------------------
+// Positions: named spots on the stage (on the floor, a wall, anywhere) to aim
+// fixtures at by name, from the stage or the chat.
+// ---------------------------------------------------------------------
+
+export const MAX_POSITIONS = 100;
+export type StagePosition = { id: string; name: string; x: number; y: number; z: number };
+
+/** Where a spot is, said for people: "x 1.2 (SL) · height 0 · z 2.8 (DS)", plus the surface it's on if given. */
+export function describeSpot(p: Xyz, surface?: string | null): string {
+  const f = (v: number) => String(round(v, 1));
+  const side = (v: number, minus: string, plus: string) => (Math.abs(v) < 0.05 ? "" : ` (${v < 0 ? minus : plus})`);
+  const parts = [`x ${f(p.x)}${side(p.x, "SR", "SL")}`, `height ${f(p.y)}`, `z ${f(p.z)}${side(p.z, "US", "DS")}`];
+  return parts.join(" · ") + (surface ? ` · ${surface}` : "");
+}
+
+export function normalizePosition(saved: unknown, i: number): StagePosition {
+  const raw = fields(saved);
+  const num = (v: unknown) => clamp(numberFrom(v) ?? 0, -100, 100);
+  return {
+    id: typeof raw.id === "string" ? raw.id : newId("position"),
+    name: typeof raw.name === "string" && raw.name.trim() ? raw.name : `Position ${i + 1}`,
+    x: round(num(raw.x), 3), y: round(clamp(num(raw.y), 0, 100), 3), z: round(num(raw.z), 3),
+  };
+}
+
+/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs, positions }`. */
+export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; transparent: Transparent; rigs: Rig[]; positions: StagePosition[] } {
   const data = fields(saved);
   const raw = fields(data.box);
   const box: Box = {
@@ -618,12 +670,14 @@ export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; tra
     applyRig(rig, members);
     return true;
   });
-  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept };
+  const savedPositions = data?.positions ?? data?.points; // "points" before the rename
+  const positions = (Array.isArray(savedPositions) ? savedPositions : []).slice(0, MAX_POSITIONS).map(normalizePosition);
+  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept, positions };
 }
 
 /** The stage as saved (with the show, and in the browser). */
 export type SavedStage = ReturnType<typeof serializeStage>;
 
-export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[]) {
-  return { box, transparent, rigs, fixtures: fixtures.map(serializeFixture) };
+export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[], positions: StagePosition[] = []) {
+  return { box, transparent, rigs, positions, fixtures: fixtures.map(serializeFixture) };
 }

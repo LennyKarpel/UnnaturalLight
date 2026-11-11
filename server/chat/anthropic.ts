@@ -3,7 +3,7 @@
 // back. Credentials: ANTHROPIC_API_KEY, or a profile from `ant auth login`.
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { BetaContentBlockParam, BetaMessage, BetaMessageParam, BetaTool } from "@anthropic-ai/sdk/resources/beta/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaMessage, BetaMessageParam, BetaTool, BetaToolUnion } from "@anthropic-ai/sdk/resources/beta/messages";
 import type { ChatAssistantMessage, ChatMessage, ChatTool, ChatToolCall } from "../../shared/chat-protocol.ts";
 import { isOneOf, isRecord } from "../../shared/guards.ts";
 import type { ChatModel } from "./model.ts";
@@ -36,6 +36,28 @@ export function toApiMessage(m: ChatMessage): BetaMessageParam {
   }
 }
 
+/**
+ * The tools as the API takes them. Deferred ones (ChatTool.deferred) are
+ * declared with `defer_loading`, so the model doesn't read them on every
+ * request: it finds them with the API's tool search when it needs one.
+ * They're also outside thinking blocks' binding until used, so tools added
+ * later this way don't drop the model's earlier reasoning.
+ */
+export function toApiTools(tools: ChatTool[]): BetaToolUnion[] | undefined {
+  if (!tools.length) return undefined;
+  const list: BetaToolUnion[] = tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.schema as BetaTool.InputSchema,
+    ...(t.deferred ? { defer_loading: true } : {}),
+  }));
+  if (tools.some((t) => t.deferred)) list.unshift({ type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" });
+  return list;
+}
+
+/** Most times a reply paused by the API's own tool loop (tool search) is resumed. */
+const MAX_RESUMES = 3;
+
 /** A failed call, said so the person at the console knows what to do. */
 function explain(err: unknown): Error {
   if (err instanceof Anthropic.AuthenticationError || (err instanceof Anthropic.AnthropicError && /api ?key|auth/i.test(err.message))) {
@@ -56,35 +78,44 @@ export function createAnthropicModel(opts: { model?: string; effort?: string }):
     label: `${PROVIDER} · ${model}`,
     async reply({ system, messages, tools, onText, signal }): Promise<ChatAssistantMessage> {
       let msg: BetaMessage;
+      // A reply can come in parts: the API pauses its own tool loop (tool
+      // search) now and then, and is resumed by sending the reply so far.
+      const content: BetaContentBlock[] = [];
       try {
         client ??= new Anthropic();
-        const stream = client.beta.messages.stream(
-          {
-            model,
-            max_tokens: 16000,
-            system,
-            messages: messages.map(toApiMessage),
-            tools: tools.length ? tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema as BetaTool.InputSchema })) : undefined,
-            output_config: { effort },
-            // Claude's thinking blocks are tied to the system prompt, tools and
-            // earlier messages they were made with. A saved conversation outlives
-            // those (the prompt or tools change in an update; the panel drops its
-            // oldest messages), so let the API drop blocks that no longer match
-            // instead of failing the request. Only the model's past reasoning is
-            // lost; what it said and did stays.
-            thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
-            cache_control: { type: "ephemeral" },
-            betas: [
-              "thinking-binding-controls-2026-08-01",
-              // If the model declines, the API retries on a fallback model.
-              "server-side-fallback-2026-07-01",
-            ],
-            fallbacks: "default",
-          },
-          { signal },
-        );
-        stream.on("text", (text) => onText(text));
-        msg = await stream.finalMessage();
+        const apiMessages = messages.map(toApiMessage);
+        const apiTools = toApiTools(tools);
+        for (let resume = 0; ; resume++) {
+          const stream = client.beta.messages.stream(
+            {
+              model,
+              max_tokens: 16000,
+              system,
+              messages: content.length ? [...apiMessages, { role: "assistant", content: [...content] }] : apiMessages,
+              tools: apiTools,
+              output_config: { effort },
+              // Claude's thinking blocks are tied to the system prompt, tools and
+              // earlier messages they were made with. A saved conversation outlives
+              // those (the prompt or tools change in an update; the panel drops its
+              // oldest messages), so let the API drop blocks that no longer match
+              // instead of failing the request. Only the model's past reasoning is
+              // lost; what it said and did stays.
+              thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
+              cache_control: { type: "ephemeral" },
+              betas: [
+                "thinking-binding-controls-2026-08-01",
+                // If the model declines, the API retries on a fallback model.
+                "server-side-fallback-2026-07-01",
+              ],
+              fallbacks: "default",
+            },
+            { signal },
+          );
+          stream.on("text", (text) => onText(text));
+          msg = await stream.finalMessage();
+          content.push(...msg.content);
+          if (msg.stop_reason !== "pause_turn" || resume >= MAX_RESUMES) break;
+        }
       } catch (err) {
         throw explain(err);
       }
@@ -92,13 +123,13 @@ export function createAnthropicModel(opts: { model?: string; effort?: string }):
 
       let text = "";
       const toolCalls: ChatToolCall[] = [];
-      for (const b of msg.content) {
+      for (const b of content) {
         if (b.type === "text") text += b.text;
         else if (b.type === "tool_use") toolCalls.push({ id: b.id, name: b.name, args: isRecord(b.input) ? b.input : {} });
       }
       // Cut off mid-call (max_tokens): drop the calls; their inputs may be incomplete.
       const cut = msg.stop_reason === "max_tokens";
-      const data = cut ? msg.content.filter((b) => b.type !== "tool_use") : msg.content;
+      const data = cut ? content.filter((b) => b.type !== "tool_use") : content;
       return { role: "assistant", text, toolCalls: cut ? [] : toolCalls, raw: { provider: PROVIDER, data } };
     },
   };

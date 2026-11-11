@@ -295,7 +295,7 @@ function duplicateSong(id: string) {
   const song = state.songs[index];
   const copy = createSong({
     name: `${song.name} copy`.slice(0, 40),
-    cues: song.cues.map((cue) => createCue({ name: cue.name, levels: cue.levels, fadeTime: cue.fadeTime })),
+    cues: song.cues.map((cue) => createCue({ name: cue.name, levels: cue.levels, fadeTime: cue.fadeTime, aims: cue.aims })),
   });
   state.songs.splice(index + 1, 0, copy);
   persistSession();

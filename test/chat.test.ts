@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseChatRequest } from "../server/chat/chat.ts";
-import { toApiMessage } from "../server/chat/anthropic.ts";
-import { findSong, TOOLS } from "../page/chat/tools.ts";
+import { toApiMessage, toApiTools } from "../server/chat/anthropic.ts";
+import { findSong, TOOLS, toolByName } from "../page/chat/tools.ts";
 
 const songs = [
   { id: "a", name: "Intro", cues: 3 },
@@ -115,4 +115,64 @@ test("fixtureLevels: dimmer in %, color mixed onto the emitters, missing channel
   // White light on red / green / blue / white: mostly the white emitter.
   const white = fixtureLevels(roles, { color: "#ffffff" }).cells;
   assert.equal(white.get(7), 255);
+});
+
+test("tool search: playback is always sent; the rest are deferred, found by Claude's tool search", () => {
+  const core = TOOLS.filter((t) => !t.deferred).map((t) => t.name);
+  assert.deepEqual(core, ["get_show", "select_song", "select_cue", "go", "control_transition", "set_levels"]);
+  const api = (toApiTools(TOOLS) ?? []) as { name: string; defer_loading?: boolean }[];
+  assert.equal(api[0].name, "tool_search_tool_bm25");
+  assert.equal(api.length, TOOLS.length + 1);
+  const placeRig = api.find((t) => t.name === "place_rig");
+  assert.equal(placeRig?.defer_loading, true);
+  // No deferred tools: no search tool.
+  const plain = (toApiTools(TOOLS.filter((t) => !t.deferred)) ?? []) as { name: string }[];
+  assert.ok(plain.every((t) => t.name !== "tool_search_tool_bm25" && !("defer_loading" in t)));
+  assert.equal(toApiTools([]), undefined);
+  // The page's `deferred` flag passes the request check.
+  assert.doesNotThrow(() => parseChatRequest({ messages: [{ role: "user", text: "x" }], tools: [{ name: "a", description: "", schema: {}, deferred: true }] }));
+});
+
+test("stage tools: fixtures by name, rig name or \"selected\"; rigs and positions by name", () => {
+  const calls: unknown[][] = [];
+  const fixtures = [
+    { id: "f1", name: "Spot L", rig: null, selected: true },
+    { id: "f2", name: "Spot R", rig: null, selected: false },
+    { id: "r1", name: "Ring 1 · 1", rig: "Ring 1", selected: false },
+    { id: "r2", name: "Ring 1 · 2", rig: "Ring 1", selected: false },
+  ];
+  const fake = {
+    stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [{ id: "rig1", name: "Ring 1" }], fixtures, positions: [{ id: "p1", name: "DSC", x: 0, y: 0, z: 3 }, { id: "p2", name: "Drum riser", x: 0, y: 0.6, z: -2 }] }),
+    aimFixtures: (ids: string[], at: unknown) => { calls.push(["aim", ids, at]); return {}; },
+    aimAtPosition: (ids: string[], id: string) => { calls.push(["follow", ids, id]); return {}; },
+    stopFollowing: (ids: string[]) => { calls.push(["unfollow", ids]); return []; },
+    deleteFixtures: (ids: string[]) => { calls.push(["delete", ids]); return []; },
+    editRig: (id: string, fields: unknown) => { calls.push(["rig", id, fields]); return {}; },
+  };
+  (globalThis as { window?: unknown }).window = { stageChat: fake };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    run("aim_fixtures", { fixtures: ["Ring 1"], at: { x: 0, y: 0, z: 0 } });
+    run("aim_fixtures", { fixtures: ["selected", "spot r"], home: true });
+    run("delete_fixtures", { fixtures: ["all"] });
+    run("edit_rig", { rig: "ring", center: { y: 5 } });
+    run("aim_fixtures", { fixtures: ["Ring 1"], position: "drum" });
+    run("stop_following", { fixtures: ["selected"] });
+    assert.deepEqual(calls, [
+      ["aim", ["r1", "r2"], { x: 0, y: 0, z: 0 }],
+      ["aim", ["f1", "f2"], null],
+      ["delete", ["f1", "f2", "r1", "r2"]],
+      ["rig", "rig1", { y: 5 }],
+      ["follow", ["r1", "r2"], "p2"],
+      ["unfollow", ["f1"]],
+    ]);
+    assert.throws(() => run("aim_fixtures", { fixtures: ["Spot L"], position: "lectern" }), /No position "lectern" \(positions: DSC, Drum riser\)/);
+    assert.throws(() => run("aim_fixtures", { fixtures: ["Spot L"], position: "DSC", home: true }), /Give one of/);
+    assert.throws(() => run("aim_fixtures", { fixtures: ["Spot"], home: true }), /matches "Spot L", "Spot R"/);
+    assert.throws(() => run("aim_fixtures", { fixtures: ["Spot L"] }), /Give one of/);
+    assert.throws(() => run("move_fixtures", { fixtures: ["Spot L"], to: { x: 1 }, by: { x: 1 } }), /either to or by/);
+    assert.throws(() => run("edit_rig", { rig: "Line" }), /No rig "Line" \(rigs: Ring 1\)/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
 });

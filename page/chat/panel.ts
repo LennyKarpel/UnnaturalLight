@@ -29,8 +29,12 @@ const MIN_WIDTH = 260;
 /** The panes keep at least this much of the window. */
 const MIN_PANES = 360;
 
-type Prefs = { open: boolean; width: number; model: string; history: ChatMessage[] };
-let prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", history: [] };
+/** Prompts kept for ↑ / ↓ (newest last). */
+const MAX_SENT = 50;
+
+/** `sent`: the prompts typed here, for ↑ / ↓ (kept across New). */
+type Prefs = { open: boolean; width: number; model: string; history: ChatMessage[]; sent: string[] };
+let prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", history: [], sent: [] };
 const saved = readStoredJson(KEY);
 if (isRecord(saved)) {
   prefs = {
@@ -38,6 +42,7 @@ if (isRecord(saved)) {
     width: typeof saved.width === "number" && Number.isFinite(saved.width) ? saved.width : DEFAULT_WIDTH,
     model: typeof saved.model === "string" ? saved.model : "",
     history: Array.isArray(saved.history) ? (saved.history as ChatMessage[]) : [],
+    sent: Array.isArray(saved.sent) ? saved.sent.filter((t): t is string => typeof t === "string").slice(-MAX_SENT) : [],
   };
   // A turn cut short by a reload can leave tool calls without results.
   try {
@@ -102,7 +107,7 @@ panel.innerHTML = `
   <div class="chat-log thin-scroll" aria-live="polite"></div>
   <form class="chat-form">
     <div class="chat-input">
-      <textarea rows="2" placeholder="Ask… (Enter sends, ⇧Enter new line)" aria-label="Message" spellcheck="false"></textarea>
+      <textarea rows="2" placeholder="Ask… (Enter sends, ⇧Enter new line, ↑ earlier prompts)" aria-label="Message" spellcheck="false"></textarea>
       <button type="submit" class="primary">Send</button>
     </div>
   </form>`;
@@ -241,35 +246,42 @@ function setBusy(busy: boolean) {
   panel.classList.toggle("is-busy", busy);
 }
 
-/** The show's edits now (not playback), or null before the console is up. */
-function editSnapshot(): string | null {
+/** The show's and the stage's edits now (not playback), or null before the console and stage are up. */
+type Snapshot = { key: string; show: string; stageKey: string; stage: unknown };
+
+function editSnapshot(): Snapshot | null {
   try {
-    return window.consoleChat?.editSnapshot() ?? null;
+    const show = window.consoleChat?.editSnapshot();
+    const stage = window.stageChat?.editSnapshot();
+    if (show == null || !stage) return null;
+    return { key: `${show}\n${stage.key}`, show, stageKey: stage.key, stage: stage.data };
   } catch {
     return null;
   }
 }
 
 /**
- * After a turn that edited the show: an Undo button that puts the edits
- * back as they were before it (playback stays as it is). Only while the
- * show hasn't changed since; only the latest turn's.
+ * After a turn that edited the show or the stage: an Undo button that puts
+ * the edits back as they were before it (playback stays as it is). Only
+ * while nothing has changed since; only the latest turn's.
  */
-function offerUndo(before: string, after: string) {
+function offerUndo(before: Snapshot, after: Snapshot) {
   const row = el("div", "chat-undo");
   const btn = button("quiet", "Undo these changes");
-  btn.title = "Put cues, songs and fixtures back as they were before this request (what's LIVE stays)";
+  btn.title = "Put cues, songs, fixtures and the stage back as they were before this request (what's LIVE stays)";
   row.append(btn);
   log.append(row);
   scrollDown();
   btn.addEventListener("click", () => {
     row.remove();
-    if (editSnapshot() !== after) {
-      bubble("hint", "Can't undo: the show has changed since.");
+    if (editSnapshot()?.key !== after.key) {
+      bubble("hint", "Can't undo: the show or the stage has changed since.");
       return;
     }
     try {
-      window.consoleChat?.restoreEdits(before);
+      // The show first: it has the console fixtures the stage's fixtures link to.
+      if (before.show !== after.show) window.consoleChat?.restoreEdits(before.show);
+      if (before.stageKey !== after.stageKey) window.stageChat?.restoreEdits(before.stage);
       bubble("hint", "Undone.");
     } catch (err) {
       bubble("error", `Couldn't undo: ${errorMessage(err)}`);
@@ -357,7 +369,7 @@ async function send(text: string) {
   if (abort.signal.aborted) bubble("hint", "Stopped.");
   for (const c of chips.values()) if (c.el.dataset.state === "wait") c.set("stopped", "Not run");
   const after = editSnapshot();
-  if (before != null && after != null && after !== before) offerUndo(before, after);
+  if (before && after && after.key !== before.key) offerUndo(before, after);
   running = null;
   setBusy(false);
   save();
@@ -374,15 +386,47 @@ form.addEventListener("submit", (e) => {
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
+  remember(text);
   void send(text);
 });
+
+// ↑ / ↓ in the box: step back and forth through the prompts sent before, as
+// in a terminal. ↑ on the first line (↓ on the last) so moving through a
+// longer prompt still works; past the newest is what was being typed.
+let recall = prefs.sent.length;
+let draft = "";
+
+function remember(text: string) {
+  if (prefs.sent.at(-1) !== text) prefs.sent.push(text);
+  prefs.sent.splice(0, Math.max(0, prefs.sent.length - MAX_SENT));
+  recall = prefs.sent.length;
+  draft = "";
+}
+
+function stepRecall(by: -1 | 1): boolean {
+  const next = recall + by;
+  if (next < 0 || next > prefs.sent.length) return false;
+  if (recall === prefs.sent.length) draft = input.value;
+  recall = next;
+  input.value = recall === prefs.sent.length ? draft : prefs.sent[recall];
+  const end = input.value.length;
+  input.setSelectionRange(end, end);
+  return true;
+}
 
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     // While it's working, Enter waits (Stop is a click), so it never stops a turn by surprise.
     if (!running) form.requestSubmit();
+    return;
   }
+  if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey || e.isComposing) return;
+  const { selectionStart: from, selectionEnd: to, value } = input;
+  if (from !== to) return;
+  const onFirstLine = !value.slice(0, from).includes("\n");
+  const onLastLine = !value.slice(to).includes("\n");
+  if (e.key === "ArrowUp" ? onFirstLine && stepRecall(-1) : onLastLine && stepRecall(1)) e.preventDefault();
 });
 // Typing here isn't for the stage or console's keys.
 panel.addEventListener("keydown", (e) => {
