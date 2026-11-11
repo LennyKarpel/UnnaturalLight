@@ -61,7 +61,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 
 ## 2. Quick start: your first fixture and cue
 
-1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height in meters) to your space.
+1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height, in meters or feet: see **⚙ View**) to your space.
 2. **Place a fixture.** Click **+ Place fixture** (or press `P`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
@@ -125,9 +125,10 @@ Start the server with `./server.sh --lan`. The terminal prints a **remote** addr
 
 ### The stage area
 
-- **Box W / D / H** in the header set the size of the performance area in meters.
+- **Box W / D / H** in the header set the size of the performance area.
+- **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a rig's center and size, positions, the readout and banners, and the plan's grid (1 m or 1 ft squares). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
 - The **amber line** marks the audience edge. *Stage left / right* are from the performer's point of view, facing the audience.
-- **⚙ View** opens view settings: tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
+- **⚙ View** opens view settings: the units (above), and tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
 
 ### Looking around
 
@@ -200,7 +201,7 @@ The fixture is named after the model (e.g. *MAC Aura 1*) and uses the fixture's 
 - **Drag** a fixture in the 3D view to slide it around at its height; hold **⇧** (Shift) to raise or lower it instead. You can press or let go of ⇧ partway through a drag to switch.
 - **Drag** it in the plan; in the Front / SR / SL views dragging also changes its height.
 - Hold `⌥` while dragging for fine steps (1 cm instead of 10 cm).
-- Or type exact numbers in the inspector's **Position** (x / height / z, in meters).
+- Or type exact numbers in the inspector's **Location** (x / height / z, in your unit).
 
 ### Controlling a fixture: the 0–255 values
 
@@ -267,11 +268,12 @@ Library fixtures get these roles from their channels automatically (warm and col
 A **position** is a named spot on the stage (e.g. *DSC*, *drum riser*, *lectern*) to aim fixtures at by name, here or in the [chat](#the-chat): the stage's version of a console's *position presets*, but a place on the stage rather than pan / tilt values, so each fixture works out its own pan / tilt to hit it. Positions are saved with the stage, so they go with the show.
 
 - **+ Position** (stage header), then click a spot on the floor, a wall or the ceiling in 3D, or in the plan (the floor in Top; the back or side wall in the other views). `Esc` cancels.
-- **Before you click**, a violet diamond shows where the position will go (to the 0.1 m it will land on), with dotted lines through it across the stage (red: stage right to left, green: floor to ceiling, blue: upstage to downstage) and its position and surface beside it and in the banner, e.g. *x 2.4 (SL) · height 0 · z 0.4 (DS) · Floor*. The plan shows the same for its two axes.
+- **Before you click**, a violet diamond shows where the position will go (snapped as it will land: 0.1 m, or 3 inches in feet), with dotted lines through it across the stage (red: stage right to left, green: floor to ceiling, blue: upstage to downstage) and its position and surface beside it and in the banner, e.g. *x 2.4 (SL) · height 0 · z 0.4 (DS) · Floor*. The plan shows the same for its two axes.
 - The new position opens in the **Positions** tab (beside **Fixtures** above the inspector) with its name ready to type. There you can rename it, set x / height / z, **Aim** the selected fixtures at it, or delete it (✕).
 - **Move a position** by dragging it: in 3D it slides level, at the height it's at (a floor position stays on the floor, also past the walls); hold **⇧** while dragging to move it **straight up or down** (e.g. to head height over the floor spot). Let go of ⇧ mid-drag and it slides level at its new height. In the plan it moves in that view's two directions (Front / SR / SL change its height too). The same dotted lines and x / height / z show while you drag. Fixtures following it re-aim as it moves. Or type its x / height / z in the list.
 - Positions show as violet diamonds with their names, in 3D (with a dashed line down to the floor when raised) and in the plan. Click one (in 3D, the plan or the list) to pick it out.
 - **Hover over a position** (in 3D, the plan, or its row in the Positions list) to light it up: it grows, gets a glow, its name gets bigger, dashed lines run to it from the fixtures following it, and the banner says where it is and how many fixtures follow it. Handy when it's lost in a beam.
+- **Right-click a position** (in 3D, the plan or its row in the list) for its menu: **Delete position** for now. It stays lit up while the menu is open.
 
 
 ### Following a position
@@ -319,7 +321,7 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 
 ### The right-click menu
 
-Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item.
+Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item. Right-click a named position for **Delete position**.
 
 ### The inspector
 
@@ -616,7 +618,7 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), meters / feet (`stage/units.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The stage's model isn't covered yet (it needs three.js, which only the browser loads).
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -666,6 +668,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/panel.ts` | Side panel layout: collapsing Plan / Fixtures / Inspector, and the dividers between them |
 | `stage/actions.ts`, `keys.ts` | Select, place, aim, flash, right-click menu, duplicate, delete / undo; keyboard |
 | `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
+| `stage/units.ts` | Meters or feet: converting what's shown and typed (the data stays in meters), snapping steps, saying where a spot is |
 | `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
 | `stage/stage-model.ts` | Fixture, rig and named position data, DMX values ↔ angles / color / beam, aiming math, save format |
 | `stage/console-link.ts` | Stage side of its link with the console |

@@ -23,6 +23,7 @@ import {
   libraryPickerFor,
 } from "./link.ts";
 import { elById } from "../shared/query.ts";
+import { UNITS, convertLength, fromShown, inputStep, lengthUnit, onUnitChange, setLengthUnit, toShown, unitName, type Unit } from "./units.ts";
 import { isOneOf } from "../shared/guards.ts";
 import type { FixtureProfile } from "./fixture-library.ts";
 import { el } from "../shared/html.ts";
@@ -33,13 +34,26 @@ import { el } from "../shared/html.ts";
 
 const boxInputs: Record<keyof Box, HTMLInputElement> = { w: elById("boxW"), d: elById("boxD"), h: elById("boxH") };
 const BOX_KEYS = ["w", "d", "h"] as const;
-export function syncBoxInputs() { for (const k of BOX_KEYS) boxInputs[k].value = String(state.box[k]); }
+/** Largest box side, meters. */
+const BOX_MAX: Record<keyof Box, number> = { w: 100, d: 100, h: 50 };
+export function syncBoxInputs() {
+  for (const k of BOX_KEYS) {
+    const el = boxInputs[k];
+    el.min = String(toShown(1));
+    el.max = String(toShown(BOX_MAX[k]));
+    if (el !== document.activeElement) el.value = String(toShown(state.box[k]));
+  }
+  elById("boxUnit").textContent = lengthUnit();
+  elById("boxGroup").title = `Performance area size in ${unitName()}`;
+}
 for (const k of BOX_KEYS) {
   const el = boxInputs[k];
   el.addEventListener("input", () => {
-    const v = numberFrom(el.value);
-    if (v == null || v < 1) return;
-    state.box[k] = clamp(v, 1, 100);
+    const shown = numberFrom(el.value);
+    if (shown == null) return;
+    const v = fromShown(shown);
+    if (v < 1) return;
+    state.box[k] = clamp(v, 1, BOX_MAX[k]);
     updateBox();
     changed();
   });
@@ -81,9 +95,20 @@ function renderSurfaceRows() {
   }
 }
 
+// Units: meters or feet (units.ts).
+const unitButtons = [...elById("unitSeg").querySelectorAll<HTMLButtonElement>("[data-unit]")];
+const syncUnitButtons = () => unitButtons.forEach((b) => b.classList.toggle("on", b.dataset.unit === lengthUnit()));
+for (const b of unitButtons) b.addEventListener("click", () => { if (isOneOf(UNITS, b.dataset.unit)) setLengthUnit(b.dataset.unit); });
+onUnitChange(() => {
+  syncUnitButtons();
+  syncBoxInputs();
+  syncRigDialogType({ keepValues: true });
+});
+
 const settingsBtn = elById("settingsBtn");
 settingsBtn.addEventListener("click", () => {
   settingsBtn.blur();
+  syncUnitButtons();
   renderSurfaceRows();
   settingsDlg.showModal();
 });
@@ -131,7 +156,7 @@ closable(rigDlg, "rigClose");
 elById("rigPlace").addEventListener("click", () => {
   const cfg = normalizeRig({
     type: rigInputs.type.value,
-    size: rigInputs.size.value,
+    size: fromShown(numberFrom(rigInputs.size.value) ?? NaN),
     count: rigInputs.count.value,
     tilt: rigInputs.tilt.value,
     yaw: rigInputs.yaw.value,
@@ -156,19 +181,33 @@ elById("rigPlace").addEventListener("click", () => {
   });
 });
 
-/** Switching type relabels the size and loads that type's defaults and help. */
-function syncRigDialogType() {
+/** The unit the rig dialog's size was typed in. */
+let rigSizeShownIn: Unit = lengthUnit();
+
+/**
+ * Switching type relabels the size and loads that type's defaults and help.
+ * `keepValues` (a new unit): only the size's label and number change.
+ */
+function syncRigDialogType({ keepValues = false } = {}) {
   const type = rigInputs.type.value;
   const t = RIG_TYPES[isOneOf(RIG_TYPE_KEYS, type) ? type : "circle"];
-  elById("rigSizeLabel").textContent = `${t.sizeLabel} (m)`;
+  elById("rigSizeLabel").textContent = `${t.sizeLabel} (${lengthUnit()})`;
+  rigInputs.size.step = inputStep();
+  if (keepValues) {
+    const was = numberFrom(rigInputs.size.value);
+    if (was != null) rigInputs.size.value = String(convertLength(was, rigSizeShownIn, lengthUnit()));
+    rigSizeShownIn = lengthUnit();
+    return;
+  }
+  rigSizeShownIn = lengthUnit();
   elById("rigHelp").textContent = `${t.name}: ${t.help}`;
-  rigInputs.size.value = String(t.defaults.size);
+  rigInputs.size.value = String(toShown(t.defaults.size));
   rigInputs.count.value = String(t.defaults.count);
   rigInputs.tilt.value = String(t.defaults.tilt);
   rigInputs.yaw.value = String(t.defaults.yaw);
 }
 rigInputs.type.innerHTML = Object.entries(RIG_TYPES).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join("");
-rigInputs.type.addEventListener("change", syncRigDialogType);
+rigInputs.type.addEventListener("change", () => syncRigDialogType());
 syncRigDialogType();
 
 // Place fixture: pick its console type first.

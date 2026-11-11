@@ -15,7 +15,6 @@ import {
   homeFixture,
   applyFixture,
   linkChannels,
-  describeSpot,
   type Fixture,
   type SavedStage,
 } from "./stage-model.ts";
@@ -41,6 +40,7 @@ import { consoleLink, pushToConsole, requestRegistrations } from "./link.ts";
 import { aimAndFollow, followingOf, stopFollowing, syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
 import * as THREE from "three";
+import { describeSpot } from "./units.ts";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import { elById } from "../shared/query.ts";
 import { readStoredJson, storeJson } from "../shared/storage.ts";
@@ -213,6 +213,9 @@ export function setActivePosition(id: string | null) {
   showPositions();
 }
 
+/** The position whose right-click menu is open, or null. */
+let menuPosition: string | null = null;
+
 /** Whether the banner shows a hovered position (so leaving it clears only that). */
 let hoverBanner = false;
 
@@ -222,6 +225,8 @@ let hoverBanner = false;
  * where it is in the banner.
  */
 export function setHoverPosition(id: string | null) {
+  // A position's right-click menu keeps it lit while it's open.
+  if (id == null && menuPosition && !ctxMenu.hidden) id = menuPosition;
   if (ui.hoverPosition === id) return;
   ui.hoverPosition = id;
   syncScene();
@@ -331,6 +336,7 @@ export const ctxMenu = elById("ctxMenu");
  * otherwise it selects just that fixture first.
  */
 export function openContextMenu(id: string, x: number, y: number) {
+  menuPosition = null;
   if (!state.selected.includes(id)) select(id);
   const n = state.selected.length;
   const rig = rigOf(byId(id));
@@ -369,6 +375,24 @@ export function openContextMenu(id: string, x: number, y: number) {
   });
   const titleEl = ctxMenu.querySelector(".menu-title");
   if (titleEl) titleEl.textContent = title;
+  showMenuAt(x, y);
+}
+
+/** The right-click menu for a named position (it stays lit up while the menu is open). */
+export function openPositionMenu(id: string, x: number, y: number) {
+  const position = positionById(id);
+  if (!position) return;
+  ctxMenu.innerHTML = `<div class="menu-title"></div>
+    <button type="button" data-delete-position="${position.id}" class="menu-item danger"><span>Delete position</span></button>`;
+  const titleEl = ctxMenu.querySelector(".menu-title");
+  if (titleEl) titleEl.textContent = position.name;
+  menuPosition = id;
+  showMenuAt(x, y);
+  setHoverPosition(id);
+}
+
+/** Show the menu at (x, y), kept on screen. */
+function showMenuAt(x: number, y: number) {
   ctxMenu.hidden = false;
   const r = ctxMenu.getBoundingClientRect();
   ctxMenu.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`;
@@ -382,12 +406,15 @@ export function openContextMenu(id: string, x: number, y: number) {
 export function closeContextMenu() {
   if (ctxMenu.hidden) return;
   ctxMenu.hidden = true;
+  menuPosition = null;
   setHoverPosition(null);
 }
 
 const menuCmd = (e: PointerEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>("[data-cmd]")?.dataset.cmd : null);
 
 ctxMenu.addEventListener("click", (e) => {
+  const doomed = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-delete-position]")?.dataset.deletePosition : null;
+  if (doomed) { closeContextMenu(); deletePosition(doomed); return; }
   const positionId = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-position]")?.dataset.position : null;
   if (positionId) { closeContextMenu(); aimAtPosition(positionId); return; }
   const sub = e.target instanceof Element ? e.target.closest(".submenu-wrap") : null;

@@ -1,9 +1,10 @@
 // The plan view (2D): top, front or side, with dragging and right-click.
 import * as THREE from "three";
-import { round, beamDir, axisHits, rigOutline, describeSpot, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
+import { describeSpot, fmtLength, gridStep, onUnitChange, snapLength } from "./units.ts";
+import { round, beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, ui } from "./state.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, showPositionSpot } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, openPositionMenu, showPositionSpot } from "./actions.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
@@ -45,7 +46,7 @@ const PLAN_VIEWS: Record<PlanView, PlanViewSpec> = {
   top: {
     h: "x", v: "z", vSign: 1, caption: "top · audience ↓",
     labels: { top: "UPSTAGE", bottom: "AUDIENCE", left: "SR", right: "SL" }, audienceEdge: "bottom",
-    placeDefault: (box: Box) => ({ y: box.h - 0.3 }), placeHint: (box: Box) => `height ${round(box.h - 0.3, 1)} m`,
+    placeDefault: (box: Box) => ({ y: box.h - 0.3 }), placeHint: (box: Box) => `height ${fmtLength(box.h - 0.3)}`,
     aimDefault: () => ({ y: 0 }), aimHint: "click a floor spot to aim at", positionHint: "click a floor spot for the position", positionSurface: "Floor",
   },
   front: {
@@ -88,11 +89,11 @@ const AXIS_COLORS: Record<Axis, string> = { x: "#ff7a7a", y: "#7ee08a", z: "#7aa
 /** Placing a position: where it would go under the pointer (world, snapped), or null. */
 let positionHover: Xyz | null = null;
 
-/** Where a click at plan axes (a, b) puts a new position: on the surface this view shows, snapped to 0.1 m. */
+/** Where a click at plan axes (a, b) puts a new position: on the surface this view shows, snapped (0.1 m or 3 in). */
 function positionSpotAt(a: number, b: number): Xyz {
   const p = { x: 0, y: 0, z: 0, ...pv().aimDefault(state.box) };
   setAB(p, a, b);
-  return { x: round(p.x, 1), y: round(clamp(p.y, 0, 50), 1), z: round(p.z, 1) };
+  return { x: snapLength(p.x), y: snapLength(clamp(p.y, 0, 50)), z: snapLength(p.z) };
 }
 
 const pv = () => PLAN_VIEWS[planView];
@@ -164,14 +165,16 @@ export function drawPlan() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, size, size);
 
-  // 1 m grid
+  // Grid: 1 m or 1 ft squares (5 ft when feet would be too dense).
   ctx.strokeStyle = "#171a20";
   ctx.lineWidth = 1;
   const [ga0, gb0] = fromPlan(0, 0);
   const [ga1, gb1] = fromPlan(size, size);
+  let g = gridStep();
+  if (g * scale < 6) g *= 5;
   ctx.beginPath();
-  for (let a = Math.ceil(ga0); a <= ga1; a++) { const [px] = toPlan(a, 0); ctx.moveTo(px, 0); ctx.lineTo(px, size); }
-  for (let b = Math.ceil(gb0); b <= gb1; b++) { const [, py] = toPlan(0, b); ctx.moveTo(0, py); ctx.lineTo(size, py); }
+  for (let a = Math.ceil(Math.min(ga0, ga1) / g) * g; a <= Math.max(ga0, ga1); a += g) { const [px] = toPlan(a, 0); ctx.moveTo(px, 0); ctx.lineTo(px, size); }
+  for (let b = Math.ceil(Math.min(gb0, gb1) / g) * g; b <= Math.max(gb0, gb1); b += g) { const [, py] = toPlan(0, b); ctx.moveTo(0, py); ctx.lineTo(size, py); }
   ctx.stroke();
 
   // Ground line in the elevations
@@ -404,9 +407,11 @@ function planPositionAt(px: number, py: number): StagePosition | null {
 
 plan.addEventListener("contextmenu", (e) => {
   const fixture = planFixtureAt(...planPosition(e));
-  if (!fixture) return;
+  const position = fixture ? null : planPositionAt(...planPosition(e));
+  if (!fixture && !position) return;
   e.preventDefault();
-  openContextMenu(fixture.id, e.clientX, e.clientY);
+  if (fixture) openContextMenu(fixture.id, e.clientX, e.clientY);
+  else if (position) openPositionMenu(position.id, e.clientX, e.clientY);
 });
 
 plan.addEventListener("pointerdown", (e) => {
@@ -473,8 +478,7 @@ plan.addEventListener("pointermove", (e) => {
     return;
   }
   const [a, b] = fromPlan(...planPosition(e));
-  const snap = e.altKey ? 0.01 : 0.1;
-  const s = (v: number) => round(Math.round(v / snap) * snap);
+  const s = (v: number) => snapLength(v, e.altKey);
   if (planDrag.kind === "position") {
     const position = positionById(planDrag.id);
     if (!position) return;
@@ -514,3 +518,5 @@ plan.addEventListener("pointerleave", () => {
 });
 plan.addEventListener("pointercancel", endDrag);
 new ResizeObserver(() => drawPlan()).observe(plan);
+
+onUnitChange(() => drawPlan());

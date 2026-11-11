@@ -1,5 +1,9 @@
 // Sidebar: the fixture list, the inspector and the key strip (HUD).
 import { followingOf } from "./follow.ts";
+import { fmtLength, fmtNumber, fromShown, inputStep, lengthUnit, onUnitChange, toShown } from "./units.ts";
+
+/** Fields shown in the length unit (meters or feet). */
+const isLength = (k: string) => k === "x" || k === "y" || k === "z" || k === "size";
 import {
   MAX_FIXTURES,
   MAX_POSITIONS,
@@ -32,6 +36,7 @@ import {
   selectRigOf,
   holdDimmer,
   openContextMenu,
+  openPositionMenu,
   act,
   ACTIONS,
   aimAtPosition,
@@ -145,7 +150,7 @@ const POSITION_FIELDS = ["name", "x", "y", "z"] as const;
 function renderPositionList(force = false) {
   elById("count").textContent = `${state.positions.length} / ${MAX_POSITIONS}`;
   const hasSel = state.selected.length > 0;
-  const key = JSON.stringify([state.positions, ui.activePosition, hasSel]);
+  const key = JSON.stringify([state.positions, ui.activePosition, hasSel, lengthUnit()]);
   if (!force && key === positionListKey) return;
   // Typing in a field: leave the rows alone while the same positions are listed
   // (the field already shows what's typed; rebuilding would drop the cursor).
@@ -175,14 +180,16 @@ function renderPositionList(force = false) {
     for (const input of row.querySelectorAll<HTMLInputElement>("[data-pk]")) {
       const k = input.dataset.pk;
       if (!isOneOf(POSITION_FIELDS, k)) continue;
-      input.value = String(position[k]);
+      input.value = k === "name" ? position.name : String(toShown(position[k]));
+      if (k !== "name") input.step = inputStep();
       input.addEventListener("input", () => {
         const p = positionById(position.id);
         if (!p) return;
         if (k === "name") { if (input.value.trim()) p.name = input.value.trim(); }
         else {
-          const v = numberFrom(input.value);
-          if (v == null) return;
+          const shown = numberFrom(input.value);
+          if (shown == null) return;
+          const v = fromShown(shown);
           p[k] = k === "y" ? clamp(v, 0, 100) : clamp(v, -100, 100);
         }
         changed({ list: false, inspector: false });
@@ -194,6 +201,7 @@ function renderPositionList(force = false) {
     row.querySelector("[data-del]")?.addEventListener("click", () => deletePosition(position.id));
     // Hovering the row lights the position up in 3D and the plan, to find it.
     row.addEventListener("pointerenter", () => setHoverPosition(position.id));
+    row.addEventListener("contextmenu", (e) => { e.preventDefault(); openPositionMenu(position.id, e.clientX, e.clientY); });
     row.addEventListener("pointerleave", () => setHoverPosition(null));
     row.addEventListener("click", (e) => {
       if (e.target instanceof Element && e.target.closest("input, button")) return;
@@ -218,11 +226,11 @@ function rigSectionHtml(rig: Rig) {
       <label>Rig name</label><input type="text" data-r="name" />
       <label>Center</label>
       <div class="xyz">
-        <input type="number" step="0.1" data-r="x" title="x (− SR · + SL)" />
-        <input type="number" step="0.1" data-r="y" title="height" />
-        <input type="number" step="0.1" data-r="z" title="z (− upstage · + audience)" />
+        <input type="number" step="${inputStep()}" data-r="x" title="x (− SR · + SL)" />
+        <input type="number" step="${inputStep()}" data-r="y" title="height" />
+        <input type="number" step="${inputStep()}" data-r="z" title="z (− upstage · + audience)" />
       </div>
-      <label>${RIG_TYPES[rig.type].sizeLabel} m</label><input type="number" min="0.5" max="50" step="0.1" data-r="size" />
+      <label>${RIG_TYPES[rig.type].sizeLabel} ${lengthUnit()}</label><input type="number" min="0" step="${inputStep()}" data-r="size" />
       <label>Fixtures</label><input type="number" min="2" max="${MAX_FIXTURES}" step="1" data-r="count" />
       <label>Tilt °</label>
       <div class="slider" title="tilt: 0 = flat, 90 = upright facing the audience">
@@ -324,13 +332,13 @@ export function renderInspector() {
     ${inspectorHeading(rig ? `<span>in ${escapeHtml(rig.name)}</span>` : "")}
     <div class="fields">
       <label>Name</label><input type="text" data-k="name" />
-      <label>Position</label>
+      <label>Location</label>
       <div class="xyz">
-        <input type="number" step="0.1" data-k="x" title="x (− SR · + SL)" ${lock} />
-        <input type="number" step="0.1" data-k="y" title="height" ${lock} />
-        <input type="number" step="0.1" data-k="z" title="z (− upstage · + audience)" ${lock} />
+        <input type="number" step="${inputStep()}" data-k="x" title="x (− SR · + SL)" ${lock} />
+        <input type="number" step="${inputStep()}" data-k="y" title="height" ${lock} />
+        <input type="number" step="${inputStep()}" data-k="z" title="z (− upstage · + audience)" ${lock} />
       </div>
-      <label></label><div class="hint" style="margin:0">x · height · z (m)${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
+      <label></label><div class="hint" style="margin:0">x · height · z (${lengthUnit()})${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
 
       <div class="subhead">DMX values · 0–255</div>
       <div class="fixture-outline dmx-box" data-outline data-attrs="${inspectorAttrs(sel[0]).join(",")}">${dmxRowsHtml(inspectorAttrs(sel[0]))}
@@ -438,7 +446,7 @@ function setField(fixture: Fixture, k: FixtureField, raw: string) {
   else if (k === "zoomMin") { fixture.zoomMin = clamp(v, 1, Math.min(120, fixture.zoomMax)); deriveFromDmx(fixture); }
   else if (k === "zoomMax") { fixture.zoomMax = clamp(v, Math.max(1, fixture.zoomMin), 120); deriveFromDmx(fixture); }
   else if (isBaseField(k)) fixture.base[BASE_FIELDS[k]] = v;
-  else if (k === "x" || k === "y" || k === "z") fixture[k] = v;
+  else if (k === "x" || k === "y" || k === "z") fixture[k] = fromShown(v);
 }
 
 /** Put everything under the inspector's heading in one block, which scrolls. */
@@ -516,7 +524,9 @@ function bindInspector() {
       const rig = commonRig(selectedFixtures());
       if (!rig) return;
       const before = rig.count;
-      setRigField(rig, k, el.value);
+      // Lengths are typed in the shown unit; the rig keeps meters.
+      const shown = isLength(k) ? numberFrom(el.value) : null;
+      setRigField(rig, k, shown != null ? String(fromShown(shown)) : el.value);
       // A new member count changes the list and possibly the selection.
       if (rig.count !== before) { renderInspector(); changed(); return; }
       // Moving / turning the rig can take members inside or outside the box,
@@ -566,7 +576,7 @@ function syncRigFields(rig: Rig) {
     const k = el.dataset.r;
     if (el === document.activeElement || !isOneOf(RIG_FIELDS, k)) return;
     const v = rig[k];
-    el.value = typeof v === "number" ? String(round(v)) : v;
+    el.value = typeof v === "number" ? String(isLength(k) ? toShown(v) : round(v)) : v;
   });
 }
 
@@ -590,7 +600,7 @@ export function syncInspector() {
     const k = el.dataset.k;
     if ((el === document.activeElement && el.type !== "range") || !isOneOf(FIXTURE_FIELDS, k)) return;
     const v = getField(fixture, k);
-    el.value = typeof v === "number" ? String(round(v)) : v;
+    el.value = typeof v === "number" ? String(isLength(k) ? toShown(v) : round(v)) : v;
   });
   syncDmxRows(fixture);
   inspectorEl.querySelector<HTMLElement>("[data-rgb]")?.style.setProperty("--rgb", fixture.color);
@@ -598,12 +608,12 @@ export function syncInspector() {
   if (readout) {
     const dir = beamDir(fixture);
     const hits = axisHits(fixture, state.box);
-    const fmt = (p: Vector3) => `${round(p.x, 1)}, ${round(p.y, 1)}, ${round(p.z, 1)}`;
+    const fmt = (p: Vector3) => `${fmtNumber(p.x)}, ${fmtNumber(p.y)}, ${fmtNumber(p.z)}`;
     let html = `<div>${isInside(fixture, state.box) ? "Inside" : "<b>Outside</b>"} the box · dir ${round(dir.x)}, ${round(dir.y)}, ${round(dir.z)}</div>`;
     if (!hits.length) html += `<div>Beam axis misses the box</div>`;
     hits.forEach((h, idx) => {
       const label = hits.length > 1 ? (idx === 0 ? "Enters" : "Exits") : "Hits";
-      html += `<div>${label} <b>${h.face}</b> at ${fmt(h.point)} · ${round(h.t, 1)} m</div>`;
+      html += `<div>${label} <b>${h.face}</b> at ${fmt(h.point)} · ${fmtLength(h.t)}</div>`;
     });
     readout.innerHTML = html;
   }
@@ -662,3 +672,9 @@ export function renderHud() {
   const nameEl = hudEl.querySelector(".name");
   if (nameEl) nameEl.textContent = i.name;
 }
+
+// A new length unit (View settings): show everything in it.
+onUnitChange(() => {
+  renderInspector();
+  renderList();
+});

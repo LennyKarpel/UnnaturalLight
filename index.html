@@ -64,17 +64,17 @@
       <div class="app">
         <header>
           <h1 class="app-title"><span>Stage</span></h1>
-          <div class="group" title="Performance area size in meters">
-            <label>Box W</label><input id="boxW" type="number" min="1" max="100" step="0.5" />
-            <label>D</label><input id="boxD" type="number" min="1" max="100" step="0.5" />
-            <label>H</label><input id="boxH" type="number" min="1" max="50" step="0.5" />
-            <label>m</label>
+          <div class="group" id="boxGroup" title="Performance area size">
+            <label>Box W</label><input id="boxW" type="number" step="0.5" />
+            <label>D</label><input id="boxD" type="number" step="0.5" />
+            <label>H</label><input id="boxH" type="number" step="0.5" />
+            <label id="boxUnit">m</label>
           </div>
           <div class="spacer"></div>
           <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (P)">+ Place fixture</button>
           <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
           <button id="positionBtn" title="Put a named position on the stage (floor, wall, ceiling) to aim fixtures at">+ Position</button>
-          <button id="settingsBtn" title="View settings: transparent sides">⚙ View</button>
+          <button id="settingsBtn" title="View settings: units, transparent sides">⚙ View</button>
         </header>
 
         <div class="view" id="view">
@@ -189,6 +189,11 @@
           <h2>View settings</h2>
           <button id="settingsClose" type="button" aria-label="Close">✕</button>
         </header>
+        <section>
+          <h3>Units</h3>
+          <p class="hint">Sizes and places on the stage are shown, and typed, in this unit (this browser only).</p>
+          <div class="seg" id="unitSeg" role="group" aria-label="Units"><button type="button" data-unit="m">Meters</button><button type="button" data-unit="ft">Feet</button></div>
+        </section>
         <section>
           <h3>Transparent sides</h3>
           <p class="hint">Ticked sides are see-through, so you can see fixtures placed beyond them. Light from beams still shows on them. The floor is always solid.</p>

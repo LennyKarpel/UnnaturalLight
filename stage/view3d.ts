@@ -1,6 +1,7 @@
 // The 3D view: the box, the fixtures and their beams, and picking, placing,
 // dragging and aiming with the mouse.
 import * as THREE from "three";
+import { describeSpot, snapLength } from "./units.ts";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   MAX_FIXTURES,
@@ -19,12 +20,11 @@ import {
   type RigShape,
   type StagePosition,
   type Xyz,
-  describeSpot,
 } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, ui } from "./state.ts";
 import { runFrameStart } from "./frame.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, showPositionSpot } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, setActivePosition, setHoverPosition, openContextMenu, openPositionMenu, showPositionSpot } from "./actions.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
@@ -658,7 +658,7 @@ export const PLACE_OFFSET = 0.3;
  *   click the ground off the box  standing on the ground, outside
  */
 function placePosition(outside: boolean) {
-  const snap = (p: THREE.Vector3) => p.set(round(p.x, 1), round(p.y, 1), round(p.z, 1));
+  const snap = (p: THREE.Vector3) => p.set(snapLength(p.x), snapLength(p.y), snapLength(p.z));
   if (outside) {
     const hit = raycaster.intersectObject(boxOuter)[0];
     if (hit?.face) return snap(hit.point.clone().addScaledVector(hit.face.normal, PLACE_OFFSET));
@@ -709,10 +709,10 @@ function surfaceName(n: THREE.Vector3): string {
 
 /**
  * Where a new position would go (uses the current ray): the box surface under
- * the pointer, else the ground outside; snapped to 0.1 m, as the click puts it.
+ * the pointer, else the ground outside; snapped (0.1 m or 3 in), as the click puts it.
  */
 function positionTarget(): { p: THREE.Vector3; surface: string } | null {
-  const snap = (p: THREE.Vector3) => p.set(round(p.x, 1), round(Math.max(0, p.y), 1), round(p.z, 1));
+  const snap = (p: THREE.Vector3) => p.set(snapLength(p.x), snapLength(Math.max(0, p.y)), snapLength(p.z));
   const hit = raycaster.intersectObject(boxInner)[0];
   if (hit?.face) return { p: snap(hit.point.clone()), surface: surfaceName(hit.face.normal) };
   const g = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
@@ -785,8 +785,8 @@ view.addEventListener("pointermove", (e) => {
     if (!hit) return;
     hit.add(dragPosition.move.offset);
     // ⇧: up and down only; else level (kept near the stage at grazing angles).
-    if (e.shiftKey) position.y = round(clamp(hit.y, 0, 50), 1);
-    else { position.x = round(clamp(hit.x, -100, 100), 1); position.z = round(clamp(hit.z, -100, 100), 1); }
+    if (e.shiftKey) position.y = snapLength(clamp(hit.y, 0, 50));
+    else { position.x = snapLength(clamp(hit.x, -100, 100)); position.z = snapLength(clamp(hit.z, -100, 100)); }
     const where = position.y < 0.05 ? "Floor" : "raised";
     showPositionPreview(new THREE.Vector3(position.x, position.y, position.z), isInside(position, state.box) ? where : `${where}, outside the box`, position.name);
     changed({ list: false, inspector: false });
@@ -817,8 +817,7 @@ view.addEventListener("pointermove", (e) => {
   const hit = raycaster.ray.intersectPlane(drag3d.plane, new THREE.Vector3());
   if (!hit) return;
   hit.add(drag3d.offset);
-  const snap = e.altKey ? 0.01 : 0.1;
-  const s = (v: number) => round(Math.round(v / snap) * snap);
+  const s = (v: number) => snapLength(v, e.altKey);
   if (drag3d.vertical) {
     moveFixture(fixture, fixture.x, clamp(s(hit.y), 0, 50), fixture.z);
   } else {
@@ -849,7 +848,9 @@ view.addEventListener("contextmenu", (e) => {
   rightDownAt = null;
   if (!still || ui.placing || ui.aiming) return;
   const id = pickFixture(e);
-  if (id) openContextMenu(id, e.clientX, e.clientY);
+  if (id) { openContextMenu(id, e.clientX, e.clientY); return; }
+  const positionId = pickPosition(e);
+  if (positionId) openPositionMenu(positionId, e.clientX, e.clientY);
 }, true);
 
 view.addEventListener("pointerup", (e) => {

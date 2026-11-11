@@ -9,6 +9,7 @@ import { updateBox } from "./view3d.ts";
 import { syncBoxInputs } from "./dialogs.ts";
 import { requestRegistrations } from "./link.ts";
 import { aimAndFollow, followingOf, stopFollowing } from "./follow.ts";
+import { unitName } from "./units.ts";
 import { takeStage } from "./stage.ts";
 import { clamp } from "../shared/numbers.ts";
 import * as THREE from "three";
@@ -61,6 +62,8 @@ const stageChat = {
       })),
       positions: state.positions.map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z })),
       maxFixtures: MAX_FIXTURES,
+      /** The unit the person sees lengths in (the tools always use meters). */
+      units: unitName(),
     };
   },
 

@@ -629,14 +629,6 @@ function normalizeTransparent(saved: unknown): Transparent {
 export const MAX_POSITIONS = 100;
 export type StagePosition = { id: string; name: string; x: number; y: number; z: number };
 
-/** Where a spot is, said for people: "x 1.2 (SL) · height 0 · z 2.8 (DS)", plus the surface it's on if given. */
-export function describeSpot(p: Xyz, surface?: string | null): string {
-  const f = (v: number) => String(round(v, 1));
-  const side = (v: number, minus: string, plus: string) => (Math.abs(v) < 0.05 ? "" : ` (${v < 0 ? minus : plus})`);
-  const parts = [`x ${f(p.x)}${side(p.x, "SR", "SL")}`, `height ${f(p.y)}`, `z ${f(p.z)}${side(p.z, "US", "DS")}`];
-  return parts.join(" · ") + (surface ? ` · ${surface}` : "");
-}
-
 export function normalizePosition(saved: unknown, i: number): StagePosition {
   const raw = fields(saved);
   const num = (v: unknown) => clamp(numberFrom(v) ?? 0, -100, 100);
