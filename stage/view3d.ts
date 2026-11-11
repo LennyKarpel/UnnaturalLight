@@ -2,6 +2,7 @@
 // dragging and aiming with the mouse.
 import * as THREE from "three";
 import { describeSpot, gridStep, lengthUnit, onUnitChange, snapLength } from "./units.ts";
+import { alwaysShowNames, onNamesChange } from "./names.ts";
 
 /** Grid squares per major square: 5 in feet, 1 in meters. */
 const majorEvery = () => (lengthUnit() === "ft" ? 5 : 1);
@@ -24,14 +25,18 @@ import {
   type Xyz,
 } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
+import { rotate, type Vec } from "./rotation.ts";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
 import { RISER_DEFAULTS, RISER_MIN, RISER_MAX_H, SIZE_HANDLES, TURN_HANDLE_GAP, resizeTo, yawToward, type Riser, type RiserHandle } from "./risers.ts";
 import { runFrameStart } from "./frame.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
 import { elById } from "../shared/query.ts";
+
+/** The model's plain vectors (./rotation.ts) as three.js ones, to draw. */
+const toVector3 = (p: Vec) => new THREE.Vector3(p.x, p.y, p.z);
 
 // ---------------------------------------------------------------------
 // 3D scene
@@ -269,7 +274,7 @@ scene.add(rigGhost);
 /** Redraw a line object as the outline of a rig (or rig-like settings). */
 function setOutline(line: THREE.Line, rig: RigShape) {
   line.geometry.dispose();
-  line.geometry = new THREE.BufferGeometry().setFromPoints(rigOutline(rig));
+  line.geometry = new THREE.BufferGeometry().setFromPoints(rigOutline(rig).map(toVector3));
 }
 
 // Aim-mode preview: target marker + a line from each selected fixture.
@@ -467,6 +472,7 @@ function syncRiser(riser: Riser) {
   const on = ui.activeRiser === riser.id;
   v.edges.material.color.set(on ? 0xffffff : RISER_COLOR);
   v.label.position.set(0, riser.h + 0.08, 0);
+  v.label.visible = on || ui.hoverRiser === riser.id || alwaysShowNames();
   v.group.updateMatrixWorld();
 }
 
@@ -569,6 +575,7 @@ function syncPosition(position: StagePosition) {
   if (v.label.userData.base == null) v.label.userData.base = v.label.scale.x;
   v.label.scale.set(v.label.userData.base * labelScale, 0.32 * labelScale, 1);
   v.label.position.set(hover ? 0.3 : 0.15, hover ? 0.25 : 0.15, 0);
+  v.label.visible = on || hover || alwaysShowNames();
   const pts = v.stem.geometry.attributes.position;
   pts.setXYZ(1, 0, -position.y, 0);
   pts.needsUpdate = true;
@@ -671,10 +678,31 @@ function showPositionPreview(p: THREE.Vector3 | null, surface: string | null, mo
   showPositionSpot(text, moving);
 }
 
+/** The hovered fixture's name in 3D (fixtures have no names there otherwise). */
+let fixtureName: { sprite: THREE.Sprite; text: string } | null = null;
+
+function syncFixtureName() {
+  const fixture = state.fixtures.find((f) => f.id === ui.hoverFixture);
+  if (fixtureName && fixtureName.text !== fixture?.name) {
+    scene.remove(fixtureName.sprite);
+    disposeLabel(fixtureName.sprite);
+    fixtureName = null;
+  }
+  if (!fixture) return;
+  if (!fixtureName) {
+    fixtureName = { sprite: makeLabel(fixture.name, 0.28), text: fixture.name };
+    fixtureName.sprite.renderOrder = 11;
+    fixtureName.sprite.material.depthTest = false; // over the fixture's own body
+    scene.add(fixtureName.sprite);
+  }
+  fixtureName.sprite.position.set(fixture.x, fixture.y + 0.35, fixture.z);
+}
+
 export function syncScene() {
   requestRender();
   syncPositions();
   syncRisers();
+  syncFixtureName();
   const ids = new Set(state.fixtures.map((i) => i.id));
   for (const [id, v] of visuals) {
     if (!ids.has(id)) {
@@ -705,14 +733,15 @@ export function syncScene() {
   state.fixtures.forEach((fixture, i) => {
     const v = visuals.get(fixture.id) || makeVisual(fixture);
     const q = fullQuat(fixture);
-    const dir = FORWARD.clone().applyQuaternion(q);
+    const dir = toVector3(rotate(FORWARD, q));
     const lk = look(fixture);
     const color = new THREE.Color(lk.color);
     const sel = state.selected.includes(fixture.id);
 
     v.group.position.set(fixture.x, fixture.y, fixture.z);
-    v.aim.quaternion.copy(q);
-    v.zero.quaternion.copy(baseQuat(fixture));
+    v.aim.quaternion.set(q.x, q.y, q.z, q.w);
+    const zero = baseQuat(fixture);
+    v.zero.quaternion.set(zero.x, zero.y, zero.z, zero.w);
     v.zero.visible = sel;
     v.ring.visible = sel;
 
@@ -1063,7 +1092,9 @@ view.addEventListener("pointermove", (e) => {
       const position = fixture ? null : pickPosition(e);
       setHoverPosition(position);
       const handle = pickHandle(e);
-      const riser = handle || fixture || position || !ui.activeRiser ? null : pickRiser(e);
+      const under = handle || fixture || position ? null : pickRiser(e);
+      setHoverItem(fixture, under);
+      const riser = ui.activeRiser ? under : null;
       renderer.domElement.style.cursor = handle ? handleCursor(handle) : fixture || position || (riser && riser === ui.activeRiser) ? "grab" : "";
     }
     return;
@@ -1099,7 +1130,7 @@ view.addEventListener("dblclick", (e) => {
   if (id) selectRigOf(id);
 }, true);
 
-renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); if (!dragPosition) setHoverPosition(null); });
+renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); if (!dragPosition) setHoverPosition(null); setHoverItem(null, null); });
 
 let rightDownAt: { x: number; y: number } | null = null;
 view.addEventListener("pointerdown", (e) => {
@@ -1193,6 +1224,7 @@ view.addEventListener("pointerup", (e) => {
 }, true);
 
 // Meters or feet: the grids follow.
+onNamesChange(() => syncScene());
 onUnitChange(() => {
   scene.remove(ground);
   ground.geometry.dispose();

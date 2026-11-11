@@ -4,6 +4,7 @@ import { FADER_COUNT } from "./patch.ts";
 import { newId } from "../shared/ids.ts";
 import { isRecord } from "../shared/guards.ts";
 import { clampByte } from "../shared/numbers.ts";
+import type { StepPath } from "../shared/engine.ts";
 
 export const MAX_SONGS = 32;
 export const MIN_CUES = 2;
@@ -13,13 +14,32 @@ export const MAX_CUES = Infinity;
 export const CUE_FADE_TIMES = Array.from({ length: 21 }, (_, i) => i);
 export const DEFAULT_CUE_FADE_TIME = 4;
 
-export type Cue = {
+/** Steps a cue can have before its own look. */
+export const MAX_CUE_STEPS = 15;
+
+/**
+ * A cue's look: fader levels, and the fixtures it aims at named stage
+ * positions (see aims.ts). A cue is one; so is each of its steps.
+ */
+export type Look = { levels: number[]; aims: CueAim[] };
+
+/**
+ * A look GO passes through on the way into a cue: it fades in over
+ * `fadeTime`, stays `holdTime`, then the next step (or the cue's own look)
+ * fades in. Seconds, as CUE_FADE_TIMES.
+ */
+export type CueStep = Look & { id: string; fadeTime: number; holdTime: number };
+
+/**
+ * A cue: its own look (where GO arrives and stays), its In time, and the steps
+ * GO passes through first (none for most cues). The steps play in order, then
+ * the cue's own look fades in over `fadeTime`.
+ */
+export type Cue = Look & {
   id: string;
   name: string;
-  levels: number[];
   fadeTime: number;
-  /** Fixtures this cue aims at named stage positions (see aims.ts). */
-  aims: CueAim[];
+  steps: CueStep[];
 };
 /** In a cue: console fixture `fixture`'s pan / tilt aim at stage position `position`. */
 export type CueAim = { fixture: string; position: string };
@@ -62,6 +82,53 @@ function newCueId(): string {
   return newId("cue");
 }
 
+function newStepId(): string {
+  return newId("step");
+}
+
+const copyAims = (aims: CueAim[]) => aims.map((a) => ({ ...a }));
+const copyLevels = (levels: readonly number[] | undefined) => Array.from({ length: FADER_COUNT }, (_, i) => clampByte(levels?.[i] ?? 0));
+
+/** A new step: a copy of `look` (its levels and aims), with these times. */
+export function createStep(look: Partial<Look> = {}, fadeTime = DEFAULT_CUE_FADE_TIME, holdTime = 0): CueStep {
+  return { id: newStepId(), levels: copyLevels(look.levels), aims: copyAims(look.aims ?? []), fadeTime: normalizeCueFadeTime(fadeTime), holdTime: normalizeCueFadeTime(holdTime, 0) };
+}
+
+/** Steps as loaded: each with a unique id (among `seen`), levels, aims and times. */
+function normalizeSteps(value: unknown, seen: Set<string>): CueStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_CUE_STEPS).flatMap((raw) => {
+    if (!isRecord(raw)) return [];
+    let id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : newStepId();
+    while (seen.has(id)) id = newStepId();
+    seen.add(id);
+    const levels = Array.isArray(raw.levels) ? raw.levels : [];
+    return [{ id, levels: copyLevels(levels), aims: normalizeAims(raw.aims), fadeTime: normalizeCueFadeTime(raw.fadeTime), holdTime: normalizeCueFadeTime(raw.holdTime, 0) }];
+  });
+}
+
+/** A cue's look and its steps' looks (everything that holds levels and aims). */
+export const looksOf = (cue: Cue): Look[] => [...cue.steps, cue];
+
+/** How long GO into `cue` takes: its steps' fades and holds, then its own fade (seconds). */
+export const cueSeconds = (cue: Cue): number => cue.steps.reduce((t, s) => t + s.fadeTime + s.holdTime, 0) + cue.fadeTime;
+
+/**
+ * The look shown for a cue that's LIVE on step `step` (-1, or no such step:
+ * the cue's own look).
+ */
+export const stepLook = (cue: Cue, step: number): Look => cue.steps[step] ?? cue;
+
+/** A song's cues' levels as shown: the LIVE cue's (`fromCue`) are its step `liveStep`'s. */
+export const shownLevels = (cues: Cue[], fromCue: number, liveStep: number): number[][] => cues.map((c, r) => (r === fromCue ? stepLook(c, liveStep) : c).levels);
+
+/** `liveStep` kept to a step `cue` has (-1: its own look). */
+export const clampStep = (cue: Cue | undefined, step: number): number => (Number.isInteger(step) && step >= 0 && step < (cue?.steps.length ?? 0) ? step : -1);
+
+/** The steps a GO into `cue` passes through, for the output math (null: none). */
+export const stepPath = (cue: Cue | undefined): StepPath | null =>
+  cue?.steps.length ? { steps: cue.steps.map((s) => ({ levels: s.levels, fade: s.fadeTime, hold: s.holdTime })), fade: cue.fadeTime } : null;
+
 function blankLevels(): number[] {
   return Array.from({ length: FADER_COUNT }, () => 0);
 }
@@ -80,7 +147,8 @@ export function normalizeSongName(name: unknown, index = 0) {
   return text || defaultSongName(index);
 }
 
-function normalizeCue(value: unknown, defaultFadeTime = DEFAULT_CUE_FADE_TIME): Cue | null {
+/** A cue as loaded, its steps still to check (normalizeSteps). */
+function normalizeCue(value: unknown, defaultFadeTime = DEFAULT_CUE_FADE_TIME): (Omit<Cue, "steps"> & { steps: unknown[] }) | null {
   if (!isRecord(value)) return null;
   const obj = value;
   const id =
@@ -97,6 +165,7 @@ function normalizeCue(value: unknown, defaultFadeTime = DEFAULT_CUE_FADE_TIME): 
     levels,
     fadeTime: normalizeCueFadeTime(obj.fadeTime, defaultFadeTime),
     aims: normalizeAims(obj.aims),
+    steps: Array.isArray(obj.steps) ? (obj.steps as unknown[]) : [],
   };
 }
 
@@ -106,7 +175,7 @@ function normalizeCues(
 ): Cue[] {
   const source = Array.isArray(list) ? list : [];
   const out: Cue[] = [];
-  const seen = new Set();
+  const seen = new Set<string>();
   for (let i = 0; i < source.length && out.length < MAX_CUES; i++) {
     const raw = normalizeCue(source[i], defaultFadeTime);
     if (!raw) continue;
@@ -119,6 +188,7 @@ function normalizeCues(
       levels: raw.levels,
       fadeTime: raw.fadeTime,
       aims: raw.aims,
+      steps: normalizeSteps(raw.steps, seen),
     });
   }
   while (out.length < MIN_CUES) {
@@ -128,6 +198,7 @@ function normalizeCues(
       levels: blankLevels(),
       fadeTime: normalizeCueFadeTime(undefined, defaultFadeTime),
       aims: [],
+      steps: [],
     });
   }
   return out;
@@ -203,15 +274,20 @@ export function createSong(opts: {
   };
 }
 
-export function createCue(opts: { name?: string; levels?: number[]; fadeTime?: number; aims?: CueAim[] } = {}): Cue {
+/** A new cue; `steps` are copied (with new ids). */
+export function createCue(opts: { name?: string; levels?: number[]; fadeTime?: number; aims?: CueAim[]; steps?: CueStep[] } = {}): Cue {
   return {
     id: newCueId(),
     name: normalizeCueName(opts.name),
-    levels: Array.from({ length: FADER_COUNT }, (_, i) => clampByte(opts.levels?.[i] ?? 0)),
+    levels: copyLevels(opts.levels),
     fadeTime: normalizeCueFadeTime(opts.fadeTime),
-    aims: (opts.aims ?? []).map((a) => ({ ...a })),
+    aims: copyAims(opts.aims ?? []),
+    steps: (opts.steps ?? []).slice(0, MAX_CUE_STEPS).map((s) => createStep(s, s.fadeTime, s.holdTime)),
   };
 }
+
+/** A copy of `cue` (name, look, In time, steps) with new ids. */
+export const copyCue = (cue: Cue): Cue => createCue(cue);
 
 export function resolveActiveSong(songs: Song[], activeSongId: string | null | undefined): Song {
   // Return the song object from `songs` itself, not from a normalized copy:

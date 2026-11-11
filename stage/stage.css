@@ -36,6 +36,29 @@
   .group { display: flex; align-items: center; gap: 0.4rem; }
   .group > label { color: var(--muted); }
   .spacer { flex: 1; }
+  /* The test fade bar: centered at the top of the 3D view (the banner sits under it). */
+  .test-fade {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 0.4rem;
+    max-width: calc(100% - 24px);
+    background: rgba(18, 20, 24, 0.82);
+    border: 1px solid var(--track);
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+  .test-fade-cues { color: var(--muted); max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .test-fade-step { padding-inline: 0.5rem; }
+  .test-fade-live { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  /* A live test is on the lights: say so. */
+  .test-fade.is-live { border-color: var(--warn); }
+  .test-fade.is-live .test-fade-live { color: var(--warn); }
+  /* Fixed widths: the bar stays put while Test ⇄ Stop and the clock come and go. */
+  #testFadeBtn { min-width: 6.5em; }
+  .test-fade-clock { font-family: var(--mono); color: var(--muted); min-width: 10ch; }
+  .test-fade-clock.has-steps { min-width: 20ch; }
+  .test-fade-steps { font-family: var(--mono); color: var(--muted); border: 1px solid var(--track); border-radius: 4px; padding: 3px 8px; white-space: nowrap; }
+  .test-fade-clock.is-idle { visibility: hidden; }
+  #testFadeBtn.is-running { color: var(--warn); }
   input[type="number"], input[type="text"] {
     font-family: var(--mono);
     width: 64px;
@@ -52,7 +75,8 @@
   .view canvas { display: block; width: 100%; height: 100%; }
   .view.placing canvas { cursor: crosshair; }
   .hud {
-    position: absolute; left: 12px; top: 12px;
+    /* Under the test fade bar's row, so a narrow view doesn't overlap them. */
+    position: absolute; left: 12px; top: 56px;
     background: rgba(18, 20, 24, 0.82);
     border: 1px solid var(--track);
     border-radius: 6px;
@@ -102,7 +126,7 @@
     background: var(--panel);
   }
   .banner {
-    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
     background: var(--select); color: #021414; padding: 4px 12px; border-radius: 4px;
     font-weight: 600; pointer-events: none;
   }

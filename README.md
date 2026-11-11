@@ -54,6 +54,7 @@ The terminal runs the **show server**: it holds the show, runs the fades and sen
 | `./server.sh --fake-dmx` | pretend a DMX USB Pro is connected (the terminal prints what would be sent) |
 | `./server.sh --no-open` | don't open a browser |
 | `./server.sh --nowatch` | don't restart the server when one of its files changes (by default it restarts by itself, for development: see [For developers](#12-for-developers)). Use this for a show |
+| `UNNATURALLIGHT_DATA_DIR=/some/folder ./server.sh 9000` | keep the show, chats and DMX settings in another folder instead of `server/data` (e.g. to try something without touching your show; the browser tests do this) |
 
 If a page ever looks out of date after an update, press **⌘⇧R** (hard reload).
 
@@ -107,9 +108,10 @@ The **Chat** button in the page header opens a panel on the right where you can 
 - **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran).
 - **It does what you ask straight away**, GO included: it never asks you to confirm. Word requests carefully during a show.
 - **Resize it** by dragging its left edge (the grip in the middle marks it); double-click the edge for the default width. With the edge focused, ← / → resize it too (⇧ for bigger steps). The width is remembered.
-- **Stop** (the Send button while it's working; click it) stops it; anything it hasn't done yet isn't done (– in the chat). Enter does nothing while it's working, so it never stops a turn by surprise. **New** starts a new conversation. **Esc** closes the panel.
-- **↑ / ↓ in the message box** step back and forth through the prompts you sent before (the last 50, kept across **New** and reloads), as in a terminal; past the newest is what you were typing. In a longer prompt, ↑ works from its first line and ↓ from its last, so the arrows still move the cursor inside it.
-- The conversation is kept in this browser, so a reload doesn't lose it. App windows in the same browser share it, so use the chat in one of them at a time.
+- **Stop** (the Send button turns red while it's working; click it) stops it; anything it hasn't done yet isn't done (– in the chat). Enter does nothing while it's working, so it never stops a turn by surprise. **Esc** closes the panel.
+- **Several chats:** **New** starts a new chat; the others are kept. A chat is named after its first prompt. The name at the top of the panel (**▾**) lists your chats, most recently used first: click one to switch to it, **✎** to rename it, **✕** to delete it (it asks first; the show isn't changed). Switching waits while a request is running (Stop it first). Up to 30 chats are kept; past that the one used longest ago goes. The list is fetched fresh from the show server each time you open it.
+- **↑ / ↓ in the message box** step back and forth through the prompts you sent before (the last 50, from all chats, kept across **New** and reloads), as in a terminal; past the newest is what you were typing. In a longer prompt, ↑ works from its first line and ↓ from its last, so the arrows still move the cursor inside it.
+- **The chats are kept on the show server** (`server/data/session.chats.json`, next to the show's `session.show.json` but not part of it: **Save show** and **Load show** leave them out). Every app window, on this computer or another, sees the same chats. Each chat has its own id, so a window only ever shows that chat's own messages. A chat open in several windows keeps up in all of them as messages arrive, and a rename or delete in one shows in the others. Each window remembers which chat it had open. Don't send in the same chat from two windows at once: the last one to finish wins. The panel's width, whether it's open and the ↑ / ↓ prompts stay in this browser.
 - **Long chats are summed up:** past 20 of your prompts, the oldest 10 are summed up in a few lines (one short extra model call) and the summary takes their place: it keeps what you asked for, what was done and any names you gave things. It shows as *Earlier messages, summed up* (click to read it).
 - **A prompt that fails before anything is done** is crossed out and left out of the conversation, so typing it again means it once, not twice.
 
@@ -127,8 +129,12 @@ Start the server with `./server.sh --lan`. The terminal prints a **remote** addr
 
 - **Box W / D / H** in the header set the size of the performance area.
 - **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a rig's center and size, positions, the readout and banners, and the grids: 1 m squares, or in feet 5 ft squares with 1 ft lines between (in 3D those fade out where they'd crowd together; the plan switches to 5 ft when zoomed out). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
+- **▶ Test**, in the bar at the top of the 3D view, replays the fade into the console's LIVE cue, on the stage only: the cue before it (the previous set song's last cue when LIVE is a song's first, or dark when there's none) for a second, then the fade over the LIVE cue's **In** time. Beside it: which cues (**Cue 1 → Cue 2**), the In time (pick another to change the LIVE cue's, as its **IN** in the console does), and while it plays a clock (**hold**, then **1.2 / 4s**). The button reads **■ Stop** while it plays, to end it early. **‹ ›** on either side of the cues make the cue before or after LIVE the LIVE one, as the console's ◀ ▶ beside GO do (across set songs too): that's the cue the stage's changes go into, and the one Test fades into (so it changes the lights, like any LIVE change). The console, the other windows and the lights don't change, so it's safe during a show; at the end the stage shows the live output again. Editing a cue meanwhile doesn't change the test (it plays the cues as they were when you clicked).
+  - **Live** (a checkbox in the bar, off when the page opens) runs the test on the real lights instead: the cue before is made LIVE, and a second later GO, so the console, the other windows and the lights all do it. The bar gets a red edge while it plays. **■ Stop** puts the tested cue back LIVE at once (it ends the fade if it's running). It needs a cue before LIVE to go back to (not from dark), and the show server for the GO.
+  - **Steps.** When the LIVE cue has [steps](#songs-and-cues), the bar shows them and their total time (**3 steps · 6s**; set their times in the console) in place of the In time, and a **Step** button: it plays the test to the next step and holds there (from the start: the second on the cue before, then the fade to step 1). The clock says where it is (**step 2/3 · 2.7 / 6s**, **on step 1/3** while held). Step again for the next one; **▶ Test** plays the rest. With **Live**, Step is the console's Step.
 - The **amber line** marks the audience edge. *Stage left / right* are from the performer's point of view, facing the audience.
-- **⚙ View** opens view settings: the units (above), and tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
+- **Names:** fixtures, positions and risers are named only while you point at them (in 3D, the plan or a list) or pick them out, so a busy stage stays readable. **⚙ View → Always show names** names them all, as before (in the plan for fixtures; 3D names a fixture only while you point at it). It's remembered in this browser.
+- **⚙ View** opens view settings: the units (above), names (above), and tick which sides of the box are **transparent** (see-through, so you can see fixtures placed beyond them) or untick for solid. The floor is always solid, and the walls nearest you always stay see-through so you can look in. Beams always show where they land, even on a transparent side.
 
 ### Looking around
 
@@ -271,8 +277,9 @@ A **position** is a named spot on the stage (e.g. *DSC*, *drum riser*, *lectern*
 - **Before you click**, a violet diamond shows where the position will go (snapped as it will land: 0.1 m, or 3 inches in feet), with dotted lines through it across the stage (red: stage right to left, green: floor to ceiling, blue: upstage to downstage) and its position and surface beside it and in the banner, e.g. *x 2.4 (SL) · height 0 · z 0.4 (DS) · Floor*. The plan shows the same for its two axes.
 - The new position opens in the **Positions** tab (beside **Fixtures** above the inspector) with its name ready to type. There you can rename it, set x / height / z, **Aim** the selected fixtures at it, or delete it (✕).
 - **Move a position** by dragging it: in 3D it slides level, at the height it's at (a floor position stays on the floor, also past the walls); hold **⇧** while dragging to move it **straight up or down** (e.g. to head height over the floor spot). Let go of ⇧ mid-drag and it slides level at its new height. In the plan it moves in that view's two directions (Front / SR / SL change its height too). The same dotted lines and x / height / z show while you drag. Fixtures following it re-aim as it moves. Or type its x / height / z in the list.
-- Positions show as violet diamonds with their names, in 3D (with a dashed line down to the floor when raised) and in the plan. Click one (in 3D, the plan or the list) to pick it out.
+- Positions show as violet diamonds, in 3D (with a dashed line down to the floor when raised) and in the plan. Click one (in 3D, the plan or the list) to pick it out.
 - **Hover over a position** (in 3D, the plan, or its row in the Positions list) to light it up: it grows, gets a glow, its name gets bigger, dashed lines run to it from the fixtures following it, and the banner says where it is and how many fixtures follow it. Handy when it's lost in a beam.
+- **Delete a position:** click it to look at it (with no fixtures selected) and press `⌫` / `Delete`; **⌘Z** brings it back. `Esc` stops looking at it.
 - **Right-click a position** (in 3D, the plan or its row in the list) for its menu: **Delete position** for now. It stays lit up while the menu is open.
 
 ### Risers
@@ -289,8 +296,9 @@ A **riser** is a box standing on the stage floor: a platform, a drum riser, a de
   - Sizes snap to 0.1 m, or 3 inches in feet; hold `⌥` for 1 cm / 1 inch. The plan's Top view shows the corner, edge and turn handles; Front / SR / SL show the height one.
 - **Move a riser** by dragging it across the floor. In 3D, drag the picked-out one; pressing on any other riser still turns the view, so a big riser doesn't get in the way of looking around. In the plan any riser drags straight away (Front / SR / SL move it along their one floor direction; they don't lift it). It snaps like everything else (⌥ for fine).
 - **On top of a riser:** clicking a riser's top while placing a fixture, placing a position or aiming lands on the riser, at its height. So for "aim at the drummer", put a position on the drum riser's top (the banner says e.g. *Drum riser (top)*), ⇧-drag it up to head height, and aim fixtures at it.
-- Risers show in the plan as sand-colored outlines with their name and height: their turned footprint in Top, and floor-to-top in the other views.
-- **Right-click a riser** (in 3D, the plan or its row in the list) for **Duplicate riser** (a copy beside it, to stage left) and **Delete riser**. **⌘Z** brings back a deleted riser.
+- Risers show in the plan as sand-colored outlines, with their name and height when named (see **Names** under the stage area): their turned footprint in Top, and floor-to-top in the other views.
+- **Delete a riser:** pick it out and press `⌫` / `Delete`, or right-click it (in 3D, the plan or its row in the list) for **Delete riser**; the same menu has **Duplicate riser** (a copy beside it, to stage left). **⌘Z** brings it back.
+- A riser and fixtures aren't picked at the same time: picking out a riser deselects the fixtures, and selecting a fixture puts the riser back, so `⌫` always deletes what's highlighted. `Esc` puts a picked-out riser back.
 - Each riser stands on the floor; for levels, put risers of different heights side by side (or overlap them: the tallest one wins where they overlap).
 
 
@@ -380,6 +388,9 @@ Switch with the tabs along the top. **Drag a tab** left or right to reorder them
 - Cues are numbered by their place in the list (**Cue 1**, **Cue 2**, …) and renumber themselves when you add, remove or reorder them. Each cue also has a name, shown after its number (*Cue 3: Chorus*). Until you give it one, a dim *name* placeholder shows there. Double-click the title to edit the name; the number stays put. Clear the name to remove it.
 - One cue is **LIVE** (on stage now) and the one after it is **UP NEXT**. Their cards say so at the top right. **GO** runs the **transition** from LIVE to UP NEXT: a fade lasting UP NEXT's **In** time. When it finishes, that cue is live and the following one is up next (after a song's last cue, that's the next song in the set: see [Sets](#sets)). **Pause / Resume** a transition, or use the blend fader to crossfade by hand. The **◀ / ▶** buttons either side of GO make the previous / next cue LIVE at once, with no fade (the same as clicking that cue). They carry on across songs in the set's order: ▶ on a song's last cue goes to the next set song's first cue, ◀ on its first cue to the previous set song's last cue. They stop at the ends of the set.
 - Each cue's **In** time is the length of the transition *into* that cue: pick 0–20 s from its menu (0 = a snap).
+- **Steps.** A cue can have **steps**: looks a GO passes through on the way into it (*Build → Hit → Chorus*), up to 15. A cue's **+ Step** adds one, a copy of the look shown, to change. A cue with steps shows them as tabs (**1 · 2s**, **2 · 1s** …, the last being the cue's own look, where GO ends), **+ Step** to add another after the one shown, and the total time; a bar under them (one part per step, sized by its time) fills in as a GO runs through them. Click a tab, or its part of the bar, to make that step LIVE (no fade) and edit it: the faders below are that step's levels, and fixture aims, the stage and the chat's changes go into it too. On the LIVE cue a row shows the step being edited (**Step 1 of 3**), **‹ ›** to go to the step before or after at once (no fade, like ◀ ▶ for cues), its **Fade** (the time to fade into it from the look before) and **Hold** (how long GO stays on it before the next fades in; 0 by default), **+ Add step** (after it; on the cue's own look, before it) and **Remove step**. The cue's own look keeps the cue's **In** as its Fade. A cue's time is all its fades and holds added up; old shows load with no steps.
+  - **GO** into a cue with steps fades through each in turn, on time. The crossfader has a tick where each step arrives, and its readout says where the fade is (*45% · into step 2 of 3*).
+  - **Step** (beside GO, shown when UP NEXT has steps) fades to UP NEXT's next step and holds there (*on step 1 of 3*). **GO** (or Step again) goes on from there. GO from part way (after Step, or after moving the blend fader by hand) also goes on from where the crossfade is, rather than starting over. Making another cue or step LIVE puts the crossfade back to 0.
 - Click a cue's row to make it LIVE. Use its **⋮** menu to name, duplicate or remove it (**Duplicate** puts a copy right after it and makes the copy LIVE), **⋮⋮** to drag it (a line shows where it will land), and **+ Add cue** (at the right of the song bar) to add a new cue at the end.
 - You can have up to 32 songs.
 
@@ -528,7 +539,7 @@ If no nodes are found: check the node and this computer are on the same network 
 
 ## 8. Saving your work
 
-**Everything autosaves** as you work, on the show server (`server/data/session.json`): the console's show and the stage. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. Closing the window is safe at any moment: console edits reach the server at once, and a stage edit still waiting (stage edits are sent 0.2 s after you stop) is sent as the window closes. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
+**Everything autosaves** as you work, on the show server (`server/data/session.show.json`): the console's show and the stage. The chat panel's chats are kept next to it, in `server/data/session.chats.json`, but aren't part of the show. Closing and reopening the page, restarting the server, or opening the show in another browser or from another computer brings it all back. Closing the window is safe at any moment: console edits reach the server at once, and a stage edit still waiting (stage edits are sent 0.2 s after you stop) is sent as the window closes. (Each browser also keeps a copy of the stage, so it shows straight away; the server's copy replaces it as soon as the page connects. Edits made while the server is unreachable are sent when it's back.) Stage windows keep each other up to date, in any browser: an edit in one (placing, moving, renaming, deleting a fixture…) shows in the others within a moment, so no window's later save undoes another's work. A fixture being registered stays the job of the window that placed it. ⌘Z after a delete works in any stage window (the undo list is saved with the stage, so it also survives a reload).
 
 To keep copies, share them or move to another computer:
 
@@ -553,7 +564,7 @@ To keep copies, share them or move to another computer:
 | `F` (hold) | Flash |
 | `P` | Place fixture |
 | `Tab` / `⇧Tab` | next / previous fixture |
-| `⌫` / `Delete` | delete selected |
+| `⌫` / `Delete` | delete the picked-out riser, else the selected fixtures, else the position you're looking at |
 | `⌘Z` | undo delete |
 | `⇧⌘Z` / `⌘Y` | redo (delete again) |
 | `Esc` | close menu / cancel / clear selection |
@@ -641,7 +652,9 @@ Plain HTML / TypeScript, no build step. Every script is a `.ts` file, kept to Ty
 
 Element lookups that must succeed use `shared/query.ts` (`elById`, `$`, `must`), which throw naming the missing element instead of returning null. Saved files, `data-*` values and other outside data are read through the checks in `shared/guards.ts` (`isRecord`, `isOneOf`) rather than cast; the Open Fixture Library's JSON is the one source taken on trust (as its documented shapes). The console ↔ stage messages (`RegisterRequest`, `StageLayout`, …) are typed in `shared/console-stage.ts`, and the messages between the page and the show server in `shared/protocol.ts`, where each request has its own reply type.
 
-**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`) reading / saving shows, cues aiming at named positions (`console/aims.ts`), meters / feet (`stage/units.ts`), risers (`stage/risers.ts`), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, and a whole turn against a fake server: GO, Stop, an unknown tool). The rest of the stage's model isn't covered yet (it needs three.js, which only the browser loads).
+**Tests:** `npm test` (Node's built-in runner, no extra packages) runs `test/*.test.ts`: number fields (`numberFrom`), channel addresses, color mixing, the output math both ways (`shared/engine.ts`), cue steps (`test/steps.test.ts`: loading, a GO's timing through them, the server's Step and GO) reading / saving shows, cues aiming at named positions (`console/aims.ts`), sets (`console/sets.ts`: what's UP NEXT, running on into the next set song, reprises, loading, reordering), console fixtures' channel blocks (`console/fixtures.ts`: one universe per block, clashes, the next free block, loading), the fixture library (`stage/fixture-library.ts`: turning a library fixture's mode into a profile, which modes can be picked, upgrading saved profiles), meters / feet (`stage/units.ts`), risers (`stage/risers.ts`), the stage model (`stage/stage-model.ts`: loading and saving a stage, pan / tilt, aiming, where beams hit the box, rig layouts), and the chat (the `/chat` request checks, finding songs and fixtures, fixture roles and levels, the stage tools against a fake stage, tool search (which tools are deferred), the Anthropic adapter's messages, the server's chat store (saved by id, the oldest dropped past 30, kept in its file), and a whole turn against a fake server: GO, Stop, an unknown tool). The stage model does its 3D math without three.js (`stage/rotation.ts`), so Node runs it. `test/stage-cases.ts` lists a range of fixtures and rigs, and `test/data/stage-geometry.json` holds what the three.js-based version computed for them (recorded in the browser); the model must match it to within 1e-9. Only the drawing (`view3d.ts`, `plan.ts`) isn't covered.
+
+**Browser tests:** `npm run test:browser` runs the app in a headless Chrome (`test/browser/`, about 6 s): it starts its own show server on a free port with a temporary data folder (`UNNATURALLIGHT_DATA_DIR`), so your show and chats are never touched, and opens app windows that it drives with real key presses and clicks over Chrome's DevTools protocol (with the repo's `ws`; no extra packages). They check: the app starts without errors; Delete removes the picked-out riser and ⌘Z brings it back, in the other window too; Delete removes the position being looked at; a new window gets the saved stage; a chat renamed in one window is renamed in another and saved on the server; a chat request that fails is crossed out; the 3D view's **▶ Test** shows the right cues, takes a new In time, plays (hold, fade, back to live) and stops, and its ‹ › step LIVE; steps: one added in the console, ‹ › and the step bars picking them, the 3D bar's Step holding on one and Test playing the rest, the console's Step holding and GO going on; a **Live** test steps back a cue and GOes, in the console too; and no window logs an error. Chrome is `$CHROME_PATH` or the usual install; without it the tests are skipped. The chat is pointed at a provider that doesn't exist, so the tests never call a model.
 
 The console and the stage are one app: anything both use (and the page header, or the server) lives in `shared/`, so there's one copy of it.
 
@@ -649,7 +662,8 @@ The console and the stage are one app: anything both use (and the page header, o
 |---|---|
 | `index.html` | The app — the only page: the stage's and the console's markup in two panes, the Console / Both / Stage switch, ⇄ swap, divider, the header with the console's show name, show buttons, DMX outputs and status (it calls `consoleHeader` in `console/app.ts`), and the import map for three.js |
 | `page/page.ts`, `page.css` | The app's header, panes, show menu and DMX output menu, and their styles |
-| `page/chat/panel.ts`, `chat.css` | The chat panel: the conversation (kept in localStorage), tool lines, Stop, Undo, the resize divider |
+| `page/chat/panel.ts`, `chat.css` | The chat panel: the chats (▾ list, New, rename, delete), the conversation, tool lines, Stop, Undo, the resize divider |
+| `page/chat/store.ts` | The chats on the show server: load, save (debounced), delete, and hear other windows' changes (server-sent events) |
 | `page/chat/loop.ts` | One chat turn: POST `/chat`, stream the reply, run the tools it calls, send the results back, repeat |
 | `page/chat/tools.ts` | The chat's tools (playback, cues and songs, fixtures; which are deferred for tool search): name, description, JSON Schema, and what each runs (through `window.consoleChat`, `console/app.ts`) |
 | `page/chat/stage-tools.ts` | The chat's stage tools (place, move, aim and follow, rigs, named positions, risers, box), through `window.stageChat` |
@@ -657,13 +671,15 @@ The console and the stage are one app: anything both use (and the page header, o
 | `server.sh` | Starts the show server (installs dependencies first if needed) |
 | `server/server.ts` | Show server: serves the app, WebSocket at `/ws`, the chat at `/chat`, 40 Hz fade / DMX loop, saving |
 | `server/chat/chat.ts` | `POST /chat`: checks the request, asks the model, streams the reply; the system prompt. `POST /chat/summary`: sums up older messages |
+| `server/chat/chats.ts` | `/chat/chats`: keeps the chats in `server/data/session.chats.json`; GET all, PUT / DELETE one by id, and `/chat/chats/events` tells every other window as each changes |
 | `server/chat/model.ts` | The `ChatModel` interface and picking the provider / model from the environment |
 | `server/chat/anthropic.ts` | The Anthropic (Claude) adapter |
 | `server/show.ts` | The show as the server holds it: songs and sets, live mix, timed fades (GO runs on into the next set song), held flash / blackout |
 | `server/dmx.ts` | Enttec DMX USB Pro output over USB serial (one universe per device, remembered by serial number); one frame in flight per device, so a slow link drops frames instead of falling behind |
 | `server/net-dmx.ts` | Art-Net and sACN output over UDP (kept in `server/data/network.json`), Art-Net node search, sACN stream-terminated on stop |
-| `test/` | `npm test`: unit tests for the shared logic (see above) |
-| `server/data/` | `session.json` (the show, with the stage under `stage`; readable JSON, with each list of numbers, like a cue's 256 levels, on one line), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional); not in git |
+| `server/files.ts` | Reading and writing the data files in `server/data/` (readable JSON, written to a temporary file and then put in place, so a crash never leaves half a file) |
+| `test/` | `npm test`: unit tests for the shared logic (see above). `test/browser/`: `npm run test:browser`, the app in a headless Chrome (`harness.ts` starts the server and Chrome; `app.test.ts` the tests) |
+| `server/data/` | `session.show.json` (the show, with the stage under `stage`; readable JSON, with each list of numbers, like a cue's 256 levels, on one line), `dmx.json` (which device is on which universe) and `network.json` (Art-Net / sACN outputs, optional), and `session.chats.json` (the chat panel's chats; not part of the show); not in git. A `session.json` from before is renamed `session.show.json` when the server starts |
 | `console/styles.css` | Console styles, scoped to its pane (`:where(#consolePane)`; breakpoints are container queries on the pane) |
 | `console/app.ts` | Starts the console and wires its controls; show new / load / save, universes and DMX outputs, fixtures placed on the stage, the page header's hooks (`consoleHeader`), the chat's hooks (`consoleChat`), the show-server link |
 | `console/state.ts` | The console's state (the show being worked on, the active set and song, the song's cues, status), shared by its modules |
@@ -673,7 +689,7 @@ The console and the stage are one app: anything both use (and the page header, o
 | `console/show-tab.ts` | Show tab: the song list |
 | `console/set-bar.ts` | Run tab set bar: the song playing, *song 3 of 12*, ◀ / ▶, the running order |
 | `console/set-tab.ts` | Set tab: building sets by drag and drop, picking the active set |
-| `console/cues.ts` | Run tab: the cue rows with their menus |
+| `console/cues.ts` | Run tab: the cue rows with their menus, and their steps (tabs, timeline, the LIVE cue's step row) |
 | `console/patch-tab.ts`, `fixtures-tab.ts` | Patch and Fixtures tabs (and the channel / count / group pickers) |
 | `console/nav.ts` | Tabs: show name, tab order, routing |
 | `console/server-link.ts` | Console side of the show-server link |
@@ -693,20 +709,23 @@ The console and the stage are one app: anything both use (and the page header, o
 | `stage/dialogs.ts` | Box size, View settings, Place rig and Place fixture dialogs |
 | `stage/units.ts` | Meters or feet: converting what's shown and typed (the data stays in meters), snapping steps, saying where a spot is |
 | `stage/link.ts` | Linking stage fixtures to console fixtures and channels, and registering them in the console |
-| `stage/stage-model.ts` | Fixture, rig and named position data, DMX values ↔ angles / color / beam, aiming math, save format |
+| `stage/stage-model.ts` | Fixture, rig and named position data, DMX values ↔ angles / color / beam, aiming math, save format; no three.js, so `npm test` covers it |
+| `stage/rotation.ts` | The model's 3D math: plain vectors, rotations (quaternions) and yaw / pitch / roll (three.js's formulas, order YXZ); `view3d.ts` turns them into three.js objects to draw |
 | `stage/risers.ts` | Riser data and math (footprint, corners, what stands where); no three.js, so `npm test` covers it |
 | `stage/console-link.ts` | Stage side of its link with the console |
+| `stage/names.ts` | Whether fixture, position and riser names always show, or only on hover / pick (⚙ View, this browser) |
+| `stage/test-fade.ts` | The 3D view's **▶ Test** bar: its cues, In time (or steps), Step and clock (the console plays the test, in `console/stage-link.ts`) |
 | `stage/follow.ts` | Fixtures following named positions: aiming, re-aiming when a position or fixture moves (here and in the console's cues), what each one follows |
 | `stage/show-link.ts` | Stage side of the show-server link: keeps the stage with the show |
 | `stage/fixture-library.ts` | Open Fixture Library browsing, picker, fixture mode → channel profile |
-| `shared/json.ts` | Readable JSON for `session.json` and saved show files (indented; lists of numbers on one line) |
-| `shared/engine.ts` | Output math (crossfade / master mix, HTP per channel, fade ease) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
+| `shared/json.ts` | Readable JSON for `session.show.json` and saved show files (indented; lists of numbers on one line) |
+| `shared/engine.ts` | Output math (crossfade / master mix, through a cue's steps, HTP per channel, fade ease and timing) and the reverse (the fader levels that give a channel a value, for the stage), used by the console and the server |
 | `shared/trace.ts` | The ⌥-click trace card (one, shared by the console and the stage; each registers what it knows) |
 | `shared/pan-tilt-pad.ts` | The ✥ pan / tilt pad (hold and move the mouse), used under the console's pan / tilt faders and in the stage inspector |
 | `shared/color-picker.ts` | The color picker (wheel, swatches, R/G/B; one, shared by the console and the stage) in place of the browser's |
 | `shared/theme.css` | The look of the whole app: colors, fonts and type scale (`--text-2xs` … `--text-2xl`, used for every font size), title bars, thin scrollbars (`.thin-scroll`), and the styles of the shared dialog, color picker and trace card; loaded by the app page |
 | `shared/ask.ts` | The confirm / name dialog (new show, new song, remove …), used by the console and the page header |
-| `shared/server-socket.ts` | The window's one WebSocket to the show server (token, reconnecting), shared by the console and the stage |
+| `shared/server-socket.ts` | The window's one WebSocket to the show server (token, reconnecting), shared by the console and the stage; keeps the server's `hello` current and hands it to a side that starts listening late |
 | `shared/console-stage.ts` | The console ↔ stage link inside the page: what each side may call on the other |
 | `shared/panes.ts` | Which pane you're working in (the stage's keys only act there) |
 | `shared/live-fields.ts` | Which show fields change while playing, used by the server and the console |
@@ -722,18 +741,44 @@ The console and the stage are one app: anything both use (and the page header, o
 ### How it all talks
 
 ```
-   browser (this computer or another one)            show computer
-  ┌──────────────────────────────────────┐        ┌──────────────────────────┐
-  │  the app (one page)                  │  /ws   │  show server             │
-  │    console ──┐   ┌── one connection ─┼◀──────▶│  (server/server.ts)      │    USB    ┌───────────────┐
-  │              │ in-page link          │        │   · holds the show       │──────────▶│ DMX USB Pro   │──▶ lights
-  │    stage   ◀─┘   │  (both use it)    │        │   · runs fades, 40 Hz    │  (one per │ (per universe)│
-  │                                      │        │   · saves session.json   │  universe)└───────────────┘
-  │                                      │        └──────────────────────────┘
-  └──────────────────────────────────────┘
+   browser (this computer or another one)               show computer
+  ┌───────────────────────────────────────┐          ┌───────────────────────────────┐
+  │  the app (one page)                   │   /ws    │  show server                  │   USB serial  ┌──────────────┐
+  │    console ──┐   ┌── one WebSocket ───┼◀────────▶│  (server/server.ts)           │──────────────▶│ DMX USB Pro  │──▶ lights
+  │              │ in-page link           │          │   · holds the show + stage    │ (per universe)└──────────────┘
+  │    stage   ◀─┘   │  (both use it)     │          │   · runs fades, 40 Hz         │
+  │                                       │  HTTP    │   · saves session.show.json   │   UDP         ┌──────────────┐
+  │    chat panel ────────────────────────┼─────────▶│   · /chat: asks the model     │──────────────▶│ Art-Net /    │──▶ lights
+  │      POST /chat, /chat/summary        │◀─────────│   · /chat/chats: the chats    │ (per universe)│ sACN nodes   │
+  │      /chat/chats (+ events stream)    │          │     (session.chats.json)      │               └──────────────┘
+  └───────────────────────────────────────┘          └───────────────┬───────────────┘
+                                                                     │ HTTPS (only /chat)
+                                                                     ▼
+                                                              model provider
 ```
 
-There are three links; the first two share the window's one WebSocket (`shared/server-socket.ts`), and each side ignores the other's messages. The **show server** is the one that counts: it holds the show, runs the fades and drives the DMX interfaces, so closing or backgrounding a browser tab never affects the lights. Every app window is a view of it, and windows keep each other in step only through it.
+#### Every connection at a glance
+
+| # | Between | How | What travels | Code |
+|---|---|---|---|---|
+| 1 | browser → server | HTTP GET | the app's files (`index.html`, `page/`, `console/`, `stage/`, `shared/`; `.ts` with types stripped), never cached | `server/server.ts` (the HTTP handler, `stripped`) |
+| 2 | console ↔ server | WebSocket `/ws` | the show, live mix, fader edits, GO / pause / stop, flash / blackout holds, DMX requests and status | `console/server-link.ts` |
+| 3 | stage ↔ server | the same WebSocket | the whole stage after each edit; the stage for **Save show** / from **Load show** | `stage/show-link.ts` |
+| 4 | console ↔ stage | function calls in the page | output levels, fixtures, aims → stage; set channel, register, select, aim → console | `shared/console-stage.ts` |
+| 5 | chat panel → server | HTTP POST `/chat` | the conversation and tool list; the reply streams back (one JSON event per line) | `page/chat/loop.ts`, `server/chat/chat.ts` |
+| 6 | chat panel → server | HTTP POST `/chat/summary` | older messages to sum up; a short summary back | same |
+| 7 | chat panel ↔ server | HTTP GET / PUT / DELETE `/chat/chats` | the chats: all of them, or one by id | `page/chat/store.ts`, `server/chat/chats.ts` |
+| 8 | server → chat panels | server-sent events `/chat/chats/events` | each chat saved or deleted by another window | same |
+| 9 | server → model provider | HTTPS | a chat turn or summary (only the server holds the API key) | `server/chat/model.ts`, `anthropic.ts` |
+| 10 | server → DMX USB Pro | USB serial (57600 baud, Enttec Pro packets) | 512 levels per universe, 40 times a second | `server/dmx.ts` |
+| 11 | server → network nodes | UDP: Art-Net (port 6454, broadcast or a node's address) or sACN (port 5568, multicast) | the same 512 levels; Art-Net polls find nodes | `server/net-dmx.ts` |
+
+- **The chat's tools don't use links 5–9 to change anything.** They run in the page and call the console and stage (`window.consoleChat`, `window.stageChat`), so their edits travel over links 2 and 3 like a click's.
+- **Each kind of state has one owner.** The show, live mix and stage belong to the server (links 2, 3). The chats also belong to the server (7, 8) but are a separate file. Each browser keeps only conveniences: a copy of the show and stage so the page opens at once, the layout, the chat panel's width and which chat is open.
+- **From another computer**, links 2, 3 and 5–8 need the token (see [Other computers](#other-computers)); the app's files (1) don't.
+- **The server never starts a conversation with a browser**, apart from answering on links that the page opened (the WebSocket and the events stream). A window's console and stage share its one WebSocket; the stage often starts listening after the server's `hello` (it waits for three.js to load), so `shared/server-socket.ts` keeps that `hello` up to date with later messages and hands it to the stage when it joins. Pages reconnect by themselves when it restarts: the WebSocket every second; the events stream through the browser's `EventSource`, after which the panel reloads the chats in case it missed a change.
+
+Links 2–4 are described below (2 and 3 share the window's one WebSocket, `shared/server-socket.ts`, and each side ignores the other's messages); the chat's links (5–9) are under [The chat server](#the-chat-server). The **show server** is the one that counts: it holds the show, runs the fades and drives the DMX interfaces, so closing or backgrounding a browser tab never affects the lights. Every app window is a view of it, and windows keep each other in step only through it.
 
 #### 1. Console ↔ show server (WebSocket `/ws`)
 
@@ -760,7 +805,7 @@ There are three links; the first two share the window's one WebSocket (`shared/s
 
 `console/stage-link.ts` ↔ `stage/console-link.ts`, over `shared/console-stage.ts`. The console and the stage are one page, so this link is always there: there's no "console offline", no tab to reopen, and nothing between browser tabs. Each app window has its own console and stage; other windows follow through the show server (links 1 and 2). Each side joins the link with the functions the other may call; a call runs as soon as the caller's current update is done.
 
-- **Console → stage: `levels`.** Output levels for every universe (whole numbers, as DMX sends them, plus `exact`: the same unrounded, which the stage draws so a fade brightens smoothly rather than in DMX's whole steps; the fixtures' DMX values stay whole), which faders feed each channel, the console's fixtures, and the cues' aims at named positions (every one in the show, and those in the cue on the output). It's called on every output change, and when the stage starts (its `hello`).
+- **Console → stage: `levels`.** Output levels for every universe (whole numbers, as DMX sends them, plus `exact`: the same unrounded, which the stage draws so a fade brightens smoothly rather than in DMX's whole steps; the fixtures' DMX values stay whole), which faders feed each channel, the console's fixtures, and the cues' aims at named positions (every one in the show, and those in the cue on the output). It's called on every output change, and when the stage starts (its `hello`). It also carries `test`: the 3D view's test fade (the cue names, the LIVE cue's time (In, or with steps all its fades and holds) and number of looks (`steps`: its steps and its own), whether there's a cue before and after LIVE for ‹ ›, and while one plays, whether it's holding, how far into the fade it is, held on a step (`held`), and which step). While a test plays, the levels are the test's, sent each frame, and stage changes to channels (`set`) are ignored.
 - **Stage → console:**
 
   | Call | What |
@@ -771,6 +816,10 @@ There are three links; the first two share the window's one WebSocket (`shared/s
   | `select` | which fixtures are selected, so the console highlights them |
   | `aim` | aim console fixtures at a named position (their pan / tilt values) in the cue(s) on the output, which remember it; position `null` forgets it |
   | `reaim` | a position or fixture moved: each cue that aims that fixture at that position and still has the old pan / tilt (`from`) gets the new ones (`to`) |
+  | `testFade` | play (`true`) or stop (`false`) the 3D view's test fade; `live`: on the lights too (the cue before is made LIVE, then GO) |
+  | `setTestFade` | set the LIVE cue's In time (seconds), as the console's **IN** does (saved, and sent to the server) |
+  | `testStep` | the test bar's **Step**: play the test to the LIVE cue's next step and hold there (from the start: the hold, then the fade to step 1); `live`: on the lights too (the console's Step) |
+  | `stepCue` | make the cue before (`-1`) or after (`1`) LIVE the LIVE one (the test bar's **‹ ›**), as the console's ◀ ▶ beside GO do |
 
 - **Hello.** Whichever side starts second gets the other's state at once: the stage's `hello` gets the console's levels, the console's `hello` gets the stage's layouts.
 - **Registering once.** A fixture another window placed (it arrives with the stage from the server, still waiting to register) is left to that window, so it isn't registered twice. If that window closes first, this one registers it after 5 s.
@@ -797,10 +846,11 @@ Every message is one JSON object with a `type`. Fader indexes are 0-based (0 = F
 |---|---|---|
 | `seed` | `show` | the `hello` had no show: this console's show becomes the show (ignored if the server already has one) |
 | `show` | `show` | the show's structure changed (anything but the live fields and fader levels): the whole show; the server keeps its own live fields |
-| `levels` | `cells`: `[cueId, fader, level]` triples | fader cells changed (sent at most once per tick, only the cells that changed) |
+| `levels` | `cells`: `[cueId, fader, level]` triples; the id can be a cue step's | fader cells changed (sent at most once per tick, only the cells that changed) |
 | `live` | `live`: only the [live fields](#the-live-object) that changed | master, submasters, crossfade, LIVE or selected cue moved |
 | `hold` | `flashing`, `blackedOut`: fader indexes this console holds | a flash / blackout button pressed or let go |
-| `go` / `pause` / `stop` | none | GO (fade from the selected cue to UP NEXT); pause / resume the running fade; stop it (a hand move on the crossfade, picking a cue or song, a new or loaded show) |
+| `step` | none | **Step**: fade to UP NEXT's next step and hold there (no steps left: like GO) |
+| `go` / `pause` / `stop` | none | GO (fade from the selected cue to UP NEXT, from where the crossfade is; on a paused fade, resume it); pause / resume the running fade; stop it (a hand move on the crossfade, picking a cue or song, a new or loaded show) |
 | `stage` | `stage` (the [stage object](#other-details)), `file: true` | a show file with a stage was loaded: the server keeps it and passes it to every window's stage, this one's too |
 | `get-stage` | `id` | **Save show**: asks for the stage to put in the file |
 | `dmx-connect` / `dmx-disconnect` | `id`, `universe` (1–8) | **DMX USB Pro → Connect / Disconnect** |
@@ -826,6 +876,7 @@ What changes while playing (`show.live()` in `server/show.ts`; the field lists a
 | `cross` | crossfade, 0 (all LIVE) – 100 (all UP NEXT) |
 | `fromCue` | the LIVE cue (index in the active song) |
 | `selectedCue` | the selected cue (GO fades from it) |
+| `liveStep` | the LIVE cue's step shown and edited (an index into its `steps`), or -1 for the cue's own look |
 | `fade` | `null`, or `{ paused }` while a transition runs (server → console only) |
 | `flashing`, `blackedOut` | fader indexes held by any console (server → console only) |
 
@@ -840,12 +891,12 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 | `showName` | the show's name |
 | `navOrder` | the console's tab order (`show`, `set`, `run`, `channels`, `fixtures`, `patch`); unknown names are dropped, and a missing tab goes in at its default place (after the tab before it in that list) |
 | `universes` | 1–8 |
-| `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime, aims }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s; `aims` is `[{ fixture, position }]`: console fixtures whose pan / tilt in this cue aim at a named stage position (by id) |
+| `songs` | `[{ id, name, cues: [{ id, name, levels, fadeTime, aims, steps }] }]`: `levels` is 256 fader values (0–255); `fadeTime` is the cue's **In** time, 0–20 s (with steps: the fade from the last step into its own look); `steps` is `[{ id, levels, aims, fadeTime, holdTime }]`, the looks a GO passes through first (ids are unique across cues and steps); `aims` is `[{ fixture, position }]`: console fixtures whose pan / tilt in this cue aim at a named stage position (by id) |
 | `activeSongId` | the song playing |
 | `sets` | `[{ id, name, entries: [{ id, songId }] }]`: each entry points at a song; a song can appear more than once |
 | `activeSetId` | the set the Run tab runs |
 | `activeEntryId` | the entry playing in that set, or `null` (a song played from outside it) |
-| `master`, `cross`, `fromSub`, `toSub`, `fromCue`, `selectedCue` | the [live fields](#the-live-object) as last saved |
+| `master`, `cross`, `fromSub`, `toSub`, `fromCue`, `selectedCue`, `liveStep` | the [live fields](#the-live-object) as last saved |
 | `faderNames` | 256 names |
 | `patch` | 256 lists of `{ channel, max }`: the channels each fader drives, and the level (0–255) a full fader sends |
 | `fixtureGroups` | `[{ id, name }]` |
@@ -857,15 +908,15 @@ What the console saves and the server holds (`serializeShow` / `parseShow` in `c
 
 #### DMX output
 
-Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved (during a fade, `live.fade` carries its start, target, length and time elapsed: between these updates, which arrive unevenly, each console works the crossfade out itself every screen frame for what it shows, so the stage view fades smoothly; only the server's value is synced back), and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.ts`) and its network output (`server/net-dmx.ts`; a packet only when the frame changed, or after 1 s). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.json` half a second after a change.
+Every 25 ms (40 Hz) the server steps any running fade, sends `live` to the consoles if something moved (during a fade, `live.fade` carries its start, target, length and time elapsed: between these updates, which arrive unevenly, each console works the crossfade out itself every screen frame for what it shows, so the stage view fades smoothly; only the server's value is synced back), and writes the 512 levels of each universe to its DMX USB Pro (`server/dmx.ts`) and its network output (`server/net-dmx.ts`; a packet only when the frame changed, or after 1 s). Only one frame is in flight per device, so a slow device never builds up a backlog. Each universe remembers its device's serial number (`server/data/dmx.json`); after an unplug or a restart the same device comes back on the same universe (missing devices are looked for every 2 s). The show is saved to `server/data/session.show.json` half a second after a change.
 
 #### Other computers
 
-By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket or `/chat` request from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the app with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before the app starts, and the console and the stage read it from there.
+By default the server listens only on this computer (`127.0.0.1`). With `--lan` it listens on the network and prints a **token** (new each start). A WebSocket, `/chat`, `/chat/summary` or `/chat/chats` request (the events stream included) from another computer without the right `?token=` is refused (403); pages are served without it. The printed remote address is the app with `?token=…`; it keeps the token for that browser tab (session storage, `unnaturallight.token`) before the app starts, and the console and the stage read it from there.
 
 #### The chat server
 
-The chat panel (`page/chat/`) runs its tools **in the page**: they call the console's own functions (`window.consoleChat`), so the chat's changes reach the show server and other windows the same way a click does, and the page never talks to a model provider. The show server's `POST /chat` (`server/chat/`) only asks the model and holds the credentials:
+The chat panel (`page/chat/`) runs its tools **in the page**: they call the console's own functions (`window.consoleChat`), so the chat's changes reach the show server and other windows the same way a click does, and the page never talks to a model provider. The show server's `POST /chat` (`server/chat/`) only asks the model and holds the credentials; `/chat/chats` keeps the chats (below):
 
 ```
 chat panel ──conversation + tool list──▶ POST /chat ──▶ model provider
@@ -889,6 +940,7 @@ page runs the tools → sends the results in the next POST → repeat
 - **No confirming:** tools run as soon as the model calls them; the panel's **Undo** is the safety net instead. Before each prompt it takes `consoleChat.editSnapshot()` (the show as saved, minus playback and live fields) and `stageChat.editSnapshot()` (the stage as saved, minus the values linked fixtures take from the console, which change with playback) and, if the turn changed them, offers `restoreEdits(before)` for each that changed (the show first: it has the console fixtures the stage's fixtures link to), only while the snapshots still equal the ones after the turn.
 - **Tool search:** a tool is `deferred` unless it's playback (`TOOLS` in `page/chat/tools.ts`). The Anthropic adapter (`toApiTools`) declares deferred tools with `defer_loading` and adds the API's tool search tool, so each request carries the few playback tools in full and the model looks up the rest (cue editing, fixtures, the stage) when a request needs them. That keeps requests small as tools are added, and keeps the model choosing well among many. A reply the API pauses in its own tool loop (`pause_turn`) is resumed in the same call. Another provider's adapter can ignore `deferred` and send every tool. A call that Stop prevented still gets a result (an error the model reads), so the conversation stays valid to send.
 - **Long chats:** past 20 prompts the panel sends the oldest 10 (and any earlier summary) to `POST /chat/summary`, which has the model sum them up in plain text (`transcript` and `SUMMARY_PROMPT` in `server/chat/chat.ts`, no tools); the summary replaces them as a `summary` message at the start (to Claude: a user message marked as a summary). It runs in the background after a turn, and only if those messages are still there unchanged. If summing up keeps failing, the oldest prompts are dropped past 40. A prompt whose turn failed or was stopped before anything was done is taken back out of the conversation.
+- **Chats on the server:** `GET /chat/chats` (all), `PUT` / `DELETE /chat/chats/<id>` (one, a `SavedChat` in `shared/chat-protocol.ts`), and `GET /chat/chats/events` (server-sent events: a `ChatChange` for each save or delete, to every window but the one that made it, by its `?window=` id). The page saves a chat 0.4 s after it changes, and once more as the window closes. Up to 30 are kept (the one used longest ago goes). They need the same `?token=` as `/chat` from another computer. Chats this browser kept before they moved to the server are sent up once and dropped from the browser.
 - **Saved conversations are repaired** on load and before each turn (`repairHistory` in `page/chat/loop.ts`): a reload or server restart mid-turn can leave a tool call without a result, which the API refuses, so it gets a *not run* result.
 - **Adding a tool:** add it to `TOOLS` in `page/chat/tools.ts` (stage tools: `page/chat/stage-tools.ts`), and a hook in `consoleChat` (`console/app.ts`) or `stageChat` (`stage/chat-hooks.ts`) if it needs one. It's deferred (found by tool search) unless it's in the playback list. Nothing on the server changes.
 
@@ -898,6 +950,6 @@ page runs the tools → sends the results in the next POST → repeat
 
 **Fixture library.** The Open Fixture Library API only accepts requests from its own site and `http://localhost:8080`; from other addresses the stage reads the library's files on GitHub instead (same data; list names from file names; GitHub limits that to about 60 manufacturer lookups an hour, cached).
 
-**Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. App layout: `unnaturallight.shell`. Console tab last open: `unnaturallight.console.tab`.
+**Browser storage.** Console show (a local copy; the server's is the one that counts): `unnaturallight.session`. Remote token: `unnaturallight.token` (session storage). Stage: `unnaturallight.stage`. App layout: `unnaturallight.shell`. Chat panel (open, width, which chat, ↑ / ↓ prompts; the chats themselves are on the server): `unnaturallight.chat`. Console tab last open: `unnaturallight.console.tab`.
 
-**Stage (`stage` in the show file and `session.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe), `positions` (`id`, `name`, `x`, `y`, `z`), `risers` (`id`, `name`, center `x` / `z`, `w` / `d` / `h` in m, `yaw` in degrees; a stage saved before risers has none) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).
+**Stage (`stage` in the show file and `session.show.json`).** `box` (`w`, `d`, `h` in m), `transparent` (per side), `rigs` (type, center, yaw, tilt, size, count, console type, fixture, universe), `positions` (`id`, `name`, `x`, `y`, `z`), `risers` (`id`, `name`, center `x` / `z`, `w` / `d` / `h` in m, `yaw` in degrees; a stage saved before risers has none) and `fixtures`. Each fixture has its position, `base` (zero frame: yaw / pitch / roll), `dmx` (the 0–255 values), `panLimit` / `tiltLimit` / `zoomMin` / `zoomMax`, `rigId` / `rigIndex`, and `link`: `consoleId`, `start` channel, `layout` (attribute per channel), `owned` (the stage registered it), `type`, `register` (waiting to register), `universe`, and `fixture` (the picked fixture mode's channels and ranges).

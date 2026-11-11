@@ -34,7 +34,7 @@ The stage: a 3D box with the fixtures placed in it (meters, origin at the floor'
 
 Do what's asked straight away — don't ask for confirmation first (the person can undo a request's edits with the Undo button in the chat). If no tool can do what's asked, say so plainly.`;
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+export function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];
@@ -54,7 +54,7 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 
 const isTool = (t: unknown): t is ChatTool =>
   isRecord(t) && typeof t.name === "string" && typeof t.description === "string" && isRecord(t.schema) && (t.deferred == null || typeof t.deferred === "boolean");
-const isMessage = (m: unknown): m is ChatMessage =>
+export const isMessage = (m: unknown): m is ChatMessage =>
   isRecord(m) &&
   (((m.role === "user" || m.role === "summary") && typeof m.text === "string") ||
     (m.role === "assistant" && typeof m.text === "string" && Array.isArray(m.toolCalls)) ||

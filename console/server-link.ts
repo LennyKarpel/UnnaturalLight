@@ -54,11 +54,12 @@ function structureKey(show: ShowData): string {
   return JSON.stringify(rest, (key, value) => (key === "levels" ? undefined : value));
 }
 
-/** cue id → copy of its levels */
+/** Every cue and step in the show, with its id (level edits are sent by it). */
+const looksById = (show: ShowData) => show.songs.flatMap((song) => song.cues.flatMap((t) => [t, ...t.steps]));
+
+/** cue or step id → copy of its levels */
 function levelsById(show: ShowData): Map<string, number[]> {
-  const map = new Map<string, number[]>();
-  for (const song of show.songs) for (const t of song.cues) map.set(t.id, [...t.levels]);
-  return map;
+  return new Map(looksById(show).map((t) => [t.id, [...t.levels]]));
 }
 
 const holdsKey = (flashing: Set<number>, blackedOut: Set<number>) => `${[...flashing].sort((a, b) => a - b)}|${[...blackedOut].sort((a, b) => a - b)}`;
@@ -117,16 +118,14 @@ export function createServerLink(api: ServerLinkApi) {
       agreed.levels = levelsById(v.show);
     } else {
       const cells: LevelCell[] = [];
-      for (const song of v.show.songs) {
-        for (const t of song.cues) {
-          const was = agreed.levels.get(t.id);
-          if (!was) continue;
-          for (let i = 0; i < t.levels.length; i++) {
-            if (t.levels[i] === was[i]) continue;
-            cells.push([t.id, i, t.levels[i]]);
-            was[i] = t.levels[i];
-            touch(`${t.id}:${i}`);
-          }
+      for (const t of looksById(v.show)) {
+        const was = agreed.levels.get(t.id);
+        if (!was) continue;
+        for (let i = 0; i < t.levels.length; i++) {
+          if (t.levels[i] === was[i]) continue;
+          cells.push([t.id, i, t.levels[i]]);
+          was[i] = t.levels[i];
+          touch(`${t.id}:${i}`);
         }
       }
       if (cells.length) send({ type: "levels", cells });
@@ -217,7 +216,7 @@ export function createServerLink(api: ServerLinkApi) {
     },
     /** Send pending changes now (before a command that depends on them). */
     flush,
-    command(type: "go" | "pause" | "stop") {
+    command(type: "go" | "step" | "pause" | "stop") {
       flush();
       send({ type });
     },

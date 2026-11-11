@@ -38,6 +38,7 @@ import path from "node:path";
 import { CHANNEL_COUNT, fillFrames } from "./dmx.ts";
 import { errorMessage, isRecord } from "../shared/guards.ts";
 import { clamp } from "../shared/numbers.ts";
+import { writeJsonFile } from "./files.ts";
 
 const ARTNET_PORT = 6454;
 const SACN_PORT = 5568;
@@ -272,7 +273,7 @@ export function createNetDmx({ dataDir, maxUniverses, onChange }: { dataDir: str
         ...(o.host ? { host: o.host } : {}),
         ...(o.protocol === "sacn" && o.priority !== 100 ? { priority: o.priority } : {}),
       }));
-    fs.writeFileSync(file, `${JSON.stringify({ ...(iface ? { interface: iface } : {}), outputs: list }, null, 2)}\n`);
+    writeJsonFile(file, { ...(iface ? { interface: iface } : {}), outputs: list });
   }
 
   function send(o: NetOutput, frame: Uint8Array, options = 0) {

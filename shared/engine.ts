@@ -4,7 +4,15 @@
 import { type FaderPatch, FADER_COUNT, scaledLevel } from "../console/patch.ts";
 import { clampByte } from "./numbers.ts";
 
-export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number };
+/**
+ * The looks a GO into a cue passes through before the cue's own (its steps):
+ * each one's levels, fade in and hold (seconds), and `fade`, the cue's own
+ * fade in after the last step.
+ */
+export type StepPath = { steps: { levels: number[]; fade: number; hold: number }[]; fade: number };
+
+/** `toPath`: UP NEXT's steps (none, or null: the crossfade goes straight to it). */
+export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number; toPath?: StepPath | null };
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max. */
 export function liveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): number {
@@ -15,9 +23,72 @@ export function liveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): 
 export function exactLiveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): number {
   const a = ((cueLevels[mix.fromCue]?.[faderIndex] ?? 0) * mix.fromSub) / 100;
   const b = ((cueLevels[mix.toCue]?.[faderIndex] ?? 0) * mix.toSub) / 100;
-  const t = mix.cross / 100;
-  const mixed = a * (1 - t) + b * t;
-  return (mixed * mix.master) / 100;
+  const steps = mix.toPath?.steps;
+  if (!steps?.length) {
+    const t = mix.cross / 100;
+    return ((a * (1 - t) + b * t) * mix.master) / 100;
+  }
+  // Through the steps: every step's look is UP NEXT's, so the to-submaster scales it.
+  const looks = [a, ...steps.map((s) => ((s.levels[faderIndex] ?? 0) * mix.toSub) / 100), b];
+  return (alongPath(mix.toPath!, mix.cross, looks) * mix.master) / 100;
+}
+
+/** Each part of a GO through steps, in order: fade into look k+1, then hold it (seconds; all 0: equal fades). */
+function segments(path: StepPath) {
+  const parts = [...path.steps.map((s) => ({ fade: s.fade, hold: s.hold })), { fade: path.fade, hold: 0 }];
+  return parts.every((p) => p.fade + p.hold <= 0) ? parts.map(() => ({ fade: 1, hold: 0 })) : parts;
+}
+
+/**
+ * The inverse of easeFade: how far through its time a GO is at crossfade
+ * `cross` (0…100), so steps fade on time though the crossfade itself eases.
+ */
+export const timeAt = (cross: number) => {
+  const y = cross / 100;
+  return y <= 0 ? 0 : y >= 1 ? 1 : 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3);
+};
+
+/** A value along `looks` (the from look, each step's, the cue's own) at crossfade `cross`; each step's fade eases on its own. */
+function alongPath(path: StepPath, cross: number, looks: number[]): number {
+  const parts = segments(path);
+  let t = timeAt(cross) * parts.reduce((sum, p) => sum + p.fade + p.hold, 0);
+  for (let k = 0; k < parts.length; k++) {
+    const { fade, hold } = parts[k];
+    if (t < fade) return looks[k] + (looks[k + 1] - looks[k]) * easeFade(t / fade);
+    t -= fade;
+    if (t < hold) return looks[k + 1];
+    t -= hold;
+  }
+  return looks[looks.length - 1];
+}
+
+/**
+ * Where a GO through `path` arrives at each look, as crossfade positions
+ * (0…100): one per step, then 100 for the cue's own look.
+ */
+export function stepArrivals(path: StepPath): number[] {
+  const parts = segments(path);
+  const total = parts.reduce((sum, p) => sum + p.fade + p.hold, 0);
+  let t = 0;
+  return parts.map((p) => {
+    const arrived = t + p.fade;
+    t += p.fade + p.hold;
+    return Math.min(100, easeFade(arrived / total) * 100);
+  });
+}
+
+/**
+ * Which look a GO through `path` is fading into, or on (arrived or holding),
+ * at crossfade `cross`: 0 = the first step … steps.length = the cue's own.
+ */
+export function stepAt(path: StepPath, cross: number): number {
+  const parts = segments(path);
+  let t = timeAt(cross) * parts.reduce((sum, p) => sum + p.fade + p.hold, 0);
+  for (let k = 0; k < parts.length; k++) {
+    t -= parts[k].fade + parts[k].hold;
+    if (t < 1e-6) return k;
+  }
+  return parts.length - 1;
 }
 
 /**
@@ -73,3 +144,15 @@ export function setChannelLevels(patch: FaderPatch[], mix: Mix, cueLevels: numbe
 
 /** Ease for timed fades (0…1 → 0…1, smooth start and end). */
 export const easeFade = (t: number): number => t * t * (3 - 2 * t);
+
+/**
+ * The crossfade `t` (0…1) of the way through a timed fade from `start` to
+ * `target` (0…100). From 0 to 100 it's easeFade; from part way (a GO that
+ * goes on after a Step, or after the crossfader was moved) it keeps the same
+ * pace through time, so steps still fade on time.
+ */
+export function fadeCross(start: number, target: number, t: number): number {
+  if (start <= 0 && target >= 100) return easeFade(Math.min(1, Math.max(0, t))) * 100;
+  const from = timeAt(start);
+  return easeFade(from + (timeAt(target) - from) * Math.min(1, Math.max(0, t))) * 100;
+}

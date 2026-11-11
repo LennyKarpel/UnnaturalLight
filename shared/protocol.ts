@@ -51,7 +51,7 @@ export type ClientMessage =
   | { type: "live"; live: Partial<Record<LiveField, number>> }
   | { type: "levels"; cells: LevelCell[] }
   | { type: "hold"; flashing: number[]; blackedOut: number[] }
-  | { type: "go" | "pause" | "stop" }
+  | { type: "go" | "step" | "pause" | "stop" }
   | { type: "stage"; stage: SavedStage; file?: boolean }
   | (Request & { id: number });
 

@@ -1,7 +1,7 @@
 // Live: output levels, the Live strip and channel meters, LIVE / UP NEXT,
 // GO, crossfade, submasters and master, and the DMX output.
 import { notifyStage } from "./stage-link.ts";
-import { computeChannelLevels as channelLevelsFor, easeFade } from "../shared/engine.ts";
+import { computeChannelLevels as channelLevelsFor, fadeCross, stepArrivals, stepAt } from "../shared/engine.ts";
 import type { FadeInfo } from "../server/show.ts";
 import {
   FADER_COUNT,
@@ -14,7 +14,7 @@ import {
   formatAddress,
   exactScaledLevel,
 } from "./patch.ts";
-import { DEFAULT_CUE_FADE_TIME, MAX_CUES } from "./songs.ts";
+import { cueSeconds, DEFAULT_CUE_FADE_TIME, MAX_CUES, stepPath } from "./songs.ts";
 import { playbackCue } from "./sets.ts";
 import {
   cuesEl,
@@ -44,8 +44,10 @@ import {
   openPopup,
   menuItem,
   scrollToCurrent,
+  goStepBtn,
+  crossTicks,
 } from "./dom.ts";
-import { zeros, syncPlaybackPair, persistSession, getActiveEntry, getActiveSet, serverLink, state } from "./state.ts";
+import { zeros, syncPlaybackPair, persistSession, getActiveEntry, getActiveSet, serverLink, state, upNextCueObject } from "./state.ts";
 import type { NetOutputSetting } from "../shared/protocol.ts";
 import {
   cueName,
@@ -70,7 +72,7 @@ import {
   syncSlidersFromState,
 } from "./faders.ts";
 import { syncSongUi, setActiveSong } from "./show-tab.ts";
-import { cueUi, renderCues } from "./cues.ts";
+import { cueUi, renderCues, syncStepTimeline } from "./cues.ts";
 import {
   updateConflictBanner,
 } from "./patch-tab.ts";
@@ -287,9 +289,20 @@ export function refreshCueSelects() {
     btn.disabled = !target;
     if (target) btn.title = `${word} cue: make ${target.label} live now (no fade)`;
   }
-  const nextFade = playbackCue(state, state.toCue)?.fadeTime ?? DEFAULT_CUE_FADE_TIME;
-  goNextFade.textContent = state.toCue === state.fromCue ? "" : `${nextFade}s`;
-  goBtn.title = `GO — fade to ${cueLabel(state.toCue)} (${nextFade}s)`;
+  const next = playbackCue(state, state.toCue);
+  const nextFade = next ? cueSeconds(next) : DEFAULT_CUE_FADE_TIME;
+  const path = stepPath(next);
+  goNextFade.textContent = state.toCue === state.fromCue ? "" : path ? `${path.steps.length + 1} steps · ${nextFade}s` : `${nextFade}s`;
+  goBtn.title = `GO — fade to ${cueLabel(state.toCue)} (${nextFade}s${path ? `, through its ${path.steps.length + 1} steps` : ""})`;
+  goStepBtn.hidden = !path;
+  goStepBtn.disabled = goBtn.disabled;
+  goStepBtn.title = `Step — fade to ${cueLabel(state.toCue)}'s next step and hold there (GO goes on)`;
+  // Tick marks where each step lands (not the cue's own look, at the end).
+  crossTicks.replaceChildren(...(path ? stepArrivals(path).slice(0, -1) : []).map((at) => {
+    const tick = el("span", "cross-tick");
+    tick.style.setProperty("--at", String(at / 100));
+    return tick;
+  }));
   goBtn.setAttribute(
     "aria-label",
     `GO to ${cueLabel(state.toCue)} in ${nextFade} seconds`,
@@ -322,13 +335,22 @@ export function cueHint(r: number) {
   return r === state.fromCue ? "Live" : r === state.toCue ? "Up next" : "Click to make live";
 }
 
-export function setSelectedCue(index: number) {
+/**
+ * Make cue `index` LIVE at once (no fade), showing step `step` (-1: its own
+ * look). Selecting a cue makes it LIVE; UP NEXT follows from it (and the set).
+ */
+export function setSelectedCue(index: number, step = -1) {
   if (index < 0 || index >= state.cueLevels.length) return;
   stopTimedFade();
+  // A row showing a step before or after: the rows' faders are other levels now.
+  const rebind = state.liveStep >= 0 || step >= 0;
   state.selectedCue = index;
-  // Selecting a cue makes it LIVE; UP NEXT follows from it (and the set).
+  // A different cue (or step) LIVE now, all of it: the crossfade starts over.
+  if (index !== state.fromCue || step !== state.liveStep) state.cross = 0;
   state.fromCue = index;
+  state.liveStep = step;
   syncPlaybackPair();
+  if (rebind) renderCues();
   for (const bank of cuesEl.querySelectorAll<HTMLElement>(".fader-row")) {
     const r = Number(bank.dataset.row);
     const selected = r === state.selectedCue;
@@ -418,7 +440,9 @@ export function syncCrossUi() {
   const pct = Math.round(state.cross);
   crossfader.value = String(pct);
   crossfader.style.setProperty("--cross-pct", `${pct}%`);
-  crossValue.textContent = `${pct}%`;
+  const step = stepProgress();
+  crossValue.textContent = step ? `${pct}% · ${step}` : `${pct}%`;
+  syncStepTimeline(state.cross);
 }
 
 function syncSubmasterLabels() {
@@ -519,7 +543,7 @@ export function shownCross(): number {
   const elapsed = fadeAnchor != null ? performance.now() - fadeAnchor : frozenElapsed;
   if (!f || elapsed == null) return state.cross;
   const t = f.durationMs > 0 ? Math.min(1, elapsed / f.durationMs) : 1;
-  return f.start + (f.target - f.start) * easeFade(t);
+  return fadeCross(f.start, f.target, t);
 }
 
 /** Take the server's word on the fade (with each live update). */
@@ -564,12 +588,26 @@ export function goNextCue() {
   state.serverLink?.command("go");
 }
 
+/** Step: GO only as far as UP NEXT's next step, and hold there (GO goes on). Its last part: all the way, as GO. */
+export function stepNextCue() {
+  if (state.toCue === state.fromCue) return;
+  state.serverLink?.command("step");
+}
+
+/** "into step 2 of 3" while a GO into UP NEXT's steps runs, "on step 1 of 3" held after a Step ("" otherwise). */
+export function stepProgress(): string {
+  const path = stepPath(upNextCueObject());
+  const cross = shownCross();
+  if (!path || cross <= 0 || cross >= 100) return "";
+  return `${state.fadeState ? "into" : "on"} step ${stepAt(path, cross) + 1} of ${path.steps.length + 1}`;
+}
+
 /**
  * The cue ◀ / ▶ beside GO go to: the previous / next cue of the song, or past
  * its first / last cue the previous set song's last cue / the next set
  * song's first. null at the ends of the set (or a song not in the set).
  */
-function stepTarget(step: -1 | 1): { cue: number; label: string; song?: { songId: string; entryId: string } } | null {
+export function stepTarget(step: -1 | 1): { cue: number; label: string; song?: { songId: string; entryId: string } } | null {
   const cue = state.fromCue + step;
   if (cue >= 0 && cue < state.cueLevels.length) return { cue, label: cueLabel(cue) };
   const set = getActiveSet();

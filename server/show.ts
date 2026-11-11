@@ -4,9 +4,9 @@
 
 import { FADER_COUNT, setUniverseCount } from "../console/patch.ts";
 import { parseShow, serializeShow, type ShowData } from "../console/show.ts";
-import { normalizeCueFadeTime, resolveActiveSong, type Cue } from "../console/songs.ts";
+import { clampStep, cueSeconds, resolveActiveSong, shownLevels, stepPath, type Look } from "../console/songs.ts";
 import { nextSetSong, playbackCue, playbackLevels, upNextCue } from "../console/sets.ts";
-import { computeChannelLevels, easeFade, liveLevel } from "../shared/engine.ts";
+import { computeChannelLevels, fadeCross, liveLevel, stepArrivals, timeAt } from "../shared/engine.ts";
 import { LIVE_FIELDS, type LiveField } from "../shared/live-fields.ts";
 import { must } from "../shared/query.ts";
 import { errorMessage } from "../shared/guards.ts";
@@ -41,14 +41,14 @@ export function createShow(saved: unknown) {
       console.warn(`Saved session ignored: ${errorMessage(err)}`);
     }
   }
-  let fade: null | { start: number; target: number; durationMs: number; startedAt: number; pausedAt: number | null; mode: "go" } = null;
+  let fade: null | { start: number; target: number; durationMs: number; startedAt: number; pausedAt: number | null } = null;
   /** client id → faders it holds flashed / blacked out */
   const holds = new Map<string, Holds>();
 
   /** The show (only called once there is one: the server checks hasShow). */
   const cur = (): ShowData => must(show, "show");
   const activeSong = () => resolveActiveSong(cur().songs, cur().activeSongId);
-  const cueLevels = () => playbackLevels(cur(), activeSong().cues.map((t) => t.levels));
+  const cueLevels = () => playbackLevels(cur(), shownLevels(activeSong().cues, cur().fromCue, cur().liveStep));
 
   /** Keep LIVE / UP NEXT / selected inside the song; UP NEXT follows LIVE (and the set). */
   function clampPlayback() {
@@ -57,6 +57,7 @@ export function createShow(saved: unknown) {
     show.activeSongId = activeSong().id;
     show.selectedCue = clamp(Math.round(show.selectedCue) || 0, 0, Math.max(0, n - 1));
     show.fromCue = clamp(Math.round(show.fromCue) || 0, 0, Math.max(0, n - 1));
+    show.liveStep = clampStep(activeSong().cues[show.fromCue], show.liveStep);
     show.toCue = upNextCue(show);
     setUniverseCount(show.universes);
   }
@@ -102,9 +103,10 @@ export function createShow(saved: unknown) {
       clampPlayback();
     },
 
+    /** Level edits: [cue or step id, fader, level]. */
     applyLevels(cells: LevelCell[]) {
-      const byId = new Map<string, Cue>();
-      for (const song of cur().songs) for (const t of song.cues) byId.set(t.id, t);
+      const byId = new Map<string, Look>();
+      for (const song of cur().songs) for (const t of song.cues) for (const look of [t, ...t.steps]) byId.set(look.id, look);
       for (const cell of cells) {
         if (!Array.isArray(cell)) continue;
         const [id, fader, value] = cell;
@@ -129,15 +131,31 @@ export function createShow(saved: unknown) {
       return Boolean(h && (h.flashing.size || h.blackedOut.size));
     },
 
-    /** GO: fade from the selected cue to UP NEXT (its fade time), then advance. */
-    go(now: number) {
+    /**
+     * GO: fade from LIVE to UP NEXT (through its steps, over its time), then
+     * advance. From part way (after a Step, or the crossfader moved) it goes
+     * on from there, over the time left. `step`: only as far as UP NEXT's
+     * next step, then hold there (its last step: all the way, as GO).
+     */
+    go(now: number, { step = false } = {}) {
       const show = cur();
-      show.fromCue = show.selectedCue;
+      if (fade) {
+        // One at a time: GO / Step on a paused fade goes on with it.
+        if (fade.pausedAt != null) this.togglePause(now);
+        return;
+      }
+      if (show.cross <= 0 || show.cross >= 100) {
+        show.fromCue = show.selectedCue;
+        show.cross = 0;
+      }
       clampPlayback();
       if (show.toCue === show.fromCue) return;
-      const seconds = normalizeCueFadeTime(playbackCue(show, show.toCue)?.fadeTime);
-      show.cross = 0;
-      fade = { start: 0, target: 100, durationMs: seconds * 1000, startedAt: now, pausedAt: null, mode: "go" };
+      const cue = playbackCue(show, show.toCue);
+      if (!cue) return;
+      const path = stepPath(cue);
+      const target = step && path ? (stepArrivals(path).find((at) => at > show.cross + 1e-6) ?? 100) : 100;
+      const durationMs = (timeAt(target) - timeAt(show.cross)) * cueSeconds(cue) * 1000;
+      fade = { start: show.cross, target, durationMs, startedAt: now, pausedAt: null };
     },
 
     togglePause(now: number) {
@@ -163,12 +181,13 @@ export function createShow(saved: unknown) {
       if (!show || !fade || fade.pausedAt != null) return null;
       // A 0 s fade arrives at once.
       const t = fade.durationMs > 0 ? Math.min(1, (now - fade.startedAt) / fade.durationMs) : 1;
-      show.cross = fade.start + (fade.target - fade.start) * easeFade(t);
+      show.cross = fadeCross(fade.start, fade.target, t);
       if (t < 1) return { arrived: null };
-      const wasGo = fade.mode === "go";
+      const { target } = fade;
       fade = null;
-      if (!wasGo) {
-        show.cross = 100;
+      // A Step: held on UP NEXT's step, part way through the crossfade.
+      if (target < 100) {
+        show.cross = target;
         return { arrived: null };
       }
       const arrived = show.toCue;
@@ -179,6 +198,7 @@ export function createShow(saved: unknown) {
       }
       show.fromCue = next ? 0 : arrived;
       show.selectedCue = show.fromCue;
+      show.liveStep = -1; // arrived on the cue's own look
       show.cross = 0;
       clampPlayback();
       return { arrived: show.fromCue, songChanged: Boolean(next) };
@@ -191,7 +211,8 @@ export function createShow(saved: unknown) {
       const levels = cueLevels();
       const flashing = heldUnion("flashing");
       const blackedOut = heldUnion("blackedOut");
-      return computeChannelLevels(s.patch, (i) => (flashing.has(i) ? 255 : blackedOut.has(i) ? 0 : liveLevel(s, levels, i)));
+      const mix = { ...s, toPath: stepPath(playbackCue(s, s.toCue)) };
+      return computeChannelLevels(s.patch, (i) => (flashing.has(i) ? 255 : blackedOut.has(i) ? 0 : liveLevel(mix, levels, i)));
     },
 
     get universes() {

@@ -1143,6 +1143,36 @@
     color: var(--ink);
   }
 
+  /* Step: GO as far as UP NEXT's next step (cues with steps only). */
+  .go-step-btn {
+    font-family: var(--display);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .crossfader-wrap {
+    position: relative;
+  }
+
+  /* Where UP NEXT's steps land on the crossfader (lined up with the thumb's center). */
+  .cross-ticks {
+    position: absolute;
+    inset: -3px 10px;
+    pointer-events: none;
+  }
+
+  .cross-tick {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--at) * 100%);
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--ink);
+    opacity: 0.7;
+  }
+
   .go-btn.is-running {
     border-color: var(--select);
     background: color-mix(in srgb, var(--select) 55%, var(--panel));
@@ -1239,6 +1269,120 @@
     font-variant-numeric: tabular-nums;
     padding: 0;
     cursor: pointer;
+  }
+
+  /* A cue's steps: a tab per look (the cue's own last), + and the total time. */
+  .cue-steps {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+
+  .cue-step-tab,
+  .cue-step-add {
+    padding: 0.12rem 0.45rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    background: var(--field);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cue-step-tab.is-shown {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+
+  .cue-step-plus,
+  .cue-step-add {
+    border-style: dashed;
+    background: none;
+    color: var(--muted);
+  }
+
+  .cue-step-add {
+    font-family: var(--font);
+  }
+
+  .cue-step-plus:hover,
+  .cue-step-add:hover {
+    color: var(--ink);
+  }
+
+  .cue-steps-total {
+    margin-left: 0.2rem;
+    font-family: var(--mono);
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+
+  /* The cue's parts sized by time; fills as GO runs into it (--done, 0…1). */
+  /* Each bar is 6px to see, with 4px above and below to click. */
+  .cue-timeline {
+    position: relative;
+    display: flex;
+    gap: 3px;
+    height: 14px;
+    margin: calc(0.1rem - 4px) 0.45rem calc(0.45rem - 4px);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .cue-timeline-part {
+    flex-basis: 0;
+    min-width: 4px;
+    border-radius: 2px;
+    padding-block: 4px;
+    background: var(--accent-dim) content-box;
+    cursor: pointer;
+  }
+
+  .cue-timeline-part:hover {
+    background-color: color-mix(in srgb, var(--accent) 60%, var(--accent-dim));
+  }
+
+  .cue-timeline-part.is-shown {
+    background-color: var(--accent);
+  }
+
+  .cue-timeline-fill {
+    position: absolute;
+    inset: 4px auto 4px 0;
+    width: calc(var(--done, 0) * 100%);
+    background: color-mix(in srgb, var(--cross-from) 75%, transparent);
+    pointer-events: none;
+  }
+
+  /* The LIVE cue's shown look: which step, its fade and hold, Remove. */
+  .cue-step-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0.45rem 0.45rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+
+  .cue-step-nav { padding: 2px 8px; }
+  .cue-step-name {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .cue-step-hint {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--faint);
+  }
+
+  .cue-step-remove {
+    font-size: var(--text-sm);
   }
 
   .fader-row.is-current .fader-row-head {

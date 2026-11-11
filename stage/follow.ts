@@ -15,7 +15,7 @@
 // values whatever the fixture was doing.
 
 import { state, positionById } from "./state.ts";
-import { aimDmx, deriveFromDmx, linkChannels, type Fixture } from "./stage-model.ts";
+import { aimDmx, setPanTilt, linkChannels, type Fixture } from "./stage-model.ts";
 import { consoleLink } from "./link.ts";
 import type { ChannelValue } from "../shared/engine.ts";
 import type { AimRequest, Reaim } from "../shared/console-stage.ts";
@@ -48,9 +48,7 @@ export function aimAndFollow(fixtures: Fixture[], positionId: string): Fixture[]
     const aim = aimFor(fixture, position);
     if (!aim) { missed.push(fixture); continue; }
     if (!aim.reached) missed.push(fixture);
-    fixture.dmx.pan = aim.pan;
-    fixture.dmx.tilt = aim.tilt;
-    deriveFromDmx(fixture);
+    setPanTilt(fixture, aim);
     const chans = consoleChannels(fixture);
     fixture.follow = chans ? null : { position: positionId, pan: aim.pan, tilt: aim.tilt };
     if (chans && fixture.link.consoleId) requests.push({ consoleId: fixture.link.consoleId, position: positionId, values: valuesFor(chans, aim) });
@@ -105,9 +103,9 @@ export function syncFollowing() {
     if (!position || fixture.dmx.pan !== f.pan || fixture.dmx.tilt !== f.tilt) { fixture.follow = null; continue; }
     const aim = aimFor(fixture, position);
     if (!aim || (aim.pan === f.pan && aim.tilt === f.tilt)) continue;
-    fixture.dmx.pan = f.pan = aim.pan;
-    fixture.dmx.tilt = f.tilt = aim.tilt;
-    deriveFromDmx(fixture);
+    f.pan = aim.pan;
+    f.tilt = aim.tilt;
+    setPanTilt(fixture, aim);
   }
 
   const reaims: Reaim[] = [];

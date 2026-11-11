@@ -20,7 +20,7 @@ import {
   serializeShow,
   normalizeUniverses,
 } from "./show.ts";
-import { type Cue, type Song, createCue, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
+import { type Cue, type Look, type Song, createCue, stepLook, stepPath, cueSeconds, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
 import {
   type PatchTarget,
   FADER_COUNT,
@@ -49,7 +49,7 @@ import {
   normalizeMount,
   normalizeRoles,
 } from "./fixtures.ts";
-import { normalizeSets, playbackCue } from "./sets.ts";
+import { normalizeSets, playbackCue, previousSetSong } from "./sets.ts";
 import { allAims, applyAims, applyReaims } from "./aims.ts";
 import {
   currentCueTitle,
@@ -60,6 +60,7 @@ import {
   toSubInput,
   crossfader,
   goBtn,
+  goStepBtn,
   prevCueBtn,
   nextCueBtn,
   fadePauseBtn,
@@ -96,6 +97,7 @@ import {
 } from "./state.ts";
 import {
   cueLabel,
+  formatCueLabel,
   faderName,
   isUnpatched,
   liveLevel,
@@ -131,6 +133,8 @@ import {
   stopTimedFade,
   goNextCue,
   stepLiveCue,
+  stepNextCue,
+  stepTarget,
   setSelectedCue,
   showArrivedCue,
   toggleFadePause,
@@ -166,7 +170,7 @@ import {
   renderFixtures,
   addFixtureGroup,
 } from "./fixtures-tab.ts";
-import { errorMessage, isPresent } from "../shared/guards.ts";
+import { errorMessage } from "../shared/guards.ts";
 import { el } from "../shared/html.ts";
 import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
 
@@ -304,6 +308,7 @@ crossfader.addEventListener("input", () => {
 goBtn.addEventListener("click", () => {
   goNextCue();
 });
+goStepBtn.addEventListener("click", () => stepNextCue());
 prevCueBtn.addEventListener("click", () => stepLiveCue(-1));
 nextCueBtn.addEventListener("click", () => stepLiveCue(1));
 
@@ -330,6 +335,7 @@ addCueBtn.addEventListener("click", async () => {
   bindActiveSong();
   state.selectedCue = state.cueLevels.length - 1;
   state.fromCue = state.selectedCue;
+  state.liveStep = -1;
   syncPlaybackPair();
   renderCues();
   renderSelectedGroup();
@@ -377,6 +383,7 @@ function applyShow(next: ShowData, { fromServer = false } = {}) {
   state.fromCue = next.fromCue;
   state.toCue = next.toCue;
   state.selectedCue = next.selectedCue ?? 0;
+  state.liveStep = next.liveStep ?? -1;
   state.songs = normalizeSongs(next.songs);
   state.activeSongId = resolveActiveSong(state.songs, next.activeSongId).id;
   state.sets = normalizeSets(next.sets, state.songs);
@@ -1028,6 +1035,50 @@ startStageLink({
   },
   register: registerFromStage,
   unregister: unregisterFromStage,
+  // The 3D view's test fade: the cue before LIVE (the previous set song's last, or dark), then LIVE.
+  testCues: () => {
+    const live = state.fromCue;
+    const levels = getPlaybackLevels();
+    // LIVE's own look (not the step shown, if one is), through its steps.
+    const cue = playbackCue(state, live);
+    const to = { label: cueLabel(live), levels: cue?.levels ?? [], path: stepPath(cue), seconds: cue ? cueSeconds(cue) : 0 };
+    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1) };
+    if (live > 0) return { from: { label: cueLabel(live - 1), levels: levels[live - 1] ?? [] }, to, ...steps };
+    const prev = previousSetSong(state);
+    const last = prev?.song.cues.at(-1);
+    if (!prev || !last) return { from: null, to, ...steps };
+    return { from: { label: formatCueLabel(prev.song.cues.length, last.name, prev.song.name), levels: last.levels }, to, ...steps };
+  },
+  setTestFade: (seconds) => {
+    const cue = playbackCue(state, state.fromCue);
+    if (!cue) return;
+    cue.fadeTime = normalizeCueFadeTime(seconds);
+    afterCueListChange(getActiveSong(), (i) => i);
+    persistSession();
+  },
+  stepCue: stepLiveCue,
+  liveTest: (() => {
+    /** The cue being tested (LIVE when the test started). */
+    let target: Cue | undefined;
+    return {
+      start() {
+        if (!stepTarget(-1)) return false;
+        target = playbackCue(state, state.fromCue);
+        stepLiveCue(-1);
+        return true;
+      },
+      go: () => consoleChat.go(),
+      step() {
+        if (!state.serverLive || state.toCue === state.fromCue) return false;
+        stepNextCue();
+        return true;
+      },
+      stop() {
+        if (target && playbackCue(state, state.fromCue) !== target) stepLiveCue(1);
+        target = undefined;
+      },
+    };
+  })(),
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
   hold: holdFromStage,
@@ -1036,8 +1087,12 @@ startStageLink({
   aim(list) {
     const t = state.cross / 100;
     const on = [t < 1 && state.fromSub > 0 ? state.fromCue : null, t > 0 && state.toSub > 0 ? state.toCue : null];
-    const cues = [...new Set(on.flatMap((i) => (i == null ? [] : [playbackCue(state, i)])).filter(isPresent))];
-    applyAims(cues, state.patch, list);
+    // LIVE: the step being shown; UP NEXT: its own look.
+    const looks = [...new Set(on.flatMap((i) => {
+      const cue = i == null ? undefined : playbackCue(state, i);
+      return cue ? [i === state.fromCue ? stepLook(cue, state.liveStep) : cue] : [];
+    }))];
+    applyAims(looks, state.patch, list);
     syncSlidersFromState();
     pushToDmx();
   },
@@ -1047,7 +1102,10 @@ startStageLink({
     pushToDmx();
   },
   aims: () => allAims(state.songs),
-  liveAims: () => playbackCue(state, state.cross >= 50 ? state.toCue : state.fromCue)?.aims ?? [],
+  liveAims: () => {
+    const cue = playbackCue(state, state.cross >= 50 ? state.toCue : state.fromCue);
+    return (cue && state.cross < 50 ? stepLook(cue, state.liveStep) : cue)?.aims ?? [];
+  },
 });
 
 // ---------------------------------------------------------------------
@@ -1070,13 +1128,14 @@ function withLive(show: unknown, live: Partial<Live>): ShowData {
 
 /** Live mix from the server (fade steps, other consoles' moves, GO arriving). */
 function applyServerLive(live: Partial<Live>) {
-  const before = { fromCue: state.fromCue, selectedCue: state.selectedCue };
+  const before = { fromCue: state.fromCue, selectedCue: state.selectedCue, liveStep: state.liveStep };
   if (live.master !== undefined) state.master = live.master;
   if (live.cross !== undefined) state.cross = live.cross;
   if (live.fromSub !== undefined) state.fromSub = live.fromSub;
   if (live.toSub !== undefined) state.toSub = live.toSub;
   if (live.fromCue !== undefined) state.fromCue = live.fromCue;
   if (live.selectedCue !== undefined) state.selectedCue = live.selectedCue;
+  if (live.liveStep !== undefined) state.liveStep = live.liveStep;
   syncPlaybackPair();
   followFade(live.fade ?? null);
   state.serverFlashing = new Set(live.flashing ?? []);
@@ -1086,6 +1145,8 @@ function applyServerLive(live: Partial<Live>) {
   syncSubmasterUi();
   syncCrossUi();
   updateFadePauseButton();
+  // A step shown before or now (picked on another console, or GO arrived): the rows' faders are other levels.
+  if (state.liveStep !== before.liveStep) { renderCues(); renderSelectedGroup(); }
   if (state.fromCue !== before.fromCue || state.selectedCue !== before.selectedCue) showArrivedCue();
   pushToDmx({ persist: false, fromServer: true });
 }
@@ -1112,10 +1173,10 @@ state.serverLink = createServerLink({
   onLive: applyServerLive,
   onLevels: (cells) => {
     if (!cells.length) return;
-    const cueById = new Map<string, Cue>();
-    for (const song of state.songs) for (const t of song.cues) cueById.set(t.id, t);
+    const byId = new Map<string, Look>();
+    for (const song of state.songs) for (const t of song.cues) for (const look of [t, ...t.steps]) byId.set(look.id, look);
     for (const [id, fader, value] of cells) {
-      const t = cueById.get(id);
+      const t = byId.get(id);
       if (t) t.levels[fader] = value;
     }
     pushToDmx({ fromServer: true });

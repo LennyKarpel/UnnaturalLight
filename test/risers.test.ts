@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handleSpot, normalizeRiser, onRiser, resizeTo, riserAt, riserCorners, standingHeight, wrapYaw, yawToward, RISER_DEFAULTS, TURN_HANDLE_GAP } from "../stage/risers.ts";
+import { handleSpot, setRiserField, normalizeRiser, onRiser, resizeTo, riserAt, riserCorners, standingHeight, wrapYaw, yawToward, RISER_DEFAULTS, TURN_HANDLE_GAP } from "../stage/risers.ts";
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
@@ -17,6 +17,20 @@ test("risers: saved risers are cleaned up (defaults, limits, a name)", () => {
   assert.equal(normalizeRiser({ w: 0 }, 0).w, 0.1); // never flat
   assert.equal(wrapYaw(180), -180);
   assert.equal(wrapYaw(-190), 170);
+});
+
+test("risers: editing a field keeps it in range, like a saved riser", () => {
+  const r = normalizeRiser({ id: "a", x: 0, z: 0 }, 0);
+  assert.ok(setRiserField(r, "h", "25"));
+  assert.equal(r.h, 10);
+  assert.ok(setRiserField(r, "yaw", 200));
+  assert.equal(r.yaw, -160);
+  assert.ok(!setRiserField(r, "w", "wide")); // not a number: unchanged
+  assert.equal(r.w, RISER_DEFAULTS.w);
+  assert.ok(!setRiserField(r, "name", "  ")); // a name can't be empty
+  assert.equal(r.name, "Riser 1");
+  assert.ok(setRiserField(r, "name", " Drums "));
+  assert.equal(r.name, "Drums");
 });
 
 test("risers: corners and footprint follow the turn (three.js rotation.y)", () => {

@@ -14,6 +14,10 @@ import {
   ctxMenu,
   closeContextMenu,
   deleteSelected,
+  deleteRiser,
+  deletePosition,
+  setActiveRiser,
+  setActivePosition,
   undoDelete,
   redoDelete,
 } from "./actions.ts";
@@ -90,13 +94,18 @@ window.addEventListener("keydown", (e) => {
     if (!ctxMenu.hidden) closeContextMenu();
     else if (ui.placing) setPlacing(false);
     else if (ui.aiming) setAiming(false);
+    else if (ui.activeRiser) setActiveRiser(null);
+    else if (!state.selected.length && ui.activePosition) setActivePosition(null);
     else select(null);
     return;
   }
   if (e.code === "KeyA") { setAiming(!ui.aiming); return; }
-  // Mac "delete" is Backspace; forward-delete is Delete. ⌘Z undoes it.
+  // Mac "delete" is Backspace; forward-delete is Delete: the picked-out riser,
+  // else the selected fixtures, else the position being looked at. ⌘Z undoes it.
   if (e.key === "Backspace" || e.key === "Delete") {
-    if (state.selected.length) { e.preventDefault(); deleteSelected(); }
+    if (ui.activeRiser) { e.preventDefault(); deleteRiser(ui.activeRiser); }
+    else if (state.selected.length) { e.preventDefault(); deleteSelected(); }
+    else if (ui.activePosition) { e.preventDefault(); deletePosition(ui.activePosition); }
     return;
   }
   if (e.key === "p" || e.key === "P") { togglePlaceFixture(); return; }

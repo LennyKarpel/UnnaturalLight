@@ -1,10 +1,11 @@
 // The plan view (2D): top, front or side, with dragging and right-click.
 import * as THREE from "three";
 import { describeSpot, fmtLength, gridStep, onUnitChange, snapLength } from "./units.ts";
+import { alwaysShowNames, onNamesChange } from "./names.ts";
 import { beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
 import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
+import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
 import { riserCorners, handleSpot, resizeTo, yawToward, SIZE_HANDLES, RISER_MIN, RISER_MAX_H, type Riser, type RiserHandle } from "./risers.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
@@ -310,7 +311,7 @@ export function drawPlan() {
     ctx.fillStyle = on ? "#e8e4dc" : RISER_COLOR;
     ctx.textAlign = "center";
     ctx.font = "10px system-ui, sans-serif";
-    ctx.fillText(`${riser.name} · ${fmtLength(riser.h, 2)}`, cx, cy + 3);
+    if (on || ui.hoverRiser === riser.id || alwaysShowNames()) ctx.fillText(`${riser.name} · ${fmtLength(riser.h, 2)}`, cx, cy + 3);
   }
 
   // The picked-out riser's handles: squares to resize, a knob to turn, a triangle for height.
@@ -384,7 +385,7 @@ export function drawPlan() {
     ctx.fillStyle = on || hover ? "#e8e4dc" : POSITION_COLOR;
     ctx.textAlign = "left";
     ctx.font = hover ? "600 13px system-ui, sans-serif" : "11px system-ui, sans-serif";
-    ctx.fillText(position.name, px + r + 4, py + 4);
+    if (on || hover || alwaysShowNames()) ctx.fillText(position.name, px + r + 4, py + 4);
   }
 
   // Beam axis hit points
@@ -431,7 +432,7 @@ export function drawPlan() {
     ctx.fillStyle = sel ? "#e8e4dc" : "#9a9488";
     ctx.textAlign = "left";
     ctx.font = "11px system-ui, sans-serif";
-    ctx.fillText(fixture.name, px + 12, py - 8);
+    if (sel || ui.hoverFixture === fixture.id || alwaysShowNames()) ctx.fillText(fixture.name, px + 12, py - 8);
   }
 
   // Placing a position: its preview, with a dotted line along each of this view's
@@ -614,7 +615,10 @@ plan.addEventListener("pointermove", (e) => {
     // Light up a position under the pointer (fixtures win when they overlap).
     if (!e.buttons && !ui.aiming && !ui.placing) {
       const [px, py] = planPosition(e);
-      setHoverPosition(planFixtureAt(px, py) ? null : planPositionAt(px, py)?.id ?? null);
+      const fixture = planFixtureAt(px, py);
+      const position = fixture ? null : planPositionAt(px, py);
+      setHoverPosition(position?.id ?? null);
+      setHoverItem(fixture?.id ?? null, fixture || position ? null : planRiserAt(px, py)?.id ?? null);
       const handle = planHandleAt(px, py);
       plan.style.cursor = !handle ? "" : handle.kind === "turn" ? "grab" : handle.kind === "height" ? "ns-resize" : "move";
     }
@@ -675,7 +679,7 @@ const endDrag = () => {
   planDrag = null;
   if (d.kind === "riserHandle") { setBanner(null); changed(); return; }
   if (d.kind === "riser") {
-    if (d.moved) { setBanner(null); ui.activeRiser = d.id; changed(); }
+    if (d.moved) { setBanner(null); setActiveRiser(d.id); changed(); }
     else setActiveRiser(ui.activeRiser === d.id ? null : d.id);
     return;
   }
@@ -687,6 +691,7 @@ const endDrag = () => {
 plan.addEventListener("pointerup", endDrag);
 plan.addEventListener("pointerleave", () => {
   if (!planDrag) setHoverPosition(null);
+  setHoverItem(null, null);
   if (!positionHover) return;
   positionHover = null;
   showPositionSpot(null);
@@ -696,3 +701,4 @@ plan.addEventListener("pointercancel", endDrag);
 new ResizeObserver(() => drawPlan()).observe(plan);
 
 onUnitChange(() => drawPlan());
+onNamesChange(() => drawPlan());

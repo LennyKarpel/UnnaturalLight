@@ -1,6 +1,7 @@
 // Cue rows on the Run tab: drawing, reordering, renaming, cue menus.
 import { FADER_COUNT } from "./patch.ts";
-import { MAX_CUES, MIN_CUES, createCue, moveCue, normalizeCueFadeTime, CUE_FADE_TIMES } from "./songs.ts";
+import { MAX_CUES, MAX_CUE_STEPS, MIN_CUES, copyCue, createStep, cueSeconds, moveCue, normalizeCueFadeTime, stepLook, CUE_FADE_TIMES, type Cue } from "./songs.ts";
+import { timeAt } from "../shared/engine.ts";
 import {
   cuesScroll,
   startDragScroll,
@@ -31,6 +32,7 @@ import {
   addColorBars,
   refreshColorBars,
   confirmRemoveCue,
+  confirmAction,
 } from "./faders.ts";
 import {
   pushToDmx,
@@ -173,43 +175,26 @@ export function renderCues() {
 
     titleGroup.append(title, menuBtn);
 
-    const fadeGroup = el("div", "cue-fade");
-    fadeGroup.title = "Fade time into this cue (how long GO takes to fade to it)";
-    const fadeLabel = el("span", "cue-fade-label", "In");
-    const fadeSelect = el("select", "cue-fade-select");
-    fadeSelect.setAttribute(
-      "aria-label",
-      `Fade time into ${cueLabel(r)}`,
-    );
     const cue = getActiveSong().cues[r];
-    const fadeValue = normalizeCueFadeTime(cue?.fadeTime);
-    for (const sec of CUE_FADE_TIMES) {
-      const opt = document.createElement("option");
-      opt.value = String(sec);
-      opt.textContent = `${sec}s`;
-      if (sec === fadeValue) opt.selected = true;
-      fadeSelect.append(opt);
-    }
-    fadeSelect.addEventListener("click", (event) => event.stopPropagation());
-    fadeSelect.addEventListener("pointerdown", (event) => event.stopPropagation());
-    fadeSelect.addEventListener("change", (event) => {
-      event.stopPropagation();
-      const next = normalizeCueFadeTime(fadeSelect.value);
-      if (cue) cue.fadeTime = next;
-      if (r === state.toCue) refreshCueSelects();
-      persistSession();
-    });
-    fadeGroup.append(fadeLabel, fadeSelect);
+    // One look: its In time, as always. With steps: a tab per look, and their total time.
+    const timing = cue.steps.length
+      ? stepTabs(cue, r)
+      : timeSelect("In", `Fade time into ${cueLabel(r)}`, cue.fadeTime, "Fade time into this cue (how long GO takes to fade to it)", (next) => {
+        cue.fadeTime = next;
+        if (r === state.toCue) refreshCueSelects();
+        persistSession();
+      });
+    const addStepBtn = cue.steps.length ? null : stepButton("+ Step", "Add a step: a look GO passes through on the way into this cue (a copy of it, to change)", () => addStep(r));
 
     const hint = el("span", "fader-row-hint", cueHint(r));
 
-    head.append(dragHandle, titleGroup, fadeGroup, hint);
+    head.append(dragHandle, titleGroup, timing, ...(addStepBtn ? [addStepBtn] : []), hint);
     wireCueRowDrag(bank, dragHandle, r);
     head.addEventListener("click", (event) => {
       if (
         event.target instanceof Element &&
         event.target.closest(
-          ".cue-title-input, .fader-row-drag-handle, .cue-menu-btn, .cue-fade",
+          ".cue-title-input, .fader-row-drag-handle, .cue-menu-btn, .cue-fade, .cue-steps, .cue-step-add",
         )
       ) {
         return;
@@ -249,13 +234,177 @@ export function renderCues() {
     }
 
     addColorBars(grid, r);
-    bank.append(head, grid);
+    bank.append(head);
+    if (cue.steps.length) bank.append(stepTimeline(cue, r));
+    if (cue.steps.length && r === state.fromCue) bank.append(stepRow(cue, r));
+    bank.append(grid);
     cuesEl.append(bank);
     cueUi[r] = { valueEls, patchLabelEls, sliders };
   }
 
   refreshCueSelects();
   refreshColorBars();
+}
+
+// ---------------------------------------------------------------------
+// Steps: looks GO passes through on the way into a cue (Cue.steps). The
+// LIVE cue shows and edits one of its looks (state.liveStep); clicking a
+// step's tab makes that cue LIVE on that step.
+// ---------------------------------------------------------------------
+
+/** Which of `cue`'s looks the row shows: its step, or steps.length for its own look (only the LIVE cue shows a step). */
+const shownLook = (cue: Cue, r: number) => (r === state.fromCue && state.liveStep >= 0 ? state.liveStep : cue.steps.length);
+
+/** A labelled seconds picker (In, Fade, Hold), styled like the cue's In time. */
+function timeSelect(label: string, ariaLabel: string, value: number, title: string, onChange: (seconds: number) => void, fallback?: number) {
+  const group = el("div", "cue-fade");
+  group.title = title;
+  const select = el("select", "cue-fade-select");
+  select.setAttribute("aria-label", ariaLabel);
+  const current = normalizeCueFadeTime(value, fallback);
+  for (const sec of CUE_FADE_TIMES) {
+    const opt = new Option(`${sec}s`, String(sec), false, sec === current);
+    select.append(opt);
+  }
+  select.addEventListener("click", (event) => event.stopPropagation());
+  select.addEventListener("pointerdown", (event) => event.stopPropagation());
+  select.addEventListener("change", (event) => {
+    event.stopPropagation();
+    onChange(normalizeCueFadeTime(select.value, fallback));
+  });
+  group.append(el("span", "cue-fade-label", label), select);
+  return group;
+}
+
+function stepButton(text: string, title: string, onClick: () => void, className = "cue-step-add") {
+  const b = button(className);
+  b.textContent = text;
+  b.title = title;
+  b.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return b;
+}
+
+/** Tabs for a cue's looks ("1 · 2s" … its own last), + to add one, and the total time. */
+function stepTabs(cue: Cue, r: number) {
+  const group = el("div", "cue-steps");
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", `Steps of ${cueLabel(r)}`);
+  const shown = r === state.fromCue ? shownLook(cue, r) : -1;
+  const looks = [...cue.steps.map((s) => s.fadeTime), cue.fadeTime];
+  looks.forEach((fade, k) => {
+    const own = k === cue.steps.length;
+    const tab = stepButton(`${k + 1} · ${fade}s`, own
+      ? "The cue's own look, where GO ends: click to make it LIVE and edit it"
+      : `Step ${k + 1}: click to make it LIVE (no fade) and edit it`, () => setSelectedCue(r, own ? -1 : k), "cue-step-tab");
+    tab.setAttribute("aria-pressed", String(k === shown));
+    tab.classList.toggle("is-shown", k === shown);
+    group.append(tab);
+  });
+  if (cue.steps.length < MAX_CUE_STEPS) {
+    group.append(stepButton("+ Step", "Add a step after the one shown (a copy of it)", () => addStep(r), "cue-step-tab cue-step-plus"));
+  }
+  group.append(el("span", "cue-steps-total", `${cueSeconds(cue)}s`));
+  return group;
+}
+
+/** A bar of the cue's parts sized by their time (fades and holds); it fills as GO runs into the cue. */
+function stepTimeline(cue: Cue, r: number) {
+  const bar = el("div", "cue-timeline");
+  bar.setAttribute("aria-hidden", "true");
+  const shown = r === state.fromCue ? shownLook(cue, r) : -1;
+  const parts = [...cue.steps.map((s) => ({ fade: s.fadeTime, hold: s.holdTime })), { fade: cue.fadeTime, hold: 0 }];
+  parts.forEach(({ fade, hold }, k) => {
+    const part = el("span", "cue-timeline-part");
+    part.style.flexGrow = String(fade + hold);
+    part.classList.toggle("is-shown", k === shown);
+    // Click a bar as its tab: that step LIVE (no fade), to edit. (The tabs are the keyboard way.)
+    const own = k === cue.steps.length;
+    part.title = own ? `${cueLabel(r)}'s own look: click to make it LIVE (no fade) and edit it` : `Step ${k + 1}: click to make it LIVE (no fade) and edit it`;
+    part.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setSelectedCue(r, own ? -1 : k);
+    });
+    bar.append(part);
+  });
+  bar.append(el("span", "cue-timeline-fill"));
+  return bar;
+}
+
+/** How far a GO into UP NEXT has got, on its row's timeline (by time, as its steps play). */
+export function syncStepTimeline(cross: number) {
+  const bar = cuesEl.querySelector<HTMLElement>(".fader-row.is-next .cue-timeline");
+  bar?.style.setProperty("--done", String(cross > 0 && cross < 100 ? timeAt(cross) : 0));
+}
+
+/** The LIVE cue's shown look: which it is, its fade and hold, and Remove. */
+function stepRow(cue: Cue, r: number) {
+  const row = el("div", "cue-step-row");
+  const k = shownLook(cue, r);
+  const own = k === cue.steps.length;
+  const step = cue.steps[k];
+  // ‹ ›: the look before / after, at once (no fade), like the cue ◀ ▶.
+  const looks = cue.steps.length + 1;
+  const go = (to: number) => setSelectedCue(r, to === cue.steps.length ? -1 : to);
+  const prev = stepButton("‹", "Previous step: make it LIVE (no fade) and edit it", () => go(k - 1), "cue-step-nav");
+  const next = stepButton("›", "Next step: make it LIVE (no fade) and edit it", () => go(k + 1), "cue-step-nav");
+  prev.disabled = k === 0;
+  next.disabled = k === looks - 1;
+  row.append(prev, next);
+  row.append(el("span", "cue-step-name", own ? `Step ${k + 1} of ${k + 1}: the cue's own look (GO ends here)` : `Step ${k + 1} of ${cue.steps.length + 1}`));
+  const changed = () => {
+    if (r === state.toCue) refreshCueSelects();
+    persistSession();
+    renderCues();
+  };
+  row.append(timeSelect("Fade", own ? `Fade into ${cueLabel(r)}'s own look` : `Fade into step ${k + 1}`, own ? cue.fadeTime : step.fadeTime, "Fade time into this look", (s) => {
+    if (own) cue.fadeTime = s;
+    else step.fadeTime = s;
+    changed();
+  }));
+  if (!own) {
+    row.append(timeSelect("Hold", `Hold on step ${k + 1}`, step.holdTime, "How long GO stays on this step before the next fades in", (s) => {
+      step.holdTime = s;
+      changed();
+    }, 0));
+  }
+  if (cue.steps.length < MAX_CUE_STEPS) {
+    row.append(stepButton("+ Add step", own ? "Add a step before the cue's own look (a copy of it)" : `Add a step after step ${k + 1} (a copy of it)`, () => addStep(r), "cue-step-remove quiet"));
+  }
+  if (!own) {
+    row.append(stepButton("Remove step", `Remove step ${k + 1}`, () => void removeStep(r, k), "cue-step-remove quiet"));
+  }
+  row.append(el("span", "cue-step-hint", "The faders below are this look"));
+  return row;
+}
+
+/** Add a step to cue `r`: a copy of the look shown, after it (before the cue's own look if that's shown), and show it. */
+function addStep(r: number) {
+  const cue = getActiveSong().cues[r];
+  if (!cue || cue.steps.length >= MAX_CUE_STEPS) return;
+  const k = shownLook(cue, r);
+  const own = k === cue.steps.length;
+  const source = cue.steps[k];
+  const at = own ? cue.steps.length : k + 1;
+  cue.steps.splice(at, 0, createStep(stepLook(cue, own ? -1 : k), own ? cue.fadeTime : source.fadeTime, own ? 0 : source.holdTime));
+  setSelectedCue(r, at);
+  if (r === state.toCue) refreshCueSelects();
+  persistSession();
+  renderCues();
+}
+
+async function removeStep(r: number, k: number) {
+  const cue = getActiveSong().cues[r];
+  if (!cue?.steps[k]) return;
+  const ok = await confirmAction({ title: "Remove step?", message: `Remove step ${k + 1} of ${cueLabel(r)}? Its fader levels will be lost.`, confirmLabel: "Remove" });
+  if (!ok) return;
+  cue.steps.splice(k, 1);
+  // Show the step before it (or the cue's own look).
+  setSelectedCue(r, cue.steps.length ? Math.max(0, k - 1) : -1);
+  persistSession();
+  renderCues();
 }
 
 function applyCueName(index: number, name: string) {
@@ -337,6 +486,7 @@ async function removeCueAt(index: number) {
   const ok = await confirmRemoveCue(cueLabel(index));
   if (!ok) return false;
   song.cues.splice(index, 1);
+  if (index === state.fromCue) state.liveStep = -1; // another cue is LIVE now
   state.fromCue = adjustIndexAfterRemove(state.fromCue, index, song.cues.length);
   state.selectedCue = adjustIndexAfterRemove(state.selectedCue, index, song.cues.length);
   bindActiveSong();
@@ -353,10 +503,11 @@ function duplicateCueAt(index: number) {
   if (song.cues.length >= MAX_CUES) return false;
   const cue = song.cues[index];
   if (!cue) return false;
-  song.cues.splice(index + 1, 0, createCue({ name: state.cueNames[index], levels: cue.levels, fadeTime: cue.fadeTime, aims: cue.aims }));
+  song.cues.splice(index + 1, 0, copyCue({ ...cue, name: state.cueNames[index] }));
   bindActiveSong();
   state.selectedCue = index + 1;
   state.fromCue = state.selectedCue;
+  state.liveStep = -1;
   syncPlaybackPair();
   renderCues();
   renderSelectedGroup();

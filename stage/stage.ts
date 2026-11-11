@@ -10,6 +10,7 @@ import { inspectorEl, renderInspector } from "./sidebar.ts";
 import { changed } from "./actions.ts";
 import "./keys.ts";
 import "./chat-hooks.ts"; // window.stageChat, for the chat panel
+import "./test-fade.ts"; // the 3D view's test fade
 import { syncBoxInputs } from "./dialogs.ts";
 import { consoleLink, consoleFixtureById, leaveToOtherWindow } from "./link.ts";
 

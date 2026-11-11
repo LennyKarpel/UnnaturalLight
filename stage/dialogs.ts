@@ -23,6 +23,7 @@ import {
   libraryPickerFor,
 } from "./link.ts";
 import { elById } from "../shared/query.ts";
+import { alwaysShowNames, setAlwaysShowNames } from "./names.ts";
 import { UNITS, convertLength, fromShown, inputStep, lengthUnit, onUnitChange, setLengthUnit, toShown, unitName, type Unit } from "./units.ts";
 import { isOneOf } from "../shared/guards.ts";
 import type { FixtureProfile } from "./fixture-library.ts";
@@ -105,10 +106,15 @@ onUnitChange(() => {
   syncRigDialogType({ keepValues: true });
 });
 
+// Names of positions and risers: always, or only the one pointed at / picked out (names.ts).
+const alwaysNames = elById<HTMLInputElement>("alwaysNames");
+alwaysNames.addEventListener("change", () => setAlwaysShowNames(alwaysNames.checked));
+
 const settingsBtn = elById("settingsBtn");
 settingsBtn.addEventListener("click", () => {
   settingsBtn.blur();
   syncUnitButtons();
+  alwaysNames.checked = alwaysShowNames();
   renderSurfaceRows();
   settingsDlg.showModal();
 });

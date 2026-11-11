@@ -18,6 +18,7 @@ import {
   type Fixture,
   type Frame,
   type Rig,
+  type Xyz,
 } from "./stage-model.ts";
 import { clamp, numberFrom } from "../shared/numbers.ts";
 import { applyCollapsed } from "./panel.ts";
@@ -26,7 +27,7 @@ import { escapeHtml, el } from "../shared/html.ts";
 import { bindPanTiltPad } from "../shared/pan-tilt-pad.ts";
 import { COLOR_ROLES, emitterHex, isColorRole } from "../shared/color.ts";
 import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS, positionById, riserById, ui } from "./state.ts";
-import { MAX_RISERS } from "./risers.ts";
+import { MAX_RISERS, RISER_FIELDS, setRiserField } from "./risers.ts";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import {
   flashing,
@@ -46,14 +47,11 @@ import {
   setHoverPosition,
   setPlacing,
   setActiveRiser,
-  setRiserField,
   deleteRiser,
   openRiserMenu,
-  RISER_FIELDS,
 } from "./actions.ts";
 import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
 import { showTrace } from "./stage.ts";
-import type { Vector3 } from "three";
 import { elById } from "../shared/query.ts";
 import { readStored, store } from "../shared/storage.ts";
 
@@ -400,6 +398,9 @@ function dmxRowsHtml(attrs: DmxAttr[]) {
 }
 
 /** Rebuild the inspector for the current selection (none, one, or several). */
+/** Inspector line for fixtures that follow a position (filled in by showFollow). */
+const FOLLOW_NOTE = `<div class="follow-note" data-follow hidden><span></span><select data-follow-pick title="Aim at a named position (they follow it)"></select><button type="button" data-act="unfollow" title="Stay aimed where it is, but stop following the position">Stop following</button></div>`;
+
 export function renderInspector() {
   const sel = selectedFixtures();
   if (!sel.length) {
@@ -421,7 +422,7 @@ export function renderInspector() {
       </div>
       <p class="hint">Sets every selected fixture. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
       ${selRig ? rigSectionHtml(selRig) + rigLinkHtml() : ""}
-      <div class="follow-note" data-follow hidden><span></span><select data-follow-pick title="Aim at a named position (they follow it)"></select><button type="button" data-act="unfollow" title="Stay aimed where it is, but stop following the position">Stop following</button></div>
+      ${FOLLOW_NOTE}
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
         <button data-act="aimSpot" title="Point all selected beams at one spot (A)">Aim at spot</button>
@@ -476,7 +477,7 @@ export function renderInspector() {
     </div>
     ${linkSectionHtml(sel[0])}
     ${rig ? rigSectionHtml(rig) + rigLinkHtml() : ""}
-    <div class="follow-note" data-follow hidden><span></span><select data-follow-pick title="Aim at a named position (they follow it)"></select><button type="button" data-act="unfollow" title="Stay aimed where it is, but stop following the position">Stop following</button></div>
+    ${FOLLOW_NOTE}
     <div class="buttons">
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
       <button data-act="aimSpot" title="Point the beam at a spot you click (A)">Aim at spot</button>
@@ -716,7 +717,7 @@ export function syncInspector() {
   if (readout) {
     const dir = beamDir(fixture);
     const hits = axisHits(fixture, state.box);
-    const fmt = (p: Vector3) => `${fmtNumber(p.x)}, ${fmtNumber(p.y)}, ${fmtNumber(p.z)}`;
+    const fmt = (p: Xyz) => `${fmtNumber(p.x)}, ${fmtNumber(p.y)}, ${fmtNumber(p.z)}`;
     let html = `<div>${isInside(fixture, state.box) ? "Inside" : "<b>Outside</b>"} the box · dir ${round(dir.x)}, ${round(dir.y)}, ${round(dir.z)}</div>`;
     if (!hits.length) html += `<div>Beam axis misses the box</div>`;
     hits.forEach((h, idx) => {

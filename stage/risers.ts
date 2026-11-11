@@ -99,6 +99,23 @@ export const SIZE_HANDLES: Extract<RiserHandle, { kind: "size" }>[] = [
   ...([[0, -1], [1, 0], [0, 1], [-1, 0]] as const).map(([su, sv]) => ({ kind: "size" as const, su, sv })),
 ];
 
+/** The riser fields people and the chat edit (the Risers list's inputs' `data-rk`). */
+export const RISER_FIELDS = ["name", "x", "z", "w", "d", "h", "yaw"] as const;
+export type RiserField = (typeof RISER_FIELDS)[number];
+
+/** Set one riser field (lengths in meters), kept in range as a saved riser is. False if the value wasn't usable. */
+export function setRiserField(riser: Riser, k: RiserField, raw: string | number): boolean {
+  if (k === "name") {
+    const name = String(raw).trim();
+    if (name) riser.name = name;
+    return !!name;
+  }
+  const v = numberFrom(raw);
+  if (v == null) return false;
+  Object.assign(riser, normalizeRiser({ ...riser, [k]: v }, 0));
+  return true;
+}
+
 /** A point in the riser's own frame (u along its width, v along its depth) → the world (x, z). */
 export function localToWorld(r: Riser, u: number, v: number): { x: number; z: number } {
   const c = Math.cos(r.yaw * DEG), s = Math.sin(r.yaw * DEG);

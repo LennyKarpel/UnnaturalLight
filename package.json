@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/server.ts",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"test/*.test.ts\"",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "test:browser": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/browser/*.test.ts\""
   },
   "engines": {
     "node": ">=22.13"

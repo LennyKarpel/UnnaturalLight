@@ -14,10 +14,11 @@ import {
   normalizeUniverses,
   type ShowData,
 } from "./show.ts";
-import { defaultSongName, createSong, normalizeSongs, resolveActiveSong, type Song } from "./songs.ts";
+import { clampStep, defaultSongName, createSong, normalizeSongs, resolveActiveSong, shownLevels, type Song } from "./songs.ts";
 import {
   normalizeSets,
   nextSetSong,
+  playbackCue,
   playbackLevels,
   resolveActiveEntry,
   resolveActiveSet,
@@ -25,6 +26,7 @@ import {
   type ShowSet,
 } from "./sets.ts";
 import { must } from "../shared/query.ts";
+import { notifyStage } from "./stage-link.ts";
 import type { ServerLink } from "./server-link.ts";
 import type { OutputStatus } from "../shared/protocol.ts";
 import { clamp } from "../shared/numbers.ts";
@@ -48,6 +50,7 @@ export function blankShowState(showName: string = defaultShowName()): ShowData {
     fromCue: 0,
     toCue: 1,
     selectedCue: 0,
+    liveStep: -1,
     songs: [song],
     activeSongId: song.id,
     sets,
@@ -105,6 +108,8 @@ export type ConsoleState = {
   fromCue: number;
   toCue: number;
   selectedCue: number;
+  /** The LIVE cue's step shown and edited (-1: its own look). Its row in cueLevels is that step's levels. */
+  liveStep: number;
   selectedFader: number;
   /** The show server's timed fade (it runs there): null = none. */
   fadeState: FadeInfo | null;
@@ -141,6 +146,7 @@ export const state: ConsoleState = {
   fromCue: boot.fromCue,
   toCue: boot.toCue,
   selectedCue: boot.selectedCue ?? 0,
+  liveStep: boot.liveStep ?? -1,
   selectedFader: 0,
   fadeState: null,
   // The show name, show buttons, DMX outputs and status are drawn in the header
@@ -190,20 +196,28 @@ export function bindActiveSong() {
   state.activeSongId = song.id;
   state.activeSetId = getActiveSet().id;
   state.activeEntryId = getActiveEntry()?.id ?? null;
-  state.cueLevels = song.cues.map((t) => t.levels);
   state.cueNames = song.cues.map((t) => t.name);
-  const n = state.cueLevels.length;
+  const n = song.cues.length;
   state.selectedCue = clamp(state.selectedCue, 0, Math.max(0, n - 1));
   state.fromCue = clamp(state.fromCue, 0, Math.max(0, n - 1));
   syncPlaybackPair();
 }
 
-/** UP NEXT follows LIVE: the next cue in the song, or the next set song's first (see upNextCue). */
+/**
+ * UP NEXT follows LIVE: the next cue in the song, or the next set song's
+ * first (see upNextCue). Also binds cueLevels: each cue's levels, the LIVE
+ * one's those of its step being shown (liveStep), so edits land in the step.
+ */
 export function syncPlaybackPair() {
-  const n = state.cueLevels.length;
-  state.fromCue = Math.min(Math.max(0, state.fromCue), n - 1);
+  const cues = getActiveSong().cues;
+  state.fromCue = Math.min(Math.max(0, state.fromCue), cues.length - 1);
+  state.liveStep = clampStep(cues[state.fromCue], state.liveStep);
+  state.cueLevels = shownLevels(cues, state.fromCue, state.liveStep);
   state.toCue = upNextCue(state);
 }
+
+/** UP NEXT as a cue (maybe the next set song's first), for its steps. */
+export const upNextCueObject = () => playbackCue(state, state.toCue);
 
 bindActiveSong();
 
@@ -221,6 +235,7 @@ export function setStatus(text: string, kind: StatusKind = "idle") {
 export function persistSession() {
   saveSession(currentShowState());
   state.serverLink?.sync();
+  notifyStage(); // the stage header shows cue names and fade times
 }
 
 export function currentShowState(): ShowData {
@@ -240,6 +255,7 @@ export function currentShowState(): ShowData {
     fromCue: state.fromCue,
     toCue: state.toCue,
     selectedCue: state.selectedCue,
+    liveStep: state.liveStep,
     songs: state.songs,
     activeSongId: state.activeSongId,
     sets: state.sets,

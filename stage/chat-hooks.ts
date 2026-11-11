@@ -3,8 +3,8 @@
 // edits are saved and shared the usual way. Fixtures and rigs are passed by id.
 import { MAX_FIXTURES, RIG_TYPES, aimAt, homeFixture, consoleTypeFromKey, createFixture, round, linkChannels, type RigType } from "./stage-model.ts";
 import { state, byId, positionById, riserById, rigById, rigOf, rigMembers, moveFixture, addRigAt, setRigField, serialize, save, RIG_FIELDS, type RigField } from "./state.ts";
-import { changed, deleteSelected, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser, setRiserField, RISER_FIELDS, type RiserField } from "./actions.ts";
-import type { Riser } from "./risers.ts";
+import { changed, deleteSelected, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser } from "./actions.ts";
+import { setRiserField, RISER_FIELDS, type Riser, type RiserField } from "./risers.ts";
 import { renderInspector } from "./sidebar.ts";
 import { updateBox } from "./view3d.ts";
 import { syncBoxInputs } from "./dialogs.ts";
@@ -76,7 +76,7 @@ const stageChat = {
   addPosition(name: string, at: { x: number; y: number; z: number }) {
     const n = name.trim();
     if (n && state.positions.some((p) => p.name.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a position called "${n}"`);
-    const position = addPositionAt(at.x, at.y, at.z, n);
+    const position = addPositionAt(at.x, at.y, at.z, n, { rename: false });
     if (!position) throw new Error("Position limit reached");
     return { name: position.name, x: position.x, y: position.y, z: position.z };
   },
@@ -114,7 +114,7 @@ const stageChat = {
       ...(cfg.depth != null ? { d: cfg.depth } : {}),
       ...(cfg.height != null ? { h: cfg.height } : {}),
       ...(cfg.yaw != null ? { yaw: cfg.yaw } : {}),
-    });
+    }, { rename: false });
     if (!riser) throw new Error("Riser limit reached");
     return riserInfo(riser);
   },

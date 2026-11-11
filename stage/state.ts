@@ -85,6 +85,9 @@ export const ui: {
   activePosition: string | null;
   /** The position under the pointer (3D, plan or its row in the list), or null: it's lit up. */
   hoverPosition: string | null;
+  /** The fixture / riser under the pointer (3D or plan), or null: it's named (see names.ts). */
+  hoverFixture: string | null;
+  hoverRiser: string | null;
   /** The riser picked out (list, plan, 3D), or null. */
   activeRiser: string | null;
   /** Set up at boot (stage.ts): keeps the stage with the show on the show server. */
@@ -97,6 +100,8 @@ export const ui: {
   aiming: false,
   activePosition: null,
   hoverPosition: null,
+  hoverFixture: null,
+  hoverRiser: null,
   activeRiser: null,
   showLink: null,
 };

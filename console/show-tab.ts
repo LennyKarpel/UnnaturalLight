@@ -1,6 +1,6 @@
 // Show tab: every song in the show (add, remove, rename, reorder, play),
 // and the sets each one is in.
-import { defaultSongName, createCue, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.ts";
+import { defaultSongName, copyCue, createSong, MAX_SONGS, moveSong, normalizeSongName } from "./songs.ts";
 import { addSongBtn, songScroll, songList, songEmpty, tabShow, dropSlot, showDropLine, startDragScroll, wireRowDrag, type DragScroll, closePopup } from "./dom.ts";
 import { renderSetBar } from "./set-bar.ts";
 import { getActiveEntry, getActiveSet, bindActiveSong, persistSession, state } from "./state.ts";
@@ -189,6 +189,7 @@ export function setActiveSong(songId: string, entryId?: string | null, startCue 
     : (getActiveSet().entries.find((entry) => entry.songId === song.id)?.id ?? null);
   state.fromCue = Math.min(Math.max(0, startCue), song.cues.length - 1);
   state.selectedCue = state.fromCue;
+  state.liveStep = -1;
   state.cross = 0;
   bindActiveSong();
   syncCrossUi();
@@ -234,7 +235,7 @@ function duplicateSong(id: string) {
   const song = state.songs[index];
   const copy = createSong({
     name: `${song.name} copy`.slice(0, 40),
-    cues: song.cues.map((cue) => createCue({ name: cue.name, levels: cue.levels, fadeTime: cue.fadeTime, aims: cue.aims })),
+    cues: song.cues.map(copyCue),
   });
   state.songs.splice(index + 1, 0, copy);
   persistSession();

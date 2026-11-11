@@ -7,7 +7,7 @@
 
 import type { StageChat } from "../../stage/chat-hooks.ts";
 import type { Args, ToolDef } from "./tools.ts";
-import { findFixtures } from "./find.ts";
+import { findByName, findFixtures } from "./find.ts";
 
 function stage(): StageChat {
   const s = window.stageChat;

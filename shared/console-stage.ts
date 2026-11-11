@@ -65,6 +65,14 @@ export type AimPair = { fixture: string; position: string };
  *   hold        the stage's B / F held (on) or released on a dimmer channel
  *   aim         aim fixtures at positions in the cue(s) on the output
  *   reaim       positions or fixtures moved: update the cues that aim at them
+ *   testFade    play (true) or stop (false) a test of the fade into the LIVE
+ *               cue (see TransitionTest): on the stage only, or `live` on
+ *               the lights too
+ *   testStep    the test, one step at a time: play to the LIVE cue's next
+ *               step and hold (on its last: all the way)
+ *   setTestFade set the LIVE cue's In time (seconds), as the test uses it
+ *   stepCue     make the cue before (-1) or after (+1) LIVE the LIVE one (the
+ *               cue the stage edits), as the console's ◀ ▶ beside GO do
  */
 export type ConsoleEnd = {
   hello: () => void;
@@ -76,6 +84,36 @@ export type ConsoleEnd = {
   hold: (kind: "blackout" | "flash", channel: number, on: boolean) => void;
   aim: (list: AimRequest[]) => void;
   reaim: (list: Reaim[]) => void;
+  testFade: (on: boolean, live?: boolean) => void;
+  testStep: (live?: boolean) => void;
+  setTestFade: (seconds: number) => void;
+  stepCue: (step: -1 | 1) => void;
+};
+
+/**
+ * The 3D view's Test: the cue before the LIVE one (`from`; "Dark" when
+ * nothing comes before it) for a second, then the fade into LIVE (`to`) over
+ * its In time. On the stage only, the console, the show server and the
+ * lights don't change. Live, it's the real thing: the cue before is made
+ * LIVE, and a second later GO (so it needs a cue before, and the server).
+ */
+export type TransitionTest = {
+  from: string;
+  to: string;
+  /** How long the fade into LIVE takes (its steps' times and its own In time; seconds). */
+  fadeSeconds: number;
+  /** LIVE's looks: its steps and its own (1: no steps; then the In time can be set here). */
+  steps: number;
+  /** Whether there's a cue before / after LIVE (for ‹ ›; across set songs, as ◀ ▶ beside GO). */
+  canBack: boolean;
+  canForward: boolean;
+  /** While a test plays: in the first second ("hold") or fading, and seconds into the fade. */
+  /**
+   * While a test plays: holding the cue before ("hold"), fading, or held on a
+   * step ("held", after Step), how far in (seconds), and the step it's on or
+   * fading into (1-based; null: no steps, or not started).
+   */
+  running: { phase: "hold" | "fade" | "held"; seconds: number; live: boolean; step: number | null } | null;
 };
 
 /** What the console sends the stage on every output change. */
@@ -93,6 +131,8 @@ export type StageLevels = {
   aims: AimPair[];
   /** The aims in the cue on the output (during a crossfade: the one past halfway). */
   liveAims: AimPair[];
+  /** The test fade's cues and time, and whether one is playing (the levels above are then the test's). */
+  test: TransitionTest;
 };
 
 /**

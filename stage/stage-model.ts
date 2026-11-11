@@ -1,7 +1,8 @@
 // Stage model: fixtures, their zero frames, pan/tilt math, and the save
-// format. No DOM or rendering here; stage.ts owns the view and UI state.
+// format. No DOM, rendering or three.js here (the 3D math is ./rotation.ts),
+// so Node can run it: npm test covers it. view3d.ts draws it.
 
-import * as THREE from "three";
+import { add, cross, dot, eulerFromAxes, eulerFromQuat, invertQuat, lengthSq, mulQuat, normalize, quatFromEuler, rotate, scale, sub, vec, type Quat, type Vec } from "./rotation.ts";
 import { normalizeProfile, type FixtureProfile } from "./fixture-library.ts";
 import { clamp, clampByte, numberFrom } from "../shared/numbers.ts";
 import { colorFromLevels, isColorRole, levelsFromColor } from "../shared/color.ts";
@@ -25,7 +26,8 @@ import { MAX_RISERS, normalizeRiser, type Riser } from "./risers.ts";
 export const STORAGE_KEY = "unnaturallight.stage";
 export const MAX_FIXTURES = 32;
 export const DEG = Math.PI / 180;
-export const FORWARD = new THREE.Vector3(0, 0, -1);
+/** A fixture's beam, in its own frame. */
+export const FORWARD: Vec = Object.freeze(vec(0, 0, -1));
 
 export type Frame = { yaw: number; pitch: number; roll: number };
 export type { DmxAttr };
@@ -173,29 +175,33 @@ export function linkChannels(fixture: Fixture): { channel: number; attr: DmxAttr
 
 export const round = (v: number, n = 2) => Math.round(v * 10 ** n) / 10 ** n;
 
-export function baseQuat(fixture: Fixture): THREE.Quaternion {
+/** A Frame from angles in radians (x = pitch, y = yaw, z = roll), in degrees rounded to 0.01. */
+const frameFrom = (e: Vec): Frame => ({ yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) });
+
+/** The fixture's zero frame as a rotation. */
+export function baseQuat(fixture: Fixture): Quat {
   const { yaw, pitch, roll } = fixture.base;
-  return new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch * DEG, yaw * DEG, roll * DEG, "YXZ"));
+  return quatFromEuler(pitch * DEG, yaw * DEG, roll * DEG);
 }
 
-export function fullQuat(fixture: Fixture): THREE.Quaternion {
-  const pt = new THREE.Quaternion().setFromEuler(new THREE.Euler(fixture.tilt * DEG, fixture.pan * DEG, 0, "YXZ"));
-  return baseQuat(fixture).multiply(pt);
+/** The zero frame, then pan and tilt: where the fixture's head points. */
+export function fullQuat(fixture: Fixture): Quat {
+  return mulQuat(baseQuat(fixture), quatFromEuler(fixture.tilt * DEG, fixture.pan * DEG, 0));
 }
 
-export function beamDir(fixture: Fixture): THREE.Vector3 {
-  return FORWARD.clone().applyQuaternion(fullQuat(fixture));
+export function beamDir(fixture: Fixture): Vec {
+  return rotate(FORWARD, fullQuat(fixture));
 }
 
 /** Yaw/pitch that make local forward point along v. */
-function frameFacing(v: THREE.Vector3): Frame {
+function frameFacing(v: Vec): Frame {
   const h = Math.hypot(v.x, v.z);
   return { yaw: round(Math.atan2(-v.x, -v.z) / DEG), pitch: round(Math.atan2(v.y, h) / DEG), roll: 0 };
 }
 
 /** Where a new fixture's zero points: stage floor center (box center if it sits on the floor). */
-export function defaultTarget(fixture: Fixture, box: Box): THREE.Vector3 {
-  return fixture.y < 0.5 ? new THREE.Vector3(0, box.h / 2, 0) : new THREE.Vector3(0, 0, 0);
+export function defaultTarget(fixture: Fixture, box: Box): Vec {
+  return fixture.y < 0.5 ? vec(0, box.h / 2, 0) : vec(0, 0, 0);
 }
 
 /** Pan / tilt back to zero (DMX 128). */
@@ -205,16 +211,14 @@ export function homeFixture(fixture: Fixture) {
   deriveFromDmx(fixture);
 }
 
-export function aimZeroAt(fixture: Fixture, target: THREE.Vector3) {
-  const v = target.clone().sub(new THREE.Vector3(fixture.x, fixture.y, fixture.z));
-  if (v.lengthSq() < 1e-6) v.set(0, -1, 0);
-  fixture.base = frameFacing(v);
+export function aimZeroAt(fixture: Fixture, target: Xyz) {
+  const v = sub(target, fixture);
+  fixture.base = frameFacing(lengthSq(v) < 1e-6 ? vec(0, -1, 0) : v);
   homeFixture(fixture);
 }
 
 export function setZeroHere(fixture: Fixture) {
-  const e = new THREE.Euler().setFromQuaternion(fullQuat(fixture), "YXZ");
-  fixture.base = { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) };
+  fixture.base = frameFrom(eulerFromQuat(fullQuat(fixture)));
   homeFixture(fixture);
 }
 
@@ -226,10 +230,9 @@ export function setZeroHere(fixture: Fixture) {
  * Changes nothing.
  */
 export function aimDmx(fixture: Fixture, target: Xyz, nearPan = fixture.pan): { pan: number; tilt: number; reached: boolean } | null {
-  const v = new THREE.Vector3(target.x - fixture.x, target.y - fixture.y, target.z - fixture.z);
-  if (v.lengthSq() < 1e-6) return null;
-  v.applyQuaternion(baseQuat(fixture).invert());
-  const want = frameFacing(v); // in the zero frame: yaw = pan, pitch = tilt
+  const v = sub(target, fixture);
+  if (lengthSq(v) < 1e-6) return null;
+  const want = frameFacing(rotate(v, invertQuat(baseQuat(fixture)))); // in the zero frame: yaw = pan, pitch = tilt
   let pan: number | null = null;
   for (const p of [want.yaw - 360, want.yaw, want.yaw + 360]) {
     if (Math.abs(p) > fixture.panLimit + 1e-6) continue;
@@ -250,10 +253,15 @@ export function aimDmx(fixture: Fixture, target: Xyz, nearPan = fixture.pan): { 
 export function aimAt(fixture: Fixture, target: Xyz, nearPan = fixture.pan): boolean {
   const aim = aimDmx(fixture, target, nearPan);
   if (!aim) return false;
-  fixture.dmx.pan = aim.pan;
-  fixture.dmx.tilt = aim.tilt;
-  deriveFromDmx(fixture);
+  setPanTilt(fixture, aim);
   return aim.reached;
+}
+
+/** Set pan and tilt (DMX 0–255) together. */
+export function setPanTilt(fixture: Fixture, { pan, tilt }: { pan: number; tilt: number }) {
+  fixture.dmx.pan = pan;
+  fixture.dmx.tilt = tilt;
+  deriveFromDmx(fixture);
 }
 
 export function isInside(p: Xyz, box: Box): boolean {
@@ -268,7 +276,7 @@ const FACE_NAMES: Record<string, string> = {
 };
 
 /** Ray/box slab test. Returns hits along the beam axis (entry/exit). */
-export type BeamHit = { t: number; face: string; point: THREE.Vector3 };
+export type BeamHit = { t: number; face: string; point: Vec };
 
 export function axisHits(fixture: Fixture, box: Box): BeamHit[] {
   const { w, d, h } = box;
@@ -293,7 +301,7 @@ export function axisHits(fixture: Fixture, box: Box): BeamHit[] {
   const axes = "xyz";
   const at = (t: number, a: number, s: string): BeamHit => ({
     t, face: FACE_NAMES[axes[a] + s],
-    point: new THREE.Vector3(o[0] + dv[0] * t, o[1] + dv[1] * t, o[2] + dv[2] * t),
+    point: vec(o[0] + dv[0] * t, o[1] + dv[1] * t, o[2] + dv[2] * t),
   });
   const hits: BeamHit[] = [];
   if (tMin > 0 && enterAxis >= 0) hits.push(at(tMin, enterAxis, enterSign));
@@ -480,15 +488,15 @@ export const RIG_TYPES: Record<RigType, {
  * axis along local +y; tilt rotates it about x (0 = flat, 90 = upright
  * facing the audience), then yaw turns it about the vertical.
  */
-function rigQuat(rig: Pick<Rig, "yaw" | "tilt">): THREE.Quaternion {
-  return new THREE.Quaternion().setFromEuler(new THREE.Euler(rig.tilt * DEG, rig.yaw * DEG, 0, "YXZ"));
+function rigQuat(rig: Pick<Rig, "yaw" | "tilt">): Quat {
+  return quatFromEuler(rig.tilt * DEG, rig.yaw * DEG, 0);
 }
 
 /** Member `i`'s position in the rig's own (unrotated) frame. */
-function localSlot(rig: Rig, i: number): THREE.Vector3 {
+function localSlot(rig: Rig, i: number): Vec {
   const n = rig.count, s = rig.size;
   if (rig.type === "line") {
-    return new THREE.Vector3(n === 1 ? 0 : -s / 2 + (s * i) / (n - 1), 0, 0);
+    return vec(n === 1 ? 0 : -s / 2 + (s * i) / (n - 1), 0, 0);
   }
   if (rig.type === "square") {
     // Walk the perimeter (upstage edge first, left to right, then clockwise
@@ -497,16 +505,11 @@ function localSlot(rig: Rig, i: number): THREE.Vector3 {
     const t = ((i + 0.5) / n) * 4 * s;
     const side = Math.min(3, Math.floor(t / s));
     const u = t - side * s;
-    return [
-      new THREE.Vector3(-h + u, 0, -h),
-      new THREE.Vector3(h, 0, -h + u),
-      new THREE.Vector3(h - u, 0, h),
-      new THREE.Vector3(-h, 0, h - u),
-    ][side];
+    return [vec(-h + u, 0, -h), vec(h, 0, -h + u), vec(h - u, 0, h), vec(-h, 0, h - u)][side];
   }
   const r = s / 2;
   const theta = (2 * Math.PI * i) / n;
-  return new THREE.Vector3(r * Math.sin(theta), 0, -r * Math.cos(theta));
+  return vec(r * Math.sin(theta), 0, -r * Math.cos(theta));
 }
 
 /**
@@ -518,22 +521,19 @@ function localSlot(rig: Rig, i: number): THREE.Vector3 {
  */
 function rigSlot(rig: Rig, i: number): Xyz & { base: Frame } {
   const q = rigQuat(rig);
-  const c = new THREE.Vector3(rig.x, rig.y, rig.z);
-  const pos = localSlot(rig, i).applyQuaternion(q).add(c);
-  const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
-  let back: THREE.Vector3, up: THREE.Vector3; // local +Z (opposite the beam) and local +Y
+  const pos = add(rotate(localSlot(rig, i), q), rig);
+  const axis = rotate(vec(0, 1, 0), q);
+  let back: Vec, up: Vec; // local +Z (opposite the beam) and local +Y
   if (RIG_TYPES[rig.type].aim === "parallel") {
     back = axis;
-    up = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    up = rotate(vec(0, 0, 1), q);
   } else {
-    back = pos.clone().sub(c).normalize(); // away from the center
-    up = axis.sub(back.clone().multiplyScalar(axis.dot(back))).normalize();
+    back = normalize(sub(pos, rig)); // away from the center
+    up = normalize(sub(axis, scale(back, dot(axis, back))));
   }
-  const right = new THREE.Vector3().crossVectors(up, back);
-  const e = new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back), "YXZ");
   return {
     x: round(pos.x, 3), y: round(pos.y, 3), z: round(pos.z, 3),
-    base: { yaw: round(e.y / DEG), pitch: round(e.x / DEG), roll: round(e.z / DEG) },
+    base: frameFrom(eulerFromAxes(cross(up, back), up, back)),
   };
 }
 
@@ -550,15 +550,14 @@ export function applyRig(rig: Rig, members: Fixture[]) {
  * The rig's shape in world space, for drawing: a polyline (closed for
  * circle / square).
  */
-export function rigOutline(rig: RigShape): THREE.Vector3[] {
+export function rigOutline(rig: RigShape): Vec[] {
   const q = rigQuat(rig);
-  const c = new THREE.Vector3(rig.x, rig.y, rig.z);
   const h = rig.size / 2;
-  let local: THREE.Vector3[];
-  if (rig.type === "line") local = [new THREE.Vector3(-h, 0, 0), new THREE.Vector3(h, 0, 0)];
-  else if (rig.type === "square") local = [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].map(([x, z]) => new THREE.Vector3(x, 0, z));
-  else local = Array.from({ length: 65 }, (_, k) => { const t = (2 * Math.PI * k) / 64; return new THREE.Vector3(h * Math.sin(t), 0, -h * Math.cos(t)); });
-  return local.map((p) => p.applyQuaternion(q).add(c));
+  let local: Vec[];
+  if (rig.type === "line") local = [vec(-h, 0, 0), vec(h, 0, 0)];
+  else if (rig.type === "square") local = [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].map(([x, z]) => vec(x, 0, z));
+  else local = Array.from({ length: 65 }, (_, k) => { const t = (2 * Math.PI * k) / 64; return vec(h * Math.sin(t), 0, -h * Math.cos(t)); });
+  return local.map((p) => add(rotate(p, q), { x: rig.x, y: rig.y, z: rig.z }));
 }
 
 /** Lowest point of the rig, so it can be kept off the floor. */

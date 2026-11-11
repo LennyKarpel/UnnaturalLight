@@ -5,10 +5,10 @@
 // to (server/data/dmx.json), so after a restart or an unplug / replug the
 // same device comes back on the same universe without asking.
 
-import fs from "node:fs";
 import path from "node:path";
 import { SerialPort } from "serialport";
 import { errorMessage } from "../shared/guards.ts";
+import { readJsonFile, writeJsonFile } from "./files.ts";
 
 const ENTTEC_START = 0x7e;
 const ENTTEC_END = 0xe7;
@@ -149,15 +149,12 @@ export function createDmx({ dataDir, maxUniverses, fake = false, onChange }: { d
   function save() {
     const map: Record<number, string> = {};
     for (const u of universes) if (u.serial && !u.fake) map[u.number] = u.serial;
-    fs.writeFileSync(savedFile, `${JSON.stringify(map, null, 2)}\n`);
+    writeJsonFile(savedFile, map);
   }
 
-  try {
-    const map = JSON.parse(fs.readFileSync(savedFile, "utf8"));
-    for (const u of universes) if (typeof map[u.number] === "string") u.serial = map[u.number];
-  } catch {
-    // No devices remembered yet.
-  }
+  // null: no devices remembered yet.
+  const map = readJsonFile(savedFile) as Record<number, unknown> | null;
+  if (map) for (const u of universes) if (typeof map[u.number] === "string") u.serial = map[u.number] as string;
 
   /** Connect universe n: its remembered device, else the first free one found. */
   async function connect(n: number) {

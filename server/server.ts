@@ -6,9 +6,10 @@
 //   - runs timed fades and sends DMX to the Enttec DMX USB Pro(s) (server/dmx.ts)
 //     and to Art-Net / sACN nodes (server/net-dmx.ts),
 //     so closing or backgrounding a browser tab never affects the lights
-//   - saves the show to server/data/session.json
+//   - saves the show to server/data/session.show.json
 //   - answers the chat panel at POST /chat and /chat/summary (server/chat/:
-//     asks the model; the tools run in the page)
+//     asks the model; the tools run in the page), and keeps its chats at
+//     /chat/chats (server/data/session.chats.json, apart from the show)
 //
 // Each app window talks to it over one WebSocket at /ws, shared by its
 // console (console/server-link.ts) and its stage (stage/show-link.ts).
@@ -17,6 +18,9 @@
 //   --lan       listen on the local network too (other machines need the printed token)
 //   --fake-dmx  pretend a DMX USB Pro is connected (for testing without hardware)
 //   --no-open   don't open a browser
+//
+// Environment: UNNATURALLIGHT_PORT (default 8080), UNNATURALLIGHT_DATA_DIR
+// (default server/data), and the chat's (server/chat/model.ts).
 
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
@@ -28,17 +32,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_UNIVERSES } from "../console/patch.ts";
-import { prettyJson } from "../shared/json.ts";
+import { readJsonFile, writeJsonFile } from "./files.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
 import { createShow } from "./show.ts";
 import { handleChat, handleChatSummary } from "./chat/chat.ts";
+import { createChats } from "./chat/chats.ts";
 import type { ClientMessage, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
 import { errorMessage } from "../shared/guards.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DATA_DIR = path.join(ROOT, "server", "data");
-const SESSION_FILE = path.join(DATA_DIR, "session.json");
+/** server/data, or UNNATURALLIGHT_DATA_DIR (the browser tests use a temporary one, so they never touch the real show). */
+const DATA_DIR = process.env.UNNATURALLIGHT_DATA_DIR ? path.resolve(process.env.UNNATURALLIGHT_DATA_DIR) : path.join(ROOT, "server", "data");
+/** The show (with the stage). Was session.json: renamed on start (below). */
+const SESSION_FILE = path.join(DATA_DIR, "session.show.json");
+const OLD_SESSION_FILE = path.join(DATA_DIR, "session.json");
+/** The chat panel's chats: next to the show file, named to match, but not part of it. */
+const CHATS_FILE = path.join(DATA_DIR, "session.chats.json");
 /** DMX refresh / fade step (40 frames a second, as the browser used to send). */
 const FRAME_MS = 25;
 const SAVE_DELAY_MS = 500;
@@ -47,7 +57,7 @@ const PUBLIC = ["index.html", "page/", "console/", "stage/", "shared/"];
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
-  // Served as JavaScript: types stripped (see serveFile).
+  // Served as JavaScript: types stripped (see stripped()).
   ".ts": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json",
@@ -63,16 +73,15 @@ const LAN = flag("--lan");
 const TOKEN = crypto.randomBytes(9).toString("base64url");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+// Before the chats had their own file, the show was session.json.
+if (!fs.existsSync(SESSION_FILE) && fs.existsSync(OLD_SESSION_FILE)) fs.renameSync(OLD_SESSION_FILE, SESSION_FILE);
 
 // --- show + DMX -------------------------------------------------------------
 
-let saved: (Record<string, unknown> & { stage?: SavedStage }) | null = null;
-try {
-  saved = JSON.parse(fs.readFileSync(SESSION_FILE, "utf8"));
-} catch {
-  // First run: the first console to connect provides the show.
-}
+// null on the first run: the first console to connect provides the show.
+const saved = readJsonFile(SESSION_FILE) as (Record<string, unknown> & { stage?: SavedStage }) | null;
 const show = createShow(saved);
+const chats = createChats(CHATS_FILE);
 /** The stage (stage page's layout, as stage/stage-model.ts serializeStage makes it), or null. */
 let stage: SavedStage | null = saved?.stage ?? null;
 
@@ -86,10 +95,7 @@ function saveNow() {
   saveTimer = null;
   const data = show.serialized();
   if (!data) return;
-  const file = stage ? { ...data, stage } : data;
-  const tmp = `${SESSION_FILE}.tmp`;
-  fs.writeFileSync(tmp, prettyJson(file));
-  fs.renameSync(tmp, SESSION_FILE);
+  writeJsonFile(SESSION_FILE, stage ? { ...data, stage } : data);
 }
 
 const dmx = createDmx({
@@ -158,6 +164,11 @@ async function onMessage(ws: WebSocket, client: { id: string }, msg: ClientMessa
     case "go":
       if (!show.hasShow) return;
       show.go(performance.now());
+      sendLive();
+      return;
+    case "step":
+      if (!show.hasShow) return;
+      show.go(performance.now(), { step: true });
       sendLive();
       return;
     case "pause":
@@ -239,6 +250,11 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/chat" || url.pathname === "/chat/summary") {
     if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
     else (url.pathname === "/chat" ? handleChat : handleChatSummary)(req, res).catch((err) => console.error(err));
+    return;
+  }
+  if (url.pathname === "/chat/chats" || url.pathname.startsWith("/chat/chats/")) {
+    if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
+    else chats.handle(req, res, url).catch((err) => console.error(err));
     return;
   }
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
@@ -334,6 +350,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   console.log("==> UnnaturalLight show server");
   console.log(`    directory : ${ROOT}`);
   console.log(`    show file : ${path.relative(ROOT, SESSION_FILE)}${show.hasShow ? "" : " (none yet: the first console provides it)"}`);
+  console.log(`    chats     : ${path.relative(ROOT, CHATS_FILE)} (${chats.list().length})`);
   console.log(`    DMX       : ${flag("--fake-dmx") ? "fake output (--fake-dmx)" : "Enttec DMX USB Pro via USB"}`);
   for (const line of netDmx.describe()) console.log(`    network   : ${line}`);
   console.log(`    this Mac  : ${local}`);
@@ -349,6 +366,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
 function stop(signal: string) {
   console.log(`\n==> ${signal}: saving the show and stopping…`);
   saveNow();
+  chats.flush();
   netDmx.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 500).unref();
 }

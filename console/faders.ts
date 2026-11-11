@@ -2,6 +2,7 @@
 // extras drawn on fader rows (color bars, pan/tilt pads, blackout and
 // flash buttons, fixture outlines).
 import { liveLevel as mixLevel, exactLiveLevel as exactMixLevel, type Mix } from "../shared/engine.ts";
+import { stepPath } from "./songs.ts";
 import { installColorPicker } from "../shared/color-picker.ts";
 import { bindPanTiltPad, type PanTilt } from "../shared/pan-tilt-pad.ts";
 import { ask, type AskOptions } from "../shared/ask.ts";
@@ -12,7 +13,7 @@ import { FADER_COUNT, formatChannelLabel, formatChannelTooltip, type FaderPatch 
 import { formatChannelRange, type Fixture } from "./fixtures.ts";
 import { defaultFaderName } from "./show.ts";
 import { liveFadersEl, faderNameMenu, faderNameMenuList, patchTableEl, tabPatch, closePopup, openPopup, menuItem } from "./dom.ts";
-import { getNextSetSong, getPlaybackLevels, persistSession, state } from "./state.ts";
+import { getNextSetSong, getPlaybackLevels, persistSession, state, upNextCueObject } from "./state.ts";
 import {
   liveUi,
   blackedOutFaders,
@@ -48,11 +49,16 @@ export function cueName(index: number) {
   return typeof name === "string" ? name.trim() : "";
 }
 
+/** "Cue 3: Chorus", or with another song's name: "Song 2 · Cue 1". */
+export function formatCueLabel(number: number, name: string | undefined, song?: string | null) {
+  const own = name?.trim();
+  return `${song ? `${song} · ` : ""}Cue ${number}${own ? `: ${own}` : ""}`;
+}
+
 /** "Cue 3: Chorus": cues are numbered by their position in the song (another song's start: "Song 2 · Cue 1"). */
 export function cueLabel(index: number) {
   const { song, number } = cueAt(index);
-  const name = cueName(index);
-  return `${song ? `${song} · ` : ""}Cue ${number}${name ? `: ${name}` : ""}`;
+  return formatCueLabel(number, cueName(index), song);
 }
 
 /**
@@ -315,7 +321,7 @@ export function levelSlider(wrap: HTMLElement, i: number, level: number, label: 
 }
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max */
-const shownMix = (): Mix => ({ master: state.master, cross: shownCross(), fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue });
+const shownMix = (): Mix => ({ master: state.master, cross: shownCross(), fromSub: state.fromSub, toSub: state.toSub, fromCue: state.fromCue, toCue: state.toCue, toPath: stepPath(upNextCueObject()) });
 
 export function liveLevel(faderIndex: number) {
   return mixLevel(shownMix(), getPlaybackLevels(), faderIndex);

@@ -102,6 +102,16 @@ export function nextSetSong(play: Playback) {
   return next && song ? { entry: next, song } : null;
 }
 
+/** The entry before the playing one in the active set, with its song, or null (first, or played from outside the set). */
+export function previousSetSong(play: Playback) {
+  const set = resolveActiveSet(play.sets, play.activeSetId);
+  const entry = resolveActiveEntry(set, play.activeEntryId, play.activeSongId);
+  const index = entry ? set.entries.indexOf(entry) : -1;
+  const prev = index > 0 ? set.entries[index - 1] : null;
+  const song = prev ? play.songs.find((item) => item.id === prev.songId) : null;
+  return prev && song ? { entry: prev, song } : null;
+}
+
 /**
  * The cue UP NEXT after LIVE (`fromCue`): the following cue in the song. After
  * the song's last cue: in the set, the next song's first cue (its index is the

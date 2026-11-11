@@ -73,6 +73,23 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
   font-size: var(--text-xs);
 }
 .chat-head button { padding: 2px 8px; }
+/* The open chat's name: opens the list of chats. */
+.chat-pick { max-width: 55%; display: flex; gap: 4px; font-weight: 600; }
+.chat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The list of chats (▾): the open one marked; ✎ rename, ✕ delete. */
+.chat-list {
+  max-height: 40%;
+  overflow-y: auto;
+  padding: 4px 10px 6px 6px;
+  border-bottom: 1px solid var(--track);
+}
+.chat-list[hidden] { display: none; }
+.chat-row { display: flex; align-items: center; gap: 2px; border-radius: 4px; }
+.chat-row.is-current { background: var(--panel-2); }
+.chat-row button { padding: 3px 6px; }
+.chat-row-name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-row.is-current .chat-row-name { color: var(--accent); }
 .chat-close { font-size: var(--text-lg); line-height: 1; }
 
 /* The conversation: a gutter on the right so the thin scrollbar never sits on the text. */
@@ -148,3 +165,12 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
   max-height: 30vh;
 }
 .chat-input textarea:focus { outline: none; border-color: var(--accent); }
+
+/* Send turns into Stop while it's working: red, so it reads as "halt". */
+.chat.is-busy .chat-input button[type="submit"] {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+.chat.is-busy .chat-input button[type="submit"]:hover { background: color-mix(in srgb, var(--warn) 38%, transparent); }

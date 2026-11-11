@@ -40,7 +40,7 @@ export type FixtureProfile = {
 type OflCapability = { type?: string; color?: string; angle?: string; angleStart?: string; angleEnd?: string };
 type OflChannel = { capability?: OflCapability; capabilities?: OflCapability[] };
 type OflMode = { name: string; channels?: (string | null | object)[] };
-type OflFixture = {
+export type OflFixture = {
   name: string;
   modes?: OflMode[];
   availableChannels?: Record<string, OflChannel>;
@@ -146,7 +146,7 @@ function classify(ch: OflChannel): { attr: DmxAttr | null; range?: { lo: number;
 }
 
 /** Modes of a fixture, with whether each can be used here (and why not). */
-function modesOf(fixture: OflFixture): { index: number; name: string; channels: number; ok: boolean; reason: string }[] {
+export function modesOf(fixture: OflFixture): { index: number; name: string; channels: number; ok: boolean; reason: string }[] {
   return (fixture.modes ?? []).map((mode, index) => {
     const n = Array.isArray(mode.channels) ? mode.channels.length : 0;
     const matrix = (mode.channels ?? []).some((c) => c && typeof c === "object");
@@ -160,7 +160,7 @@ function modesOf(fixture: OflFixture): { index: number; name: string; channels: 
  * (only the first of each kind); everything else (strobe, gobo, fine
  * channels, …) is kept by name so the console can still give it a fader.
  */
-function profileFor(fixture: OflFixture, manufacturerName: string, manufacturerKey: string, fixtureKey: string, modeIndex: number): FixtureProfile {
+export function profileFor(fixture: OflFixture, manufacturerName: string, manufacturerKey: string, fixtureKey: string, modeIndex: number): FixtureProfile {
   const mode = (fixture.modes ?? [])[modeIndex];
   const available = fixture.availableChannels ?? {};
   // Pixel fixtures define channels as templates ("Red $pixelKey"), used in

@@ -2,19 +2,25 @@
  * The chat panel: a side panel on the right of the app page (../../index.html),
  * opened with the header's Chat button. You ask in words; the model answers
  * and uses the tools (./tools.ts) to look at and change the show, through
- * this window's console. The conversation is kept in this browser
- * (localStorage; windows in the same browser share it), not on the show
- * server. A long one is kept short: past MAX_PROMPTS prompts, the oldest
- * are summed up by the model and the summary takes their place.
+ * this window's console. There can be several named conversations (chats);
+ * they're kept on the show server (./store.ts: server/data/session.chats.json,
+ * next to the show's session.show.json but not in it), so every window and
+ * computer shares them. This browser keeps the panel's own settings (open,
+ * width, which chat is open, ↑ / ↓ prompts). A long chat is kept short: past
+ * MAX_PROMPTS prompts, the oldest are summed up by the model and the summary
+ * takes their place.
  */
 
-import type { ChatAssistantMessage, ChatMessage, ChatToolCall } from "../../shared/chat-protocol.ts";
+import { CHAT_NAME_MAX, MAX_CHATS, type ChatChange, type ChatAssistantMessage, type ChatMessage, type ChatToolCall, type SavedChat } from "../../shared/chat-protocol.ts";
 import { button, el } from "../../shared/html.ts";
+import { ask } from "../../shared/ask.ts";
+import { newId } from "../../shared/ids.ts";
 import { elById } from "../../shared/query.ts";
 import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { readStoredJson, storeJson } from "../../shared/storage.ts";
 import { promptCount, repairHistory, runTurn, summarize, summaryCut, type TurnView } from "./loop.ts";
 import { toolByName } from "./tools.ts";
+import { deleteChat, fetchChats, flushChats, listenChats, saveChat } from "./store.ts";
 
 const KEY = "unnaturallight.chat";
 /** Past this many prompts, the oldest SUMMED are summed up (between turns). */
@@ -31,35 +37,71 @@ const MIN_PANES = 360;
 
 /** Prompts kept for ↑ / ↓ (newest last). */
 const MAX_SENT = 50;
+/** A conversation (as the server keeps it). */
+type Chat = SavedChat;
+/** This browser's: `sent`: the prompts typed here, for ↑ / ↓ (all chats, kept across New). `current`: the open chat's id. */
+type Prefs = { open: boolean; width: number; model: string; current: string; sent: string[] };
 
-/** `sent`: the prompts typed here, for ↑ / ↓ (kept across New). */
-type Prefs = { open: boolean; width: number; model: string; history: ChatMessage[]; sent: string[] };
-let prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", history: [], sent: [] };
-const saved = readStoredJson(KEY);
-if (isRecord(saved)) {
-  prefs = {
-    open: saved.open === true,
-    width: typeof saved.width === "number" && Number.isFinite(saved.width) ? saved.width : DEFAULT_WIDTH,
-    model: typeof saved.model === "string" ? saved.model : "",
-    history: Array.isArray(saved.history) ? (saved.history as ChatMessage[]) : [],
-    sent: Array.isArray(saved.sent) ? saved.sent.filter((t): t is string => typeof t === "string").slice(-MAX_SENT) : [],
-  };
-  // A turn cut short by a reload can leave tool calls without results.
+/** A chat's name from its first prompt. */
+const nameFrom = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, CHAT_NAME_MAX);
+
+const newChat = (history: ChatMessage[] = []): Chat => ({ id: newId("chat"), name: "", history, used: Date.now() });
+
+/** A saved chat, its tool calls cut short by a reload repaired; null if this version can't read it. */
+function readChat(v: unknown): Chat | null {
+  if (!isRecord(v) || typeof v.id !== "string" || !Array.isArray(v.history)) return null;
+  const history = v.history as ChatMessage[];
   try {
-    repairHistory(prefs.history);
+    repairHistory(history);
   } catch {
-    prefs.history = []; // not a conversation this version can read
+    return null;
   }
+  const first = history.find((m) => m.role === "user");
+  const name = typeof v.name === "string" && v.name ? v.name.slice(0, CHAT_NAME_MAX) : first ? nameFrom(first.text) : "";
+  return { id: v.id, name, history, used: typeof v.used === "number" ? v.used : 0 };
 }
 
+const readChats = (list: unknown[]) => list.map(readChat).filter((c): c is Chat => !!c);
+
+/** Chats this browser kept before they moved to the show server: they're sent there once, then dropped here. */
+let fromBrowser: Chat[] = [];
+
+function loadPrefs(): Prefs {
+  const saved = readStoredJson(KEY);
+  const prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", current: "", sent: [] };
+  if (isRecord(saved)) {
+    prefs.open = saved.open === true;
+    if (typeof saved.width === "number" && Number.isFinite(saved.width)) prefs.width = saved.width;
+    if (typeof saved.model === "string") prefs.model = saved.model;
+    if (Array.isArray(saved.sent)) prefs.sent = saved.sent.filter((t): t is string => typeof t === "string").slice(-MAX_SENT);
+    if (Array.isArray(saved.chats)) fromBrowser = readChats(saved.chats);
+    // Before named chats: one conversation, `history`.
+    else if (Array.isArray(saved.history)) fromBrowser = readChats([{ id: newId("chat"), history: saved.history }]);
+    if (typeof saved.current === "string") prefs.current = saved.current;
+  }
+  return prefs;
+}
+
+const prefs = loadPrefs();
+/** Every chat: the server's (loadChats), plus a new empty one until they're in. */
+let chats: Chat[] = [newChat()];
+/** The server's chats are in (until then, sending waits). */
+let loaded = false;
 const save = () => storeJson(KEY, prefs);
+/** Save a chat on the server; a new chat that's still empty stays here until it's used. */
+const keep = (c: Chat) => { if (c.history.length || c.name) saveChat(c); };
+
+/** The open chat. */
+const chat = () => chats.find((c) => c.id === prefs.current) ?? chats[0];
+/** What a chat is called: its name, else "New chat". */
+const chatName = (c: Chat) => c.name || "New chat";
 
 /**
  * Never more than HARD_MAX prompts, whatever happens to summing up: drop the
  * oldest down to MAX_PROMPTS. In place (a running turn holds this same list).
  */
 function capHistory() {
-  const h = prefs.history;
+  const h = chat().history;
   const n = promptCount(h);
   if (n > HARD_MAX) h.splice(0, summaryCut(h, HARD_MAX, n - MAX_PROMPTS));
 }
@@ -69,21 +111,23 @@ let summing = false;
 /**
  * Past MAX_PROMPTS prompts, have the oldest SUMMED summed up and put the
  * summary in their place. Runs in the background after a turn; only
- * replaces them if they're still there unchanged (New, or another window
- * in this browser, may have changed the conversation meanwhile).
+ * replaces them if they're still there unchanged (New, or another window,
+ * may have changed the conversation meanwhile; it may not be the open chat
+ * any more).
  */
 async function sumUpOld() {
-  const h = prefs.history;
+  const c = chat();
+  const h = c.history;
   const cut = summaryCut(h, MAX_PROMPTS, SUMMED);
   if (summing || !cut) return;
   summing = true;
   const part = h.slice(0, cut);
   try {
     const text = await summarize(part);
-    if (prefs.history !== h || !part.every((m, i) => h[i] === m)) return;
+    if (!chats.includes(c) || c.history !== h || !part.every((m, i) => h[i] === m)) return;
     h.splice(0, cut, { role: "summary", text });
-    save();
-    if (!running) renderHistory();
+    keep(c);
+    if (!running && chat() === c) renderHistory();
   } catch (err) {
     console.warn(`Chat: couldn't sum up older messages (${errorMessage(err)}); trying again after the next prompt`);
   } finally {
@@ -99,11 +143,12 @@ panel.innerHTML = `
   <div class="chat-divider" role="separator" aria-orientation="vertical" aria-label="Resize the chat" tabindex="0"
     title="Drag to resize · double-click for the default width"><span class="grip"></span></div>
   <header class="chat-head">
-    <strong>Chat</strong>
+    <button type="button" class="chat-pick quiet" aria-expanded="false" aria-controls="chatList" title="Your chats: switch, rename or delete"><span class="chat-name"></span> ▾</button>
     <span class="chat-model"></span>
-    <button type="button" class="chat-new quiet" title="Start a new conversation">New</button>
+    <button type="button" class="chat-new quiet" title="Start a new chat (the others are kept: ▾)">New</button>
     <button type="button" class="chat-close quiet" title="Close the chat" aria-label="Close the chat">×</button>
   </header>
+  <div class="chat-list thin-scroll" id="chatList" hidden></div>
   <div class="chat-log thin-scroll" aria-live="polite"></div>
   <form class="chat-form">
     <div class="chat-input">
@@ -113,6 +158,9 @@ panel.innerHTML = `
   </form>`;
 const q = <T extends HTMLElement>(sel: string) => panel.querySelector(sel) as T;
 const modelEl = q<HTMLElement>(".chat-model");
+const pickBtn = q<HTMLButtonElement>(".chat-pick");
+const nameEl = q<HTMLElement>(".chat-name");
+const list = q<HTMLElement>(".chat-list");
 const log = q<HTMLElement>(".chat-log");
 const form = q<HTMLFormElement>(".chat-form");
 const input = q<HTMLTextAreaElement>("textarea");
@@ -210,7 +258,8 @@ function describe(call: ChatToolCall) {
 /** Draw the saved conversation. */
 function renderHistory() {
   log.replaceChildren();
-  const h = prefs.history;
+  nameEl.textContent = chatName(chat());
+  const h = chat().history;
   if (!h.length) {
     bubble("hint", "Ask in words: “play song 2”, “what’s up next?”, “master to 60%”, “GO”.");
   }
@@ -244,6 +293,10 @@ function setBusy(busy: boolean) {
   sendBtn.textContent = busy ? "Stop" : "Send";
   sendBtn.classList.toggle("primary", !busy);
   panel.classList.toggle("is-busy", busy);
+  // Switching chats waits for the turn (Stop first): it's still changing the show.
+  pickBtn.disabled = busy;
+  pickBtn.title = busy ? "Working… (Stop first to switch chats)" : "Your chats: switch, rename or delete";
+  if (busy) showList(false);
 }
 
 /** The show's and the stage's edits now (not playback), or null before the console and stage are up. */
@@ -295,8 +348,16 @@ async function send(text: string) {
   const before = editSnapshot();
   capHistory();
   const prompt: ChatMessage = { role: "user", text };
-  prefs.history.push(prompt);
-  save();
+  const c = chat();
+  c.history.push(prompt);
+  c.used = Date.now();
+  // A new chat is named after its first prompt (rename it from ▾).
+  const named = !c.name;
+  if (named) {
+    c.name = nameFrom(text);
+    nameEl.textContent = c.name;
+  }
+  keep(c);
   const promptEl = bubble("user", text);
   const abort = new AbortController();
   running = abort;
@@ -340,9 +401,10 @@ async function send(text: string) {
       prefs.model = model;
       modelEl.textContent = model;
       save();
+      keep(c);
     },
     results: () => {
-      if (current()) save();
+      if (current()) keep(c);
     },
     tool: (call) => {
       const c = chips.get(call.id) ?? chip(describe(call));
@@ -350,7 +412,7 @@ async function send(text: string) {
     },
   };
 
-  const history = prefs.history;
+  const history = c.history;
   try {
     await runTurn(history, view, abort.signal);
   } catch (err) {
@@ -363,6 +425,11 @@ async function send(text: string) {
   // conversation, so asking again means once (not a pile of unanswered prompts).
   if (history.at(-1) === prompt) {
     history.pop();
+    // Nothing left: the next prompt names it.
+    if (named && !history.length) {
+      c.name = "";
+      nameEl.textContent = chatName(c);
+    }
     promptEl.classList.add("is-failed");
     promptEl.title = "Not sent: it failed or was stopped before anything was done";
   }
@@ -372,7 +439,7 @@ async function send(text: string) {
   if (before && after && after.key !== before.key) offerUndo(before, after);
   running = null;
   setBusy(false);
-  save();
+  keep(c);
   input.focus();
   void sumUpOld();
 }
@@ -384,7 +451,8 @@ form.addEventListener("submit", (e) => {
     return;
   }
   const text = input.value.trim();
-  if (!text) return;
+  // Until the chats are in from the show server (a moment), the text waits in the box.
+  if (!text || !loaded) return;
   input.value = "";
   remember(text);
   void send(text);
@@ -430,24 +498,176 @@ input.addEventListener("keydown", (e) => {
 });
 // Typing here isn't for the stage or console's keys.
 panel.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !running) setOpen(false);
+  if (e.key === "Escape" && !list.hidden) showList(false);
+  else if (e.key === "Escape" && !running) setOpen(false);
   e.stopPropagation();
 });
+
+// --- the chats: New, and the ▾ list to switch, rename or delete -------------------
+
+/** Open a chat (and save which one it is). `focus`: put the cursor in the box (not when another window caused it). */
+function openChat(c: Chat, focus = true) {
+  prefs.current = c.id;
+  save();
+  renderHistory();
+  scrollDown();
+  if (focus) input.focus();
+}
+
+/** Take a chat out of the list; if it was open, open the most recent one instead (with `note` under it). */
+function dropChat(c: Chat, note?: string) {
+  chats.splice(chats.indexOf(c), 1);
+  if (!chats.length) chats.push(newChat());
+  if (c.id !== prefs.current) return;
+  openChat(byUse()[0], !note);
+  if (note) bubble("hint", note);
+}
+
+/** The chats, the one used most recently first. */
+const byUse = () => [...chats].sort((a, b) => b.used - a.used);
+
+/**
+ * Take the server's chats (another window may have added, changed or
+ * deleted some). The open chat stays this window's own (it may be running,
+ * or have a save on its way). Chats this browser kept before are sent up.
+ */
+async function loadChats() {
+  let fresh: Chat[];
+  try {
+    fresh = readChats(await fetchChats());
+  } catch (err) {
+    if (!loaded) bubble("error", `Couldn't load the chats from the show server (${errorMessage(err)}). Reload to try again.`);
+    return;
+  }
+  for (const c of fromBrowser) {
+    if (fresh.some((f) => f.id === c.id)) continue;
+    fresh.push(c);
+    saveChat(c);
+  }
+  if (fromBrowser.length) {
+    fromBrowser = [];
+    save(); // the browser copy goes (prefs has no chats)
+  }
+  // The open chat stays this window's own object (even a new, still empty one
+  // the server doesn't have yet), so nothing holding it goes stale.
+  const mine = chat();
+  const i = fresh.findIndex((c) => c.id === mine.id);
+  if (loaded) {
+    if (i >= 0) fresh[i] = mine;
+    else fresh.push(mine);
+  }
+  if (!fresh.length) fresh.push(newChat());
+  chats = fresh;
+  if (!chats.some((c) => c.id === prefs.current)) prefs.current = byUse()[0].id;
+  const first = !loaded;
+  loaded = true;
+  if (first) {
+    renderHistory();
+    void sumUpOld();
+  } else nameEl.textContent = chatName(chat());
+  if (!list.hidden) renderList();
+}
+
+/**
+ * Another window saved or deleted a chat. Only the chat with that id
+ * changes. The open one is redrawn, unless a request is running in it here
+ * (then this window's copy wins: it saves when the request ends).
+ */
+function onChange(change: ChatChange) {
+  if (!loaded) return;
+  const id = change.type === "saved" ? change.chat.id : change.id;
+  const i = chats.findIndex((c) => c.id === id);
+  const isOpen = id === chat().id;
+  if (isOpen && running) return;
+  if (change.type === "saved") {
+    const [fresh] = readChats([change.chat]);
+    if (!fresh) return;
+    if (i >= 0) chats[i] = fresh;
+    else chats.push(fresh);
+    if (isOpen) {
+      renderHistory();
+      scrollDown();
+    }
+  } else if (i >= 0) {
+    dropChat(chats[i], "That chat was deleted in another window.");
+  }
+  if (!list.hidden) renderList();
+}
+
+function showList(show: boolean) {
+  list.hidden = !show;
+  pickBtn.setAttribute("aria-expanded", String(show));
+  if (show) {
+    renderList();
+    void loadChats();
+  }
+}
+
+function renderList() {
+  list.replaceChildren();
+  for (const c of byUse()) {
+    // The list may be reloaded from the server while it's open: act on the chat as it is when clicked.
+    const id = c.id;
+    const now = () => chats.find((x) => x.id === id);
+    const row = el("div", "chat-row" + (c.id === prefs.current ? " is-current" : ""));
+    const open = button("chat-row-name quiet", chatName(c));
+    const n = promptCount(c.history);
+    open.title = `${chatName(c)} · ${n} prompt${n === 1 ? "" : "s"}`;
+    open.addEventListener("click", () => {
+      const it = now();
+      showList(false);
+      if (it) openChat(it);
+    });
+    const rename = button("quiet", "✎");
+    rename.title = "Rename";
+    rename.setAttribute("aria-label", `Rename ${chatName(c)}`);
+    rename.addEventListener("click", async () => {
+      const name = await ask({ title: "Rename chat", initial: chatName(c), confirmLabel: "Rename" });
+      const it = now();
+      if (!name || !it) return;
+      it.name = name.slice(0, CHAT_NAME_MAX);
+      saveChat(it);
+      renderList();
+      if (it.id === prefs.current) nameEl.textContent = it.name;
+    });
+    const del = button("quiet", "✕");
+    del.title = "Delete";
+    del.setAttribute("aria-label", `Delete ${chatName(c)}`);
+    del.addEventListener("click", async () => {
+      if (c.history.length && !(await ask({ title: `Delete “${chatName(c)}”?`, message: "Its messages are deleted for good. The show isn't changed.", confirmLabel: "Delete" }))) return;
+      void deleteChat(id);
+      const it = now();
+      if (it) dropChat(it);
+      renderList();
+    });
+    row.append(open, rename, del);
+    list.append(row);
+  }
+}
+
+pickBtn.addEventListener("click", () => showList(list.hidden));
 
 q<HTMLButtonElement>(".chat-new").addEventListener("click", () => {
   running?.abort();
   running = null;
   turn++;
   setBusy(false);
-  prefs.history = [];
-  save();
-  renderHistory();
-  input.focus();
+  showList(false);
+  // An empty chat is already new: no pile of empty ones.
+  if (chat().history.length) {
+    const c = newChat();
+    chats.push(c);
+    // Too many: the one used longest ago goes (the server does the same).
+    while (chats.length > MAX_CHATS) chats.splice(chats.indexOf(byUse().at(-1)!), 1);
+    prefs.current = c.id;
+  }
+  openChat(chat());
 });
 q<HTMLButtonElement>(".chat-close").addEventListener("click", () => setOpen(false));
 chatBtn.addEventListener("click", () => setOpen(panel.hidden));
 
-capHistory();
 renderHistory();
 setOpen(prefs.open);
-void sumUpOld();
+void loadChats();
+listenChats(onChange, () => void loadChats());
+addEventListener("pagehide", flushChats);

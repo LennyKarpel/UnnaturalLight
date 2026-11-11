@@ -1,7 +1,7 @@
 import { FADER_COUNT, defaultPatch, normalizeFaderPatch, MAX_UNIVERSES, type FaderPatch } from "./patch.ts";
 import { normalizeFixtureGroups, normalizeFixtures, type Fixture, type FixtureGroup } from "./fixtures.ts";
 import { prettyJson } from "../shared/json.ts";
-import { normalizeSongs, resolveActiveSong, type Song } from "./songs.ts";
+import { clampStep, normalizeSongs, resolveActiveSong, type Song } from "./songs.ts";
 import { normalizeSets, resolveActiveEntry, resolveActiveSet, upNextCue, type ShowSet } from "./sets.ts";
 import { clamp, clampInt } from "../shared/numbers.ts";
 import { isRecord } from "../shared/guards.ts";
@@ -81,6 +81,8 @@ export type ShowData = {
   fromCue: number;
   toCue: number;
   selectedCue: number;
+  /** The LIVE cue's step shown and edited (-1: the cue's own look). */
+  liveStep: number;
   songs: Song[];
   activeSongId: string;
   sets: ShowSet[];
@@ -123,6 +125,7 @@ export function serializeShow(state: ShowInput) {
     universes: normalizeUniverses(state.universes),
     fromCue: state.fromCue,
     selectedCue: state.selectedCue ?? 0,
+    liveStep: clampStep(active.cues[state.fromCue], state.liveStep ?? -1),
     songs,
     activeSongId: active.id,
     sets,
@@ -198,6 +201,7 @@ export function parseShow(data: unknown): ShowData {
     fromCue,
     toCue,
     selectedCue,
+    liveStep: clampStep(active.cues[fromCue], Number(obj.liveStep ?? -1)),
     songs,
     activeSongId: active.id,
     sets,

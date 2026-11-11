@@ -1,6 +1,6 @@
 /**
  * Link to the show server (../server/server.ts), which keeps the stage with
- * the show: saved in server/data/session.json and in set files, so the stage
+ * the show: saved in server/data/session.show.json and in set files, so the stage
  * follows the show to any browser or computer.
  *
  *   stage → server   the whole stage after each edit made here

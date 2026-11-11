@@ -48,6 +48,22 @@ export type ChatRequest = { messages: ChatMessage[]; tools: ChatTool[] };
 export type ChatSummaryRequest = { messages: ChatMessage[] };
 export type ChatSummary = { summary: string };
 
+/**
+ * One chat (conversation) as the show server keeps it (server/data/session.chats.json).
+ * `name` is "" until the first prompt names it; `used`: when it was last sent to (ms).
+ */
+export type SavedChat = { id: string; name: string; history: ChatMessage[]; used: number };
+/** GET /chat/chats: every chat. PUT /chat/chats/<id> (a SavedChat) saves one; DELETE removes it. Each has its own id, so a window only ever takes a chat's messages by that id. */
+export type SavedChats = { chats: SavedChat[] };
+/**
+ * GET /chat/chats/events?window=<id> (server-sent events): each `data:` line is
+ * one ChatChange, as another window saves or deletes a chat. A PUT or DELETE
+ * with ?window=<id> isn't sent back to that window.
+ */
+export type ChatChange = { type: "saved"; chat: SavedChat } | { type: "deleted"; id: string };
+export const MAX_CHATS = 30;
+export const CHAT_NAME_MAX = 40;
+
 /** Server → page: one JSON object per line, as the reply streams in. */
 export type ChatEvent =
   | { type: "text"; text: string }

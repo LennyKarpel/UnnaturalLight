@@ -4,7 +4,7 @@
  * results back, and repeat until it answers without calling any.
  */
 
-import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatSummary, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
+import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatRequest, ChatSummary, ChatSummaryRequest, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
 import { accessToken } from "../../shared/server-socket.ts";
 import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { TOOLS, toolByName, type ToolDef } from "./tools.ts";
@@ -26,7 +26,7 @@ export type TurnView = {
   tool: (call: ChatToolCall, description: string) => { done: (ok: boolean, note?: string) => void };
 };
 
-const chatUrl = (path = "/chat") => {
+export const chatUrl = (path = "/chat") => {
   const url = new URL(path, location.href);
   const token = accessToken();
   if (token) url.searchParams.set("token", token);
@@ -48,13 +48,13 @@ async function ask(history: ChatMessage[], view: TurnView, signal: AbortSignal):
   }
 }
 
+/** POST JSON to the show server's chat (`body` typed by what each endpoint takes). */
+const post = (path: string, body: ChatRequest | ChatSummaryRequest, signal?: AbortSignal) =>
+  fetch(chatUrl(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+
 async function stream(history: ChatMessage[], view: TurnView, signal: AbortSignal): Promise<{ message: ChatAssistantMessage; model: string }> {
-  const res = await fetch(chatUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: history, tools: TOOLS.map(({ name, description, schema, deferred }) => ({ name, description, schema, deferred })) }),
-    signal,
-  });
+  const tools = TOOLS.map(({ name, description, schema, deferred }) => ({ name, description, schema, deferred }));
+  const res = await post("/chat", { messages: history, tools }, signal);
   if (!res.ok || !res.body) throw new Error(res.status === 404 ? "This show server has no chat (restart it to update)" : `Chat failed: ${await res.text()}`);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
@@ -130,12 +130,7 @@ export function summaryCut(history: ChatMessage[], max: number, chunk: number): 
 
 /** Ask the show server to sum up `messages` (POST /chat/summary). */
 export async function summarize(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
-  const res = await fetch(chatUrl("/chat/summary"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
-    signal,
-  });
+  const res = await post("/chat/summary", { messages }, signal);
   if (!res.ok) throw new Error(`Summary failed: ${await res.text()}`);
   const { summary } = (await res.json()) as ChatSummary;
   if (typeof summary !== "string" || !summary.trim()) throw new Error("Summary failed: empty");

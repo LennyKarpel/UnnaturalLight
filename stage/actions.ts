@@ -19,8 +19,7 @@ import {
   type SavedStage,
 } from "./stage-model.ts";
 import { newId } from "../shared/ids.ts";
-import { MAX_RISERS, RISER_DEFAULTS, RISER_MAX_H, RISER_MAX_SIDE, RISER_MIN, normalizeRiser, wrapYaw, type Riser } from "./risers.ts";
-import { clamp, numberFrom } from "../shared/numbers.ts";
+import { MAX_RISERS, RISER_DEFAULTS, normalizeRiser, type Riser } from "./risers.ts";
 import {
   state,
   save,
@@ -119,6 +118,8 @@ export function changed({ list = true, inspector = true, persist = true } = {}) 
 }
 
 export function select(id: string | null, additive = false) {
+  // Selecting a fixture puts a picked-out riser back (Delete then means the fixture).
+  if (id && ui.activeRiser) setActiveRiser(null);
   if (!id) state.selected = [];
   else if (additive) {
     state.selected = state.selected.includes(id) ? state.selected.filter((s) => s !== id) : [...state.selected, id];
@@ -227,6 +228,15 @@ let menuPosition: string | null = null;
 /** Whether the banner shows a hovered position (so leaving it clears only that). */
 let hoverBanner = false;
 
+/** Name the fixture or riser under the pointer (3D or plan; null: none). */
+export function setHoverItem(fixture: string | null, riser: string | null) {
+  if (ui.hoverFixture === fixture && ui.hoverRiser === riser) return;
+  ui.hoverFixture = fixture;
+  ui.hoverRiser = riser;
+  syncScene();
+  drawPlan();
+}
+
 /**
  * Light up the position under the pointer (3D, plan or the list; null:
  * none): bigger, with a halo and lines from the fixtures following it, and
@@ -252,25 +262,30 @@ export function setHoverPosition(id: string | null) {
 }
 
 /** A name like "Position 3" that isn't taken yet. */
-function nextPositionName() {
-  const taken = new Set(state.positions.map((p) => p.name.toLowerCase()));
-  let n = state.positions.length + 1;
-  while (taken.has(`position ${n}`)) n++;
-  return `Position ${n}`;
+/** "Position 3", "Riser 3": the first `<prefix> N` (from one past the count) that isn't taken. */
+function nextFreeName(prefix: string, items: { name: string }[]) {
+  const taken = new Set(items.map((item) => item.name.toLowerCase()));
+  let n = items.length + 1;
+  while (taken.has(`${prefix.toLowerCase()} ${n}`)) n++;
+  return `${prefix} ${n}`;
 }
 
-/** Add a position (from a click while placing one, or the chat); returns it. */
-export function addPositionAt(x: number, y: number, z: number, name?: string) {
+/**
+ * Add a position (from a click while placing one, or the chat); returns it.
+ * `rename`: put the cursor in its name, to type one (a click; not the chat,
+ * which would lose its own cursor).
+ */
+export function addPositionAt(x: number, y: number, z: number, name?: string, { rename = true } = {}) {
   setPlacing(false);
   if (state.positions.length >= MAX_POSITIONS) {
     setBanner(`Position limit reached (${MAX_POSITIONS})`, 2500);
     return null;
   }
-  const position = { id: newId("position"), name: name?.trim() || nextPositionName(), x: round(x), y: round(Math.max(0, y)), z: round(z) };
+  const position = { id: newId("position"), name: name?.trim() || nextFreeName("Position", state.positions), x: round(x), y: round(Math.max(0, y)), z: round(z) };
   state.positions.push(position);
   ui.activePosition = position.id;
   changed();
-  showPositions({ rename: position.id });
+  showPositions(rename ? { rename: position.id } : {});
   return position;
 }
 
@@ -309,57 +324,35 @@ export function aimAtPosition(id: string, fixtures: Fixture[] = selectedFixtures
 /** Riser picked out (highlighted in the list, plan and 3D), or null. */
 export function setActiveRiser(id: string | null) {
   ui.activeRiser = id;
+  // Picking out a riser deselects the fixtures (Delete then means the riser).
+  if (id && state.selected.length) {
+    state.selected = [];
+    renderInspector();
+    changed({ inspector: false });
+  }
   syncScene();
   drawPlan();
   showRisers();
 }
 
-/** A name like "Riser 3" that isn't taken yet. */
-function nextRiserName() {
-  const taken = new Set(state.risers.map((r) => r.name.toLowerCase()));
-  let n = state.risers.length + 1;
-  while (taken.has(`riser ${n}`)) n++;
-  return `Riser ${n}`;
-}
-
-/** Add a riser centered at (x, z) (a click while placing one, or the chat); returns it. */
-export function addRiserAt(x: number, z: number, opts: Partial<Omit<Riser, "id" | "x" | "z">> = {}) {
+/** Add a riser centered at (x, z) (a click while placing one, or the chat); returns it. `rename`: as for addPositionAt. */
+export function addRiserAt(x: number, z: number, opts: Partial<Omit<Riser, "id" | "x" | "z">> = {}, { rename = true } = {}) {
   setPlacing(false);
   if (state.risers.length >= MAX_RISERS) {
     setBanner(`Riser limit reached (${MAX_RISERS})`, 2500);
     return null;
   }
-  const riser = normalizeRiser({ ...RISER_DEFAULTS, ...opts, id: newId("riser"), name: opts.name?.trim() || nextRiserName(), x, z }, state.risers.length);
+  const riser = normalizeRiser({ ...RISER_DEFAULTS, ...opts, id: newId("riser"), name: opts.name?.trim() || nextFreeName("Riser", state.risers), x, z }, state.risers.length);
   state.risers.push(riser);
-  ui.activeRiser = riser.id;
+  setActiveRiser(riser.id);
   changed();
-  showRisers({ rename: riser.id });
+  showRisers(rename ? { rename: riser.id } : {});
   return riser;
 }
 
 /** A riser's size and turn for the banner: "2.4 × 1.2 × 0.4 m · turn 30°". */
 export function describeRiser(r: Riser) {
   return `${toShown(r.w)} × ${toShown(r.d)} × ${toShown(r.h)} ${lengthUnit()} · turn ${r.yaw}°`;
-}
-
-/** The riser fields the Risers list edits (its inputs' `data-rk`). */
-export const RISER_FIELDS = ["name", "x", "z", "w", "d", "h", "yaw"] as const;
-export type RiserField = (typeof RISER_FIELDS)[number];
-
-/** Set one riser field (lengths in meters). False if the value wasn't usable. */
-export function setRiserField(riser: Riser, k: RiserField, raw: string | number): boolean {
-  if (k === "name") {
-    const name = String(raw).trim();
-    if (name) riser.name = name;
-    return !!name;
-  }
-  const v = numberFrom(raw);
-  if (v == null) return false;
-  if (k === "yaw") riser.yaw = round(wrapYaw(v), 1);
-  else if (k === "h") riser.h = round(clamp(v, RISER_MIN, RISER_MAX_H), 3);
-  else if (k === "w" || k === "d") riser[k] = round(clamp(v, RISER_MIN, RISER_MAX_SIDE), 3);
-  else riser[k] = round(clamp(v, -100, 100), 3);
-  return true;
 }
 
 export function deleteRiser(id: string, { redoing = false } = {}) {
@@ -667,9 +660,8 @@ export function undoDelete() {
     if (!back.length) return;
     state.risers.splice(Math.min(entry.riserIndex, state.risers.length), 0, ...back);
     writeRedo([...readRedo(), { fixtures: [], positions: [], risers: back.map((r) => r.id) }]);
-    ui.activeRiser = back[0].id;
+    setActiveRiser(back[0].id);
     changed();
-    showRisers();
     setBanner(`Restored ${back[0].name} · ⇧⌘Z to delete again`, 2500);
     return;
   }
