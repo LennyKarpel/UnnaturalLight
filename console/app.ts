@@ -4,7 +4,7 @@
 // server. The console's tabs themselves are in the modules imported below.
 import { startStageLink } from "./stage-link.ts";
 import { blankStage } from "../stage/stage-model.ts";
-import type { RegisterRequest, RegisterResult, StageLayout } from "../shared/console-stage.ts";
+import type { GoButton, RegisterRequest, RegisterResult, StageLayout } from "../shared/console-stage.ts";
 import { createServerLink } from "./server-link.ts";
 import { LIVE_FIELDS } from "../shared/live-fields.ts";
 import { isColorRole } from "../shared/color.ts";
@@ -21,7 +21,7 @@ import {
   serializeShow,
   normalizeUniverses,
 } from "./show.ts";
-import { type Look, type Song, createCue, stepLook, stepPath, cueSeconds, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
+import { type Look, type Song, createCue, stepLook, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
 import {
   type PatchTarget,
   FADER_COUNT,
@@ -50,7 +50,7 @@ import {
   normalizeMount,
   normalizeRoles,
 } from "./fixtures.ts";
-import { goTarget, normalizeSets, playbackCue, previousSetSong } from "./sets.ts";
+import { goTarget, normalizeSets, playbackCue } from "./sets.ts";
 import { allAims, applyAims, applyReaims } from "./aims.ts";
 import {
   currentCueTitle,
@@ -99,7 +99,6 @@ import {
 } from "./state.ts";
 import {
   cueLabel,
-  formatCueLabel,
   faderName,
   isUnpatched,
   liveLevel,
@@ -136,10 +135,8 @@ import {
   goNextCue,
   stepLiveCue,
   stepNextCue,
-  stepProgress,
+  goArea,
   stepBackCue,
-  previousLook,
-  stepTarget,
   setSelectedCue,
   showArrivedCue,
   toggleFadePause,
@@ -310,13 +307,19 @@ crossfader.addEventListener("input", () => {
   setCross(Number(crossfader.value), { fromUser: true });
 });
 
-goBtn.addEventListener("click", () => {
-  goNextCue();
-});
-goStepBtn.addEventListener("click", () => stepNextCue());
-goStepBackBtn.addEventListener("click", () => stepBackCue());
-prevCueBtn.addEventListener("click", () => stepLiveCue(-1));
-nextCueBtn.addEventListener("click", () => stepLiveCue(1));
+/** The GO area's buttons: here, and the 3D view's GO bar (console/stage-link.ts), which does exactly the same. */
+function goPress(button: GoButton) {
+  if (!goArea().buttons[button].enabled) return;
+  if (button === "go") goNextCue();
+  else if (button === "step") stepNextCue();
+  else if (button === "stepBack") stepBackCue();
+  else stepLiveCue(button === "prevCue" ? -1 : 1);
+}
+goBtn.addEventListener("click", () => goPress("go"));
+goStepBtn.addEventListener("click", () => goPress("step"));
+goStepBackBtn.addEventListener("click", () => goPress("stepBack"));
+prevCueBtn.addEventListener("click", () => goPress("prevCue"));
+nextCueBtn.addEventListener("click", () => goPress("nextCue"));
 
 fadePauseBtn.addEventListener("click", () => {
   toggleFadePause();
@@ -1058,40 +1061,9 @@ startStageLink({
   },
   register: registerFromStage,
   unregister: unregisterFromStage,
-  // The 3D view's test fade: the cue before LIVE (the previous set song's last, or dark), then LIVE.
-  testCues: () => {
-    const live = state.fromCue;
-    const levels = getPlaybackLevels();
-    // LIVE's own look (not the step shown, if one is), through its steps.
-    const cue = playbackCue(state, live);
-    const to = { label: cueLabel(live), levels: cue?.levels ?? [], path: stepPath(cue), seconds: cue ? cueSeconds(cue) : 0 };
-    // On its own look after its steps, LIVE is on its last step.
-    const looks = cue ? cue.steps.length + 1 : 1;
-    const progress = stepProgress() || (looks > 1 ? `on step ${looks} of ${looks}` : "");
-    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1), canStepBack: !!previousLook(), progress };
-    if (live > 0) return { from: { label: cueLabel(live - 1), levels: levels[live - 1] ?? [] }, to, ...steps };
-    const prev = previousSetSong(state);
-    const last = prev?.song.cues.at(-1);
-    if (!prev || !last) return { from: null, to, ...steps };
-    return { from: { label: formatCueLabel(prev.song.cues.length, last.name, prev.song.name), levels: last.levels }, to, ...steps };
-  },
-  setTestFade: (seconds) => {
-    const cue = playbackCue(state, state.fromCue);
-    if (!cue) return;
-    cue.fadeTime = normalizeCueFadeTime(seconds);
-    afterCueListChange(getActiveSong(), (i) => i);
-    persistSession();
-  },
-  stepCue: stepLiveCue,
-  stepBack: stepBackCue,
-  liveTest: {
-    go: () => consoleChat.go(),
-    step() {
-      if (!state.serverLive || !goTarget(state, true)) return false;
-      stepNextCue();
-      return true;
-    },
-  },
+  // The 3D view's GO bar: the GO area as shown here, and its buttons are these.
+  goArea,
+  goPress,
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
   hold: holdFromStage,

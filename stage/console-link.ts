@@ -6,15 +6,15 @@
 //   stage → console   "set channel N to V" when a linked value is changed here,
 //                     aims at named positions (follow.ts),
 //                     and the stage's channel layouts (the console takes
-//                     color roles its fixtures lack); the 3D view's test fade
-//                     (play / stop, and the LIVE cue's In time)
+//                     color roles its fixtures lack); the 3D view's GO bar
+//                     (its buttons are the console's GO area's)
 //
 // Only channels with a fader patched are synced. A channel is sent only after
 // the console's value for it has been heard, so opening the stage never moves
 // a console fader; and a value just sent is held briefly against the
 // console's older broadcasts so dragging a slider doesn't jitter.
 
-import { joinLink, type AimPair, type AimRequest, type Reaim, type RegisterRequest, type RegisterResult, type StageLayout, type StageLevels, type TransitionTest } from "../shared/console-stage.ts";
+import { joinLink, type AimPair, type AimRequest, type Reaim, type RegisterRequest, type RegisterResult, type StageLayout, type StageLevels, type GoArea, type GoButton } from "../shared/console-stage.ts";
 import type { ChannelValue } from "../shared/engine.ts";
 
 /** How long a value sent from the stage wins over the console's updates (e.g. an older one from the show server). */
@@ -43,9 +43,9 @@ export function createConsoleLink({
   /** Aims at named positions: in any cue / in the cue on the output. */
   let aims: AimPair[] = [];
   let liveAims: AimPair[] = [];
-  /** The test fade's cues and time (null until the console starts). */
-  let test: TransitionTest | null = null;
-  const testListeners: ((t: TransitionTest) => void)[] = [];
+  /** The console's GO area (null until the console starts). */
+  let go: GoArea | null = null;
+  const goListeners: ((g: GoArea) => void)[] = [];
   /** channel → the value the console and stage agree on (heard or sent) */
   const synced = new Map<number, number>();
   /** channel → { value, until }: just sent from the stage */
@@ -62,9 +62,9 @@ export function createConsoleLink({
       universes = data.universes;
       aims = data.aims;
       liveAims = data.liveAims;
-      test = data.test;
+      go = data.go;
       onLevels();
-      for (const fn of testListeners) fn(data.test);
+      for (const fn of goListeners) fn(data.go);
     },
   });
   toConsole((c) => c.hello());
@@ -145,32 +145,16 @@ export function createConsoleLink({
     reaim(list: Reaim[]) {
       toConsole((c) => c.reaim(list));
     },
-    /** The test fade's cues and time, and whether it's playing (null until the console starts). */
-    get test() { return test; },
-    /** Call `fn` with each update of the test fade's info. */
-    onTest(fn: (t: TransitionTest) => void) {
-      testListeners.push(fn);
-      if (test) fn(test);
+    /** The console's GO area (null until the console starts). */
+    get go() { return go; },
+    /** Call `fn` with each update of the console's GO area. */
+    onGo(fn: (g: GoArea) => void) {
+      goListeners.push(fn);
+      if (go) fn(go);
     },
-    /** Play (or stop) the fade into the LIVE cue: on the stage only, or `live` on the lights too. */
-    testFade(on: boolean, live = false) {
-      toConsole((c) => c.testFade(on, live));
-    },
-    /** The test one step at a time: play to LIVE's next step and hold (`live`: on the lights too). */
-    testStep(live = false) {
-      toConsole((c) => c.testStep(live));
-    },
-    /** ‹ Step: a held test back a step; otherwise the console's ‹ Step. */
-    testStepBack(live = false) {
-      toConsole((c) => c.testStepBack(live));
-    },
-    /** Make the cue before (-1) / after (+1) LIVE the LIVE one: the cue the stage edits. */
-    stepCue(step: -1 | 1) {
-      toConsole((c) => c.stepCue(step));
-    },
-    /** Set the LIVE cue's In time (seconds). */
-    setTestFade(seconds: number) {
-      toConsole((c) => c.setTestFade(seconds));
+    /** Press a GO area button: the console does what its own does. */
+    goPress(button: GoButton) {
+      toConsole((c) => c.go(button));
     },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
     setChannel(channel: number, value: number) {

@@ -59,3 +59,28 @@ test("stage model: setZeroHere keeps the beam where it points", () => {
   const after = model.beamDir(f);
   near([after.x, after.y, after.z], [before.x, before.y, before.z], "beam", 1e-3);
 });
+
+test("dimmer curves: what the stage draws for a dimmer value, saved with the fixture", () => {
+  const box = { w: 12, d: 8, h: 6 };
+  const f = model.createFixture(0, 5, 0, 0, box);
+  assert.equal(f.dimmerCurve, "linear");
+  model.setDmx(f, "dimmer", 128);
+  assert.equal(f.intensity, 128 / 255);
+  // Square law: half the value is a quarter of the light; dimmer 1 is next to nothing.
+  f.dimmerCurve = "square";
+  model.deriveFromDmx(f);
+  assert.ok(Math.abs(f.intensity - (128 / 255) ** 2) < 1e-12);
+  model.setDmx(f, "dimmer", 1);
+  assert.ok(f.intensity < 2e-5);
+  // Every curve: 0 is off, 255 is full, and more is never less.
+  for (const curve of model.DIMMER_CURVES) {
+    assert.equal(model.dimmerLight(curve, 0), 0, curve);
+    assert.equal(model.dimmerLight(curve, 1), 1, curve);
+    for (let v = 1; v <= 255; v++) assert.ok(model.dimmerLight(curve, v / 255) >= model.dimmerLight(curve, (v - 1) / 255), `${curve} at ${v}`);
+  }
+  assert.ok(model.dimmerLight("inverse-square", 0.25) > 0.25);
+  // Saved and read back; anything else reads as linear.
+  const { fixtures } = model.parseStage(model.serializeStage(box, [f], model.parseStage({}).transparent, []));
+  assert.equal(fixtures[0].dimmerCurve, "square");
+  assert.equal(model.normalizeFixture({ dimmerCurve: "bogus" }, 0).dimmerCurve, "linear");
+});

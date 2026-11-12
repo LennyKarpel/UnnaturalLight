@@ -59,6 +59,8 @@ export type Fixture = {
   base: Frame;
   dmx: DmxValues;
   panLimit: number; tiltLimit: number; zoomMin: number; zoomMax: number;
+  /** How the real fixture turns its dimmer value into light (its menu's dimmer curve), for drawing it. */
+  dimmerCurve: DimmerCurve;
   link: Link;
   color: string; pan: number; tilt: number; intensity: number; beam: number;
   rigId: string | null; rigIndex: number;
@@ -90,6 +92,31 @@ function dmxFromAngle(deg: number, limit: number) {
 }
 
 const beamFromZoom = (v: number, min: number, max: number) => min + (v / 255) * (max - min);
+
+/**
+ * Dimmer curves, as on a fixture's menu: how much light (0–1) a dimmer value
+ * (0–1) makes. The stage draws a fixture through its curve, so it looks as
+ * bright as the real one; the DMX sent doesn't change.
+ *   linear          light in step with the value
+ *   square          square law: low values stay dim (common on LED fixtures)
+ *   inverse-square  the opposite: low values come up quickly
+ *   s-curve         gentle at both ends
+ */
+export const DIMMER_CURVES = ["linear", "square", "inverse-square", "s-curve"] as const;
+export type DimmerCurve = (typeof DIMMER_CURVES)[number];
+export const DIMMER_CURVE_LABELS: Record<DimmerCurve, string> = {
+  linear: "Linear",
+  square: "Square law",
+  "inverse-square": "Inverse square",
+  "s-curve": "S-curve",
+};
+export function dimmerLight(curve: DimmerCurve, v: number): number {
+  const x = Math.min(1, Math.max(0, v));
+  if (curve === "square") return x * x;
+  if (curve === "inverse-square") return 1 - (1 - x) * (1 - x);
+  if (curve === "s-curve") return x * x * (3 - 2 * x);
+  return x;
+}
 export const zoomFromBeam = (deg: number, min: number, max: number) => (max > min ? clampByte(((deg - min) / (max - min)) * 255) : 0);
 
 /**
@@ -97,7 +124,7 @@ export const zoomFromBeam = (deg: number, min: number, max: number) => (max > mi
  * `d` (values to draw instead, like a fade's in-between ones).
  */
 export function deriveFromDmx(fixture: Fixture, d: DmxValues = fixture.dmx) {
-  fixture.intensity = d.dimmer / 255;
+  fixture.intensity = dimmerLight(fixture.dimmerCurve, d.dimmer / 255);
   fixture.pan = round(angleFromDmx(d.pan, fixture.panLimit));
   fixture.tilt = round(angleFromDmx(d.tilt, fixture.tiltLimit));
   fixture.color = colorFromLevels(d);
@@ -318,6 +345,7 @@ export function createFixture(x: number, y: number, z: number, n: number, box: B
     base: { yaw: 0, pitch: 0, roll: 0 },
     dmx: { ...(Object.fromEntries(DMX_ATTRS.map((a) => [a, 0])) as DmxValues), dimmer: 255, pan: DMX_CENTER, tilt: DMX_CENTER, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
+    dimmerCurve: "linear",
     link: { consoleId: null, start: null, layout: [] },
     rigId: null, rigIndex: 0, follow: null,
     // Derived (set by deriveFromDmx just below).
@@ -404,6 +432,7 @@ export function normalizeFixture(saved: unknown, i: number): Fixture {
     base: { yaw: num(b.yaw, 0), pitch: num(b.pitch, -45), roll: num(b.roll, 0) },
     dmx,
     panLimit, tiltLimit, zoomMin, zoomMax,
+    dimmerCurve: isOneOf(DIMMER_CURVES, raw.dimmerCurve) ? raw.dimmerCurve : "linear",
     link: normalizeLink(raw.link),
     rigId: typeof raw.rigId === "string" ? raw.rigId : null,
     rigIndex: typeof raw.rigIndex === "number" && Number.isInteger(raw.rigIndex) ? raw.rigIndex : 0,

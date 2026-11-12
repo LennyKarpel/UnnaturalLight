@@ -36,39 +36,33 @@
   .group { display: flex; align-items: center; gap: 0.4rem; }
   .group > label { color: var(--muted); }
   .spacer { flex: 1; }
-  /* The test fade bar, centered at the top of the 3D view (the banner sits under it).
-     Its buttons row has fixed widths (Test ⇄ GO ⇄ Stop, the time kept even while
-     hidden for steps), so the buttons never move; the line under them (cues,
-     steps, clock) takes the row's width and never widens the bar. */
-  .test-fade {
+  /* The GO bar (the console's GO area), centered at the top of the 3D view (the
+     banner sits under it). The buttons have fixed widths, so they never move;
+     the line under them (LIVE → UP NEXT, the fade, the readout) is cut
+     short (…) rather than widen the bar. */
+  .stage-go {
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     display: grid; justify-items: center; gap: 3px;
-    max-width: calc(100% - 24px);
+    /* A fixed width: room for the line under the buttons, and nothing moves as it changes. */
+    width: min(30rem, calc(100% - 24px));
     background: rgba(18, 20, 24, 0.82);
     border: 1px solid var(--track);
     border-radius: 6px;
     padding: 4px 6px 3px;
   }
-  .test-fade-row { display: flex; align-items: center; gap: 0.4rem; }
-  .test-fade-info {
+  .stage-go-row { display: flex; align-items: center; gap: 0.4rem; }
+  .stage-go-info {
     width: 0; min-width: 100%;
     display: flex; justify-content: center; gap: 0.6rem;
     font-size: var(--text-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
   }
-  .test-fade-cues { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .test-fade-step { padding-inline: 0.5rem; }
-  .test-fade-live { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
-  /* Live: the buttons are the console's, on the lights. Say so. */
-  .test-fade.is-live { border-color: var(--warn); }
-  .test-fade.is-live .test-fade-live, .test-fade.is-live #testFadeBtn { color: var(--warn); }
-  #testFadeBtn { min-width: 6.5em; }
-  #testFadeTime { min-width: 4.5em; }
-  /* With steps the time is the console's: hidden, still taking its room. */
-  #testFadeTime.is-off { visibility: hidden; }
-  .test-fade-clock, .test-fade-steps { font-family: var(--mono); flex: none; }
-  .test-fade-progress { flex: none; color: var(--ink); }
-  .test-fade-clock.is-idle { display: none; }
-  #testFadeBtn.is-running { color: var(--warn); }
+  .stage-go-cues { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .stage-go-fade, .stage-go-readout { flex: none; }
+  .stage-go-readout { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stage-go-step { padding-inline: 0.5rem; }
+  .stage-go-btn { min-width: 5.5em; font-weight: 700; letter-spacing: 0.04em; }
+  /* As the console's GO while a fade plays. */
+  .stage-go-btn.is-running { border-color: var(--select); background: color-mix(in srgb, var(--select) 55%, var(--panel)); }
   input[type="number"], input[type="text"] {
     font-family: var(--mono);
     width: 64px;
@@ -85,8 +79,8 @@
   .view canvas { display: block; width: 100%; height: 100%; }
   .view.placing canvas { cursor: crosshair; }
   .hud {
-    /* Under the test fade bar's row, so a narrow view doesn't overlap them. */
-    position: absolute; left: 12px; top: 56px;
+    /* Under the GO bar (two rows), so a narrow view doesn't overlap them. */
+    position: absolute; left: 12px; top: 74px;
     background: rgba(18, 20, 24, 0.82);
     border: 1px solid var(--track);
     border-radius: 6px;

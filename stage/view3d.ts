@@ -757,7 +757,8 @@ export function syncScene() {
     v.cone.scale.set(coneR, coneR, coneLen);
     v.cone.material.clippingPlanes = wallPlanes.filter((pl) => pl.distanceToPoint(p) >= -1e-3);
     v.cone.material.color.copy(color);
-    v.cone.material.opacity = 0.06 + 0.16 * lk.intensity;
+    // In step with the dimmer from zero (no floor), so a low level looks low: dimmer 1 is a faint beam.
+    v.cone.material.opacity = 0.22 * lk.intensity;
     v.cone.visible = lk.intensity > 0.001;
     v.lens.material.color.copy(color).multiplyScalar(0.25 + 0.75 * lk.intensity);
 
@@ -806,7 +807,7 @@ renderer.setAnimationLoop(() => {
 });
 
 // 3D picking, placing and dragging.
-//   click fixture      select (⇧ adds/removes)
+//   click fixture      select (⌘ or ⇧ adds/removes)
 //   drag fixture       slide it horizontally at its current height
 //   ⇧-drag fixture     raise / lower it
 //   drag empty space      orbit (OrbitControls)
@@ -817,7 +818,8 @@ const DRAG_THRESHOLD = 4;
 /** Has the pointer gone further than a click from where it was pressed (`at`)? */
 const movedFrom = (e: MouseEvent, at: { x: number; y: number } | null) => !!at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > DRAG_THRESHOLD;
 let downAt: { x: number; y: number } | null = null;
-let drag3d: null | { id: string; shift: boolean; active: boolean; vertical: boolean; plane: THREE.Plane; offset: THREE.Vector3 } = null;
+/** `add`: ⇧- or ⌘-click, which adds the fixture to the selection (or takes it out). */
+let drag3d: null | { id: string; add: boolean; active: boolean; vertical: boolean; plane: THREE.Plane; offset: THREE.Vector3 } = null;
 
 function rayFromEvent(e: MouseEvent) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -1024,7 +1026,7 @@ view.addEventListener("pointerdown", (e) => {
   if (!id) return;
   const fixture = byId(id);
   if (!fixture) return;
-  drag3d = { id, shift: e.shiftKey, active: false, ...dragFrom(fixture, e.shiftKey) };
+  drag3d = { id, add: e.shiftKey || e.metaKey, active: false, ...dragFrom(fixture, e.shiftKey) };
   controls.enabled = false;
   renderer.domElement.setPointerCapture(e.pointerId);
 }, true);
@@ -1190,7 +1192,7 @@ view.addEventListener("pointerup", (e) => {
     renderer.domElement.style.cursor = "grab";
     if (d.active) changed();
     else if (e.altKey) showTrace({ kind: "stageFixture", id: d.id }, e);
-    else select(d.id, d.shift);
+    else select(d.id, d.add);
     return;
   }
   if (!downAt || moved) return;
@@ -1219,7 +1221,7 @@ view.addEventListener("pointerup", (e) => {
   // A riser clicked (not a fixture or position): pick it out.
   const riserId = pickRiser(e);
   if (riserId) { setActiveRiser(riserId); return; }
-  if (!e.shiftKey) select(null);
+  if (!e.shiftKey && !e.metaKey) select(null);
   if (ui.activeRiser) setActiveRiser(null);
 }, true);
 

@@ -197,14 +197,14 @@ export function moveFixture(fixture: Fixture, x: number, y: number, z: number) {
 }
 
 /** Make a member fixture for `rig` at slot `k`, copying the look of `like`. */
-type MemberLook = Pick<Fixture, "panLimit" | "tiltLimit" | "zoomMin" | "zoomMax"> & { dmx: Partial<DmxValues> };
+type MemberLook = Pick<Fixture, "panLimit" | "tiltLimit" | "zoomMin" | "zoomMax" | "dimmerCurve"> & { dmx: Partial<DmxValues> };
 
 function makeRigMember(rig: Rig, k: number, like: MemberLook): Fixture {
   const fixture = createFixture(0, 0, 0, state.fixtures.length, state.box);
   Object.assign(fixture, {
     name: `${rig.name} · ${k + 1}`,
     rigId: rig.id, rigIndex: k, follow: null,
-    panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax,
+    panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax, dimmerCurve: like.dimmerCurve,
   });
   for (const a of ["dimmer", "zoom", ...COLOR_ROLES] as const) fixture.dmx[a] = like.dmx[a] ?? 0;
   deriveFromDmx(fixture);
@@ -231,7 +231,7 @@ export function addRigAt(cfg: RigSettings, x: number, y: number, z: number) {
   if (low < PLACE_OFFSET) rig.y = round(rig.y + PLACE_OFFSET - low, 2);
   const like: MemberLook = {
     dmx: { dimmer: 255, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
-    panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
+    panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60, dimmerCurve: "linear",
   };
   const members = Array.from({ length: rig.count }, (_, k) => makeRigMember(rig, k, like));
   state.rigs.push(rig);

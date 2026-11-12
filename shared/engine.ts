@@ -45,14 +45,11 @@ function segments(path: StepPath) {
 
 /**
  * The inverse of easeFade: how far through its time a GO is at crossfade
- * `cross` (0…100), so steps fade on time though the crossfade itself eases.
+ * `cross` (0…100), so steps fade on time. (Fades are linear: the same.)
  */
-export const timeAt = (cross: number) => {
-  const y = cross / 100;
-  return y <= 0 ? 0 : y >= 1 ? 1 : 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3);
-};
+export const timeAt = (cross: number) => Math.min(1, Math.max(0, cross / 100));
 
-/** A value along `looks` (the from look, each step's, the cue's own) at crossfade `cross`; each step's fade eases on its own. */
+/** A value along `looks` (the from look, each step's, the cue's own) at crossfade `cross`; each step's fade follows easeFade on its own. */
 function alongPath(path: StepPath, cross: number, looks: number[]): number {
   const parts = segments(path);
   let t = timeAt(cross) * parts.reduce((sum, p) => sum + p.fade + p.hold, 0);
@@ -147,8 +144,12 @@ export function setChannelLevels(patch: FaderPatch[], mix: Mix, cueLevels: numbe
   return touched;
 }
 
-/** Ease for timed fades (0…1 → 0…1, smooth start and end). */
-export const easeFade = (t: number): number => t * t * (3 - 2 * t);
+/**
+ * The curve of timed fades (0…1 of the time → 0…1 of the way): linear, as a
+ * desk's default, so halfway through the time is halfway through the levels.
+ * (An S-curve was `t * t * (3 - 2 * t)`; timeAt must stay its inverse.)
+ */
+export const easeFade = (t: number): number => t;
 
 /**
  * The crossfade `t` (0…1) of the way through a timed fade from `start` to

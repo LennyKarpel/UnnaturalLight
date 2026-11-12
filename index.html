@@ -80,23 +80,20 @@
 
         <div class="view" id="view">
           <div class="hud" id="hud" hidden></div>
-          <!-- Test the fade into LIVE (stage/test-fade.ts), at the top of the 3D view:
-               the buttons (Test / GO in the middle), and under them the cues, the console's step, the steps and the clock. -->
-          <div class="test-fade" id="testFade">
-            <div class="test-fade-row">
-              <label class="test-fade-live" title="Drive the real lights: the button is the console's GO, and › ‹ its Steps"><input type="checkbox" id="testFadeLive" /> Live</label>
-              <button type="button" id="cueBackBtn" class="test-fade-step" title="Make the cue before LIVE the LIVE one (the cue the stage edits)" aria-label="Previous cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
-              <button type="button" id="testStepBackBtn" class="test-fade-step" aria-label="Previous step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
-              <button type="button" id="testFadeBtn" disabled>▶ Test</button>
-              <button type="button" id="testStepBtn" class="test-fade-step" aria-label="Next step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
-              <button type="button" id="cueForwardBtn" class="test-fade-step" title="Make the cue after LIVE the LIVE one (the cue the stage edits)" aria-label="Next cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
-              <select id="testFadeTime" aria-label="The LIVE cue's fade (In) time" title="The LIVE cue's fade (In) time" disabled></select>
+          <!-- The console's GO area at the top of the 3D view (stage/go-bar.ts): the
+               same buttons, doing the same, and under them LIVE → UP NEXT, its fade and the readout. -->
+          <div class="stage-go" id="stageGo">
+            <div class="stage-go-row">
+              <button type="button" id="stageGoPrevCue" class="stage-go-step" aria-label="Previous cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
+              <button type="button" id="stageGoStepBack" class="stage-go-step" aria-label="Previous step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+              <button type="button" id="stageGoBtn" class="stage-go-btn" disabled>GO</button>
+              <button type="button" id="stageGoStep" class="stage-go-step" aria-label="Next step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+              <button type="button" id="stageGoNextCue" class="stage-go-step" aria-label="Next cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
             </div>
-            <div class="test-fade-info">
-              <span id="testFadeCues" class="test-fade-cues">—</span>
-              <span id="testFadeProgress" class="test-fade-progress" hidden title="The console's step in the LIVE cue"></span>
-              <span id="testFadeSteps" class="test-fade-steps" hidden title="The LIVE cue's steps and their total time (set them in the console)"></span>
-              <span id="testFadeClock" class="test-fade-clock is-idle"></span>
+            <div class="stage-go-info">
+              <span id="stageGoCues" class="stage-go-cues">—</span>
+              <span id="stageGoFade" class="stage-go-fade" hidden></span>
+              <span id="stageGoReadout" class="stage-go-readout"></span>
             </div>
           </div>
           <div class="banner" id="banner" hidden>Click a surface (inside) · ⌥-click a wall (outside) · click the ground off the box · or click the plan · Esc cancels</div>
@@ -128,7 +125,7 @@
               </span>
             </h2>
             <canvas id="plan"></canvas>
-            <p class="hint">Drag fixtures to move them (in Front / SR / SL this changes height too). Shift-click to select several; keys act on every selected fixture.</p>
+            <p class="hint">Drag fixtures to move them (in Front / SR / SL this changes height too). ⌘-click (or ⇧-click) to select several; keys act on every selected fixture.</p>
           </section>
           <div class="vdivider" data-resize="plan" title="Drag to resize · double-click to reset"><span class="grip"></span></div>
           <section id="fixtures">

@@ -586,11 +586,12 @@ plan.addEventListener("pointerdown", (e) => {
     return;
   }
   if (!best) {
-    if (!e.shiftKey) select(null);
+    if (!e.shiftKey && !e.metaKey) select(null);
     if (ui.activeRiser) setActiveRiser(null);
     return;
   }
-  if (e.shiftKey) { select(best.id, true); return; }
+  // ⇧- or ⌘-click: add to the selection (or take out).
+  if (e.shiftKey || e.metaKey) { select(best.id, true); return; }
   if (!state.selected.includes(best.id)) select(best.id);
   const [ia, ib] = toAB(best);
   planDrag = { kind: "fixture", id: best.id, da: ia - a, db: ib - b };

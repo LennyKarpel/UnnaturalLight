@@ -5,6 +5,8 @@ import { fmtLength, fmtNumber, fromShown, inputStep, lengthUnit, onUnitChange, t
 /** Fields shown in the length unit (meters or feet). */
 const isLength = (k: string) => k === "x" || k === "y" || k === "z" || k === "size";
 import {
+  DIMMER_CURVES,
+  DIMMER_CURVE_LABELS,
   MAX_FIXTURES,
   MAX_POSITIONS,
   round,
@@ -142,7 +144,7 @@ export function renderList() {
     row.addEventListener("click", (e) => {
       if (e.altKey) showTrace({ kind: "stageFixture", id: fixture.id }, e);
       // A double-click on a rig's fixture selects the whole rig. (Not "dblclick": the first click rebuilds the rows.)
-      else if (!(e.detail === 2 && selectRigOf(fixture.id))) select(fixture.id, e.shiftKey);
+      else if (!(e.detail === 2 && selectRigOf(fixture.id))) select(fixture.id, e.shiftKey || e.metaKey);
     });
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);
@@ -419,6 +421,8 @@ export function renderInspector() {
         <div class="slider"><input type="range" min="0" max="255" step="1" data-multi="zoom" title="Beam angle (each fixture's own zoom range)" /><input type="number" min="0" max="255" data-multi="zoom" /></div>
         <label>Color</label>
         <input type="color" data-multi="color" />
+        <label>Dimmer curve</label>
+        <select data-multi="dimmerCurve" title="How the real fixtures turn their dimmer value into light (as set in their menus), so the stage draws them as bright: the DMX sent doesn't change"><option value="" hidden>Mixed</option>${DIMMER_CURVES.map((c) => `<option value="${c}">${DIMMER_CURVE_LABELS[c]}</option>`).join("")}</select>
       </div>
       <p class="hint">Sets every selected fixture. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
       ${selRig ? rigSectionHtml(selRig) + rigLinkHtml() : ""}
@@ -465,6 +469,8 @@ export function renderInspector() {
         <input type="number" min="1" max="120" step="1" data-k="zoomMin" title="beam angle at zoom 0" />
         <input type="number" min="1" max="120" step="1" data-k="zoomMax" title="beam angle at zoom 255" />
       </div>
+      <label>Dimmer curve</label>
+      <select data-k="dimmerCurve" title="How the real fixture turns its dimmer value into light (set it to match the fixture's menu), so the stage draws it as bright: the DMX sent doesn't change">${DIMMER_CURVES.map((c) => `<option value="${c}">${DIMMER_CURVE_LABELS[c]}</option>`).join("")}</select>
 
       <div class="subhead">Zero frame (world)</div>
       <label>Yaw/Pitch/Roll</label>
@@ -527,7 +533,7 @@ function syncFollowNote(sel: Fixture[]) {
 }
 
 /** The fixture fields the inspector edits (its inputs' `data-k`). */
-const FIXTURE_FIELDS = ["name", "color", "x", "y", "z", "panLimit", "tiltLimit", "zoomMin", "zoomMax", "base.yaw", "base.pitch", "base.roll"] as const;
+const FIXTURE_FIELDS = ["name", "color", "x", "y", "z", "panLimit", "tiltLimit", "zoomMin", "zoomMax", "dimmerCurve", "base.yaw", "base.pitch", "base.roll"] as const;
 type FixtureField = (typeof FIXTURE_FIELDS)[number];
 /** The zero-frame fields, and the part of `fixture.base` each one is. */
 const BASE_FIELDS = { "base.yaw": "yaw", "base.pitch": "pitch", "base.roll": "roll" } as const satisfies Record<string, keyof Frame>;
@@ -547,6 +553,11 @@ function setField(fixture: Fixture, k: FixtureField, raw: string) {
     return;
   }
   if (k === "color") { setColorHex(fixture, raw); return; }
+  // The curve changes how bright the same dimmer value looks, so re-derive.
+  if (k === "dimmerCurve") {
+    if (isOneOf(DIMMER_CURVES, raw)) { fixture.dimmerCurve = raw; deriveFromDmx(fixture); }
+    return;
+  }
   const v = numberFrom(raw);
   if (v == null) return;
   // Ranges change what the same 0–255 values mean, so re-derive afterwards.
@@ -599,6 +610,13 @@ function bindInspector() {
     el.addEventListener("input", () => {
       if (el.dataset.multi === "color") {
         for (const fixture of selectedFixtures()) setColorHex(fixture, el.value);
+        changed();
+        return;
+      }
+      if (el.dataset.multi === "dimmerCurve") {
+        const curve = el.value;
+        if (!isOneOf(DIMMER_CURVES, curve)) return;
+        for (const fixture of selectedFixtures()) { fixture.dimmerCurve = curve; deriveFromDmx(fixture); }
         changed();
         return;
       }
@@ -701,6 +719,9 @@ export function syncInspector() {
     }
     const colorEl = inspectorEl.querySelector<HTMLInputElement>('[data-multi="color"]');
     if (colorEl && colorEl !== document.activeElement) colorEl.value = sel[0].color;
+    // The curve they share, or "Mixed".
+    const curveEl = inspectorEl.querySelector<HTMLSelectElement>('[data-multi="dimmerCurve"]');
+    if (curveEl) curveEl.value = sel.every((f) => f.dimmerCurve === sel[0].dimmerCurve) ? sel[0].dimmerCurve : "";
     return;
   }
   const fixture = sel[0];

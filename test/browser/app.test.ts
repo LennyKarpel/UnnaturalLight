@@ -87,73 +87,33 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.equal(await a.evaluate(`document.querySelector("#chatPanel .chat-name").textContent`), "Rehearsal notes");
   });
 
-  test("the 3D view's Test replays the fade into LIVE, with its In time", async () => {
-    const header = () => a.evaluate<{ cues: string; btn: string; time: string; clock: string | null }>(`({
-      cues: document.getElementById("testFadeCues").textContent,
-      btn: document.getElementById("testFadeBtn").textContent,
-      time: document.getElementById("testFadeTime").value,
-      clock: document.getElementById("testFadeClock").classList.contains("is-idle") ? null : document.getElementById("testFadeClock").textContent,
-    })`);
-    await a.waitFor(`!document.getElementById("testFadeBtn").disabled`, "the Test button");
-    assert.equal((await header()).cues, "Dark → Cue 1");
-    await a.evaluate("window.consoleChat.go()");
-    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Cue 1 → Cue 2"`, "the cues after GO");
-    // The In time set here is the LIVE cue's.
-    await a.evaluate(`{ const t = document.getElementById("testFadeTime"); t.value = "1"; t.dispatchEvent(new Event("change")); }`);
-    await a.waitFor(`document.getElementById("testFadeTime").value === "1"`, "the new In time");
-    await a.click("#testFadeBtn");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "■ Stop" && document.getElementById("testFadeClock").textContent === "hold"`, "the hold");
-    await a.waitFor(`/ 1s$/.test(document.getElementById("testFadeClock").textContent)`, "the fade");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "the end of the test", 4000);
-    assert.equal((await header()).clock, null);
-    // Stop ends it early.
-    await a.click("#testFadeBtn");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "■ Stop"`, "the test again");
-    await a.click("#testFadeBtn");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "stopped");
-    // ‹ › step LIVE (the cue the stage edits), in the console too.
-    await a.click("#cueBackBtn");
-    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Dark → Cue 1" && document.getElementById("cueBackBtn").disabled`, "LIVE back on cue 1");
-    assert.equal(await a.evaluate(`document.querySelector('#cues .fader-row[data-row="0"]').classList.contains("is-current")`), true);
-    await a.click("#cueForwardBtn");
-    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Cue 1 → Cue 2"`, "LIVE on cue 2 again");
-    // › on cue 1 (no steps) plays its whole fade; once played, › goes on to cue 2, with no hold.
-    await a.click("#cueBackBtn");
-    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Dark → Cue 1"`, "LIVE on cue 1");
-    await a.evaluate(`{ const t = document.getElementById("testFadeTime"); t.value = "1"; t.dispatchEvent(new Event("change")); }`);
-    await a.click("#testStepBtn");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "■ Stop"`, "cue 1's test");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "cue 1 played", 4000);
-    await a.click("#testStepBtn");
-    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Cue 1 → Cue 2" && document.getElementById("testFadeBtn").textContent === "■ Stop"`, "on to cue 2");
-    assert.notEqual(await a.evaluate(`document.getElementById("testFadeClock").textContent`), "hold");
-    assert.equal(await a.evaluate(`document.querySelector('#cues .fader-row[data-row="1"]').classList.contains("is-current")`), true);
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "cue 2 played", 4000);
-  });
-
-  test("with Live the button is GO: the console's GO, on the lights", async () => {
+  test("the 3D view's GO bar is the console's GO area: the same text and buttons, doing the same", async () => {
     const liveRow = `document.querySelector("#cues .fader-row.is-current")?.dataset.row`;
-    const btn = `document.getElementById("testFadeBtn")`;
-    // From cue 1, GO goes to cue 2, in the console too.
-    await a.click("#cueBackBtn");
-    await a.waitFor(`${liveRow} === "0"`, "cue 1 LIVE");
-    await a.click("#testFadeLive");
-    await a.waitFor(`${btn}.textContent === "GO" && !${btn}.disabled && document.getElementById("testFade").classList.contains("is-live")`, "the GO button");
-    await a.click("#testFadeBtn");
-    await a.waitFor(`${liveRow} === "1"`, "the GO into cue 2", 6000);
-    // Nothing up next after the last cue: no GO.
-    await a.waitFor(`${btn}.disabled`, "no GO from the last cue");
-    // Unticked: a stage-only Test again.
-    await a.click("#testFadeLive");
-    await a.waitFor(`${btn}.textContent === "▶ Test" && !${btn}.disabled`, "Test again");
-    await a.click("#cueBackBtn");
-    await a.waitFor(`${liveRow} === "0"`, "cue 1 LIVE again");
+    const bar = `document.getElementById("stageGoCues").textContent`;
+    /** Each of the five buttons, here and in the console: disabled and tooltip, side by side. */
+    const same = `[["prevCueBtn", "stageGoPrevCue"], ["goStepBackBtn", "stageGoStepBack"], ["goBtn", "stageGoBtn"], ["goStepBtn", "stageGoStep"], ["nextCueBtn", "stageGoNextCue"]]
+      .every(([c, s]) => document.getElementById(c).disabled === document.getElementById(s).disabled && document.getElementById(c).title === document.getElementById(s).title)
+      && document.getElementById("stageGoReadout").textContent === document.getElementById("crossValue").textContent
+      && document.getElementById("stageGoFade").textContent === document.getElementById("goNextFade").textContent`;
+    await a.waitFor(`${bar} === "Cue 1 → Cue 2" && !document.getElementById("stageGoBtn").disabled`, "LIVE → UP NEXT in the bar");
+    await a.waitFor(same, "the bar as the console");
+    // GO here is the console's GO: the fade plays (GO lit, the readout as the console's), then cue 2 is LIVE.
+    await a.click("#stageGoBtn");
+    await a.waitFor(`document.getElementById("stageGoBtn").classList.contains("is-running")`, "the GO fade");
+    await a.waitFor(`${liveRow} === "1" && ${bar} === "Cue 2 → End of set"`, "cue 2 LIVE", 8000);
+    await a.waitFor(`${same} && document.getElementById("stageGoBtn").disabled && !document.getElementById("stageGoBtn").classList.contains("is-running")`, "no GO past the end, as the console");
+    // « » make the cue before / after LIVE the LIVE one, as the console's.
+    await a.click("#stageGoPrevCue");
+    await a.waitFor(`${liveRow} === "0" && ${bar} === "Cue 1 → Cue 2"`, "cue 1 LIVE again");
+    await a.click("#stageGoNextCue");
+    await a.waitFor(`${liveRow} === "1"`, "cue 2 LIVE from »");
+    await a.click("#stageGoPrevCue");
+    await a.waitFor(`${liveRow} === "0" && ${same}`, "cue 1 LIVE, the bar as the console");
   });
 
-  test("steps: added in the console, picked with ‹ › and the bars, the 3D bar's ›, and the console's › ‹ and GO", async () => {
-    const text = (sel: string) => a.evaluate<string>(`document.querySelector(${JSON.stringify(sel)})?.textContent ?? ""`);
-    // LIVE is cue 1; make cue 2 LIVE and give it a step.
-    await a.click("#cueForwardBtn");
+  test("steps: added in the console, picked with ‹ › and the bars, and the console's (and the 3D bar's) › ‹ and GO", async () => {
+    // LIVE is cue 1; make cue 2 LIVE (with the 3D bar's ») and give it a step.
+    await a.click("#stageGoNextCue");
     await a.waitFor(`document.querySelector('#cues .fader-row.is-current')?.dataset.row === "1"`, "cue 2 LIVE");
     await a.click('#cues .fader-row[data-row="1"] .cue-step-add');
     const shown = `document.querySelector("#cues .cue-step-row .cue-step-name")?.textContent`;
@@ -175,32 +135,25 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.waitFor(`${shown} === "Step 2 of 3"`, "the added step");
     await a.click('#cues .fader-row[data-row="1"] .cue-step-plus');
     await a.waitFor(`${shown} === "Step 3 of 4"`, "another from the tabs' + Step");
-    // The 3D bar: with steps, the steps summary under the buttons and no In time.
-    await a.waitFor(`!document.getElementById("testStepBtn").hidden && document.getElementById("testFadeTime").classList.contains("is-off")`, "the bar's Step");
-    assert.match(await text("#testFadeSteps"), /^4 steps · \d+s$/);
-    await a.click("#testStepBtn");
-    await a.waitFor(`document.getElementById("testFadeClock").textContent === "on step 1/4"`, "held on step 1", 6000);
-    await a.click("#testFadeBtn"); // the rest
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test" && document.getElementById("testFadeClock").classList.contains("is-idle")`, "the end of the test", 8000);
     // The console: back to cue 1, so UP NEXT is cue 2. Step › fades to its first step and makes it LIVE.
     const row = `document.querySelector('#cues .fader-row.is-current')?.dataset.row`;
     const readout = `document.getElementById("crossValue").textContent`;
-    await a.click("#cueBackBtn");
+    await a.click("#stageGoPrevCue");
     await a.waitFor(`!document.getElementById("goStepBtn").hidden && !document.getElementById("goStepBtn").disabled`, "the console's Step ›");
     await a.click("#goStepBtn");
     await a.waitFor(`${row} === "1" && ${readout} === "0% · on step 1 of 4"`, "LIVE on cue 2's step 1", 6000);
-    // The 3D bar shows the console's step too.
-    await a.waitFor(`document.getElementById("testFadeProgress").textContent === "on step 1 of 4" && !document.getElementById("testFadeProgress").hidden`, "the step in the 3D bar");
+    // The 3D bar shows the same: LIVE's step, UP NEXT (the rest of cue 2) and the readout.
+    await a.waitFor(`document.getElementById("stageGoCues").textContent === "Cue 2 · step 1 of 4 → Cue 2 · step 2–4" && document.getElementById("stageGoReadout").textContent === "0% · on step 1 of 4"`, "the steps in the 3D bar");
     // ‹ Step: back to cue 1 at once.
     await a.click("#goStepBackBtn");
     await a.waitFor(`${row} === "0" && ${readout} === "0%"`, "cue 1 again");
     // Step › twice: cue 2's step 1, then its step 2 (the rest of LIVE's cue).
     await a.click("#goStepBtn");
     await a.waitFor(`${readout} === "0% · on step 1 of 4"`, "step 1 again", 6000);
-    await a.click("#goStepBtn");
+    await a.click("#stageGoStep"); // the 3D bar's ›: the same
     await a.waitFor(`${row} === "1" && ${readout} === "0% · on step 2 of 4"`, "step 2", 6000);
-    // GO: the rest of cue 2, to its own look.
-    await a.click("#goBtn");
+    // GO (the 3D bar's): the rest of cue 2, to its own look.
+    await a.click("#stageGoBtn");
     await a.waitFor(`${row} === "1" && ${readout} === "0%" && document.querySelector("#cues .cue-step-row .cue-step-name")?.textContent.startsWith("Step 4 of 4")`, "GO through the rest of cue 2", 10000);
   });
 

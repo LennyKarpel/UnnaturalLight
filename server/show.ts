@@ -16,7 +16,7 @@ import { clamp } from "../shared/numbers.ts";
 /** The parts of the show that change while playing, as sent to every console. */
 /**
  * A GO fade in progress: the crossfade runs from `start` to `target` over
- * `durationMs`, eased, and is `elapsedMs` in. `id` changes when a new fade
+ * `durationMs` (linear: see easeFade), and is `elapsedMs` in. `id` changes when a new fade
  * starts or a paused one resumes. `step`: a Step's (to the next look only).
  */
 export type FadeInfo = { id: number; paused: boolean; start: number; target: number; step: boolean; durationMs: number; elapsedMs: number };
