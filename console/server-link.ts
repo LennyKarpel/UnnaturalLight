@@ -220,9 +220,9 @@ export function createServerLink(api: ServerLinkApi) {
       flush();
       send({ type });
     },
-    /** Replace the stage kept with the show (from a loaded show file). */
-    sendStage(stage: SavedStage) {
-      send({ type: "stage", stage, file: true });
+    /** New show or Load show: its stage and chats replace the ones kept with the show, in every window. */
+    sendShowFile(stage: SavedStage, chats: unknown[]) {
+      send({ type: "show-file", stage, chats });
     },
     /** Ask the server something; resolves with its reply (`ok`, and what that request returns, or `error`). */
     request<R extends Request>(msg: R): Promise<Reply<R["type"]>> {

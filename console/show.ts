@@ -145,9 +145,11 @@ export function showSnapshot(state: ShowInput): string {
 }
 
 /** @param stage the stage's layout, saved in the same file */
-function showToJson(state: ShowInput, stage: object | null = null): string {
+/** `extra`: what the show server keeps with the show (the stage, the chats), or null when it's offline. */
+function showToJson(state: ShowInput, extra: { stage: object | null; chats: object[] } | null = null): string {
   const data = serializeShow(state);
-  return prettyJson(stage ? { ...data, stage } : data);
+  if (!extra) return prettyJson(data);
+  return prettyJson({ ...data, ...(extra.stage ? { stage: extra.stage } : {}), chats: extra.chats });
 }
 
 export function parseShow(data: unknown): ShowData {
@@ -214,8 +216,8 @@ export function parseShow(data: unknown): ShowData {
   };
 }
 
-export function downloadShow(state: ShowInput, filename?: string, stage: object | null = null) {
-  const blob = new Blob([showToJson(state, stage)], { type: "application/json" });
+export function downloadShow(state: ShowInput, filename?: string, extra: { stage: object | null; chats: object[] } | null = null) {
+  const blob = new Blob([showToJson(state, extra)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

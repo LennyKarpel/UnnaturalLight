@@ -14,6 +14,7 @@ import type { DmxStatus } from "../server/dmx.ts";
 import type { ArtNetNode, NetOutputSetting } from "../server/net-dmx.ts";
 import type { LiveField } from "./live-fields.ts";
 import type { SavedStage } from "../stage/stage-model.ts";
+import type { SavedChat } from "./chat-protocol.ts";
 
 export type { Live, ArtNetNode, NetOutputSetting, SavedStage };
 
@@ -25,7 +26,7 @@ export type LevelCell = [cueId: string, fader: number, level: number];
 
 /** Questions a window asks the server (each gets a `reply` with the same id). */
 export type Request =
-  | { type: "get-stage" }
+  | { type: "get-show-file" }
   | { type: "dmx-connect"; universe: number }
   | { type: "dmx-disconnect"; universe: number }
   | { type: "net-set"; universe: number; output: NetOutputSetting | null }
@@ -33,7 +34,8 @@ export type Request =
 
 /** What a successful reply carries, per request type. */
 type ReplyData = {
-  "get-stage": { stage: SavedStage | null };
+  /** What a show file holds besides the console's show: the stage and the chats. */
+  "get-show-file": { stage: SavedStage | null; chats: SavedChat[] };
   "dmx-connect": Nothing;
   "dmx-disconnect": Nothing;
   "net-set": Nothing;
@@ -52,7 +54,9 @@ export type ClientMessage =
   | { type: "levels"; cells: LevelCell[] }
   | { type: "hold"; flashing: number[]; blackedOut: number[] }
   | { type: "go" | "step" | "pause" | "stop" }
-  | { type: "stage"; stage: SavedStage; file?: boolean }
+  | { type: "stage"; stage: SavedStage }
+  /** New show or Load show: the show's stage and chats (unchecked, from the file) replace them, in every window. */
+  | { type: "show-file"; stage: SavedStage; chats: unknown[] }
   | (Request & { id: number });
 
 /** Server → app window. */

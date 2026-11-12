@@ -3,7 +3,8 @@
  * server/data/session.chats.json), so every app window and computer shares
  * them. Saves wait a moment and send the latest only; a failed one is tried
  * again with the next change. listenChats hears the other windows' saves and
- * deletes as they happen, each by its chat's id.
+ * deletes as they happen, each by its chat's id, and a new or loaded show
+ * replacing them all.
  */
 
 import type { ChatChange, SavedChat } from "../../shared/chat-protocol.ts";
@@ -57,6 +58,11 @@ function cancel(id: string) {
   waiting.delete(id);
 }
 
+/** Drop every waiting save (a new or loaded show replaced the chats). */
+export function cancelSaves() {
+  for (const id of [...waiting.keys()]) cancel(id);
+}
+
 /** Send every waiting save now (the page is closing). */
 export function flushChats() {
   for (const { chat } of [...waiting.values()]) {
@@ -89,7 +95,7 @@ export function listenChats(onChange: (change: ChatChange) => void, reconnected:
   events.addEventListener("message", (e) => {
     try {
       const change: unknown = JSON.parse(e.data);
-      if (isRecord(change) && (change.type === "saved" || change.type === "deleted")) onChange(change as ChatChange);
+      if (isRecord(change) && (change.type === "saved" || change.type === "deleted" || change.type === "replaced")) onChange(change as ChatChange);
     } catch {
       // not a change
     }

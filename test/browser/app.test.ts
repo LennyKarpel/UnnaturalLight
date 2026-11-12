@@ -117,26 +117,37 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.equal(await a.evaluate(`document.querySelector('#cues .fader-row[data-row="0"]').classList.contains("is-current")`), true);
     await a.click("#cueForwardBtn");
     await a.waitFor(`document.getElementById("testFadeCues").textContent === "Cue 1 → Cue 2"`, "LIVE on cue 2 again");
+    // › on cue 1 (no steps) plays its whole fade; once played, › goes on to cue 2, with no hold.
+    await a.click("#cueBackBtn");
+    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Dark → Cue 1"`, "LIVE on cue 1");
+    await a.evaluate(`{ const t = document.getElementById("testFadeTime"); t.value = "1"; t.dispatchEvent(new Event("change")); }`);
+    await a.click("#testStepBtn");
+    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "■ Stop"`, "cue 1's test");
+    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "cue 1 played", 4000);
+    await a.click("#testStepBtn");
+    await a.waitFor(`document.getElementById("testFadeCues").textContent === "Cue 1 → Cue 2" && document.getElementById("testFadeBtn").textContent === "■ Stop"`, "on to cue 2");
+    assert.notEqual(await a.evaluate(`document.getElementById("testFadeClock").textContent`), "hold");
+    assert.equal(await a.evaluate(`document.querySelector('#cues .fader-row[data-row="1"]').classList.contains("is-current")`), true);
+    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test"`, "cue 2 played", 4000);
   });
 
-  test("a Live test is a real GO: back a cue, then the fade, in the console too", async () => {
+  test("with Live the button is GO: the console's GO, on the lights", async () => {
     const liveRow = `document.querySelector("#cues .fader-row.is-current")?.dataset.row`;
-    await a.click("#testFadeLive");
-    await a.click("#testFadeBtn");
-    // Cue 1 is LIVE for the hold; the bar still names the cues it's testing.
-    await a.waitFor(`${liveRow} === "0" && document.getElementById("testFade").classList.contains("is-live")`, "cue 1 LIVE for the hold");
-    assert.equal(await a.evaluate(`document.getElementById("testFadeCues").textContent`), "Cue 1 → Cue 2");
-    await a.waitFor(`document.getElementById("testFadeBtn").textContent === "▶ Test" && ${liveRow} === "1"`, "the GO into cue 2", 5000);
-    // Stopped in the hold: the tested cue is LIVE again.
-    await a.click("#testFadeBtn");
-    await a.waitFor(`${liveRow} === "0"`, "the hold again");
-    await a.click("#testFadeBtn");
-    await a.waitFor(`${liveRow} === "1" && document.getElementById("testFadeBtn").textContent === "▶ Test"`, "cue 2 back");
-    // With nothing before LIVE there's nothing to go back to.
+    const btn = `document.getElementById("testFadeBtn")`;
+    // From cue 1, GO goes to cue 2, in the console too.
     await a.click("#cueBackBtn");
-    await a.waitFor(`document.getElementById("testFadeBtn").disabled`, "no live test from cue 1");
+    await a.waitFor(`${liveRow} === "0"`, "cue 1 LIVE");
     await a.click("#testFadeLive");
-    await a.waitFor(`!document.getElementById("testFadeBtn").disabled`, "a stage-only test from cue 1");
+    await a.waitFor(`${btn}.textContent === "GO" && !${btn}.disabled && document.getElementById("testFade").classList.contains("is-live")`, "the GO button");
+    await a.click("#testFadeBtn");
+    await a.waitFor(`${liveRow} === "1"`, "the GO into cue 2", 6000);
+    // Nothing up next after the last cue: no GO.
+    await a.waitFor(`${btn}.disabled`, "no GO from the last cue");
+    // Unticked: a stage-only Test again.
+    await a.click("#testFadeLive");
+    await a.waitFor(`${btn}.textContent === "▶ Test" && !${btn}.disabled`, "Test again");
+    await a.click("#cueBackBtn");
+    await a.waitFor(`${liveRow} === "0"`, "cue 1 LIVE again");
   });
 
   test("steps: added in the console, picked with ‹ › and the bars, the 3D bar's ›, and the console's › ‹ and GO", async () => {
@@ -164,8 +175,8 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.waitFor(`${shown} === "Step 2 of 3"`, "the added step");
     await a.click('#cues .fader-row[data-row="1"] .cue-step-plus');
     await a.waitFor(`${shown} === "Step 3 of 4"`, "another from the tabs' + Step");
-    // The 3D bar: with steps, a Step button and the steps summary in place of the In time.
-    await a.waitFor(`!document.getElementById("testStepBtn").hidden && document.getElementById("testFadeTime").hidden`, "the bar's Step");
+    // The 3D bar: with steps, the steps summary under the buttons and no In time.
+    await a.waitFor(`!document.getElementById("testStepBtn").hidden && document.getElementById("testFadeTime").classList.contains("is-off")`, "the bar's Step");
     assert.match(await text("#testFadeSteps"), /^4 steps · \d+s$/);
     await a.click("#testStepBtn");
     await a.waitFor(`document.getElementById("testFadeClock").textContent === "on step 1/4"`, "held on step 1", 6000);
@@ -178,6 +189,8 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.waitFor(`!document.getElementById("goStepBtn").hidden && !document.getElementById("goStepBtn").disabled`, "the console's Step ›");
     await a.click("#goStepBtn");
     await a.waitFor(`${row} === "1" && ${readout} === "0% · on step 1 of 4"`, "LIVE on cue 2's step 1", 6000);
+    // The 3D bar shows the console's step too.
+    await a.waitFor(`document.getElementById("testFadeProgress").textContent === "on step 1 of 4" && !document.getElementById("testFadeProgress").hidden`, "the step in the 3D bar");
     // ‹ Step: back to cue 1 at once.
     await a.click("#goStepBackBtn");
     await a.waitFor(`${row} === "0" && ${readout} === "0%"`, "cue 1 again");
@@ -189,6 +202,32 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     // GO: the rest of cue 2, to its own look.
     await a.click("#goBtn");
     await a.waitFor(`${row} === "1" && ${readout} === "0%" && document.querySelector("#cues .cue-step-row .cue-step-name")?.textContent.startsWith("Step 4 of 4")`, "GO through the rest of cue 2", 10000);
+  });
+
+  test("New show clears the stage and the chats, in every window", async () => {
+    await a.evaluate(`window.stageChat.addRiser({ name: "Old riser", x: 2, z: 1 })`);
+    await b.waitFor(`window.stageChat.stage().risers.some((r) => r.name === "Old riser")`, "the riser in the other window");
+    // A chat from the old show, on the server and in both windows' lists.
+    await a.evaluate(`fetch("/chat/chats/old-chat", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "old-chat", name: "Old chat", history: [{ role: "user", text: "hi" }], used: Date.now() }) })`);
+    const chatNames = `fetch("/chat/chats").then((r) => r.json()).then((b) => b.chats.map((c) => c.name).join())`;
+    await a.waitFor(`${chatNames}.then((n) => n.includes("Old chat"))`, "the old chat on the server");
+    await a.click("#newShowBtn");
+    const open = `document.querySelector("dialog.ask[open]")`;
+    await a.waitFor(`!!${open}`, "the first question");
+    // "Discard unsaved changes?" first, if there are any; then the name.
+    if (await a.evaluate<boolean>(`${open}.querySelector("label").hidden`)) {
+      await a.click(`dialog.ask[open] button[value="confirm"]`);
+      await a.waitFor(`!!${open} && !${open}.querySelector("label").hidden`, "the name question");
+    }
+    await a.type("Fresh");
+    await a.click(`dialog.ask[open] button[value="confirm"]`);
+    for (const p of [a, b]) {
+      await p.waitFor(`(({ risers, positions, fixtures }) => !risers.length && !positions.length && !fixtures.length)(window.stageChat.stage())`, "a blank stage");
+      await p.waitFor(`document.querySelector("#chatPanel .chat-name").textContent !== "Old chat" && !document.querySelector("#chatPanel .chat-log .is-user")`, "a new, empty chat in the panel");
+    }
+    assert.equal(await a.evaluate(`${chatNames}`), "");
+    // Its show file is saved (downloaded) straight away.
+    await a.waitFor(`document.getElementById("status").textContent === "New show · Fresh · saved"`, "the new show's file saved");
   });
 
   test("no window logged an error", () => {

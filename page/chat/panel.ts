@@ -4,8 +4,8 @@
  * and uses the tools (./tools.ts) to look at and change the show, through
  * this window's console. There can be several named conversations (chats);
  * they're kept on the show server (./store.ts: server/data/session.chats.json,
- * next to the show's session.show.json but not in it), so every window and
- * computer shares them. This browser keeps the panel's own settings (open,
+ * next to the show's session.show.json; a saved show file holds both), so
+ * every window and computer shares them. New show / Load show replace them all. This browser keeps the panel's own settings (open,
  * width, which chat is open, ↑ / ↓ prompts). A long chat is kept short: past
  * MAX_PROMPTS prompts, the oldest are summed up by the model and the summary
  * takes their place.
@@ -20,7 +20,7 @@ import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { readStoredJson, storeJson } from "../../shared/storage.ts";
 import { promptCount, repairHistory, runTurn, summarize, summaryCut, type TurnView } from "./loop.ts";
 import { toolByName } from "./tools.ts";
-import { deleteChat, fetchChats, flushChats, listenChats, saveChat } from "./store.ts";
+import { cancelSaves, deleteChat, fetchChats, flushChats, listenChats, saveChat } from "./store.ts";
 
 const KEY = "unnaturallight.chat";
 /** Past this many prompts, the oldest SUMMED are summed up (between turns). */
@@ -575,6 +575,10 @@ async function loadChats() {
  */
 function onChange(change: ChatChange) {
   if (!loaded) return;
+  if (change.type === "replaced") {
+    replaceChats(change.chats);
+    return;
+  }
   const id = change.type === "saved" ? change.chat.id : change.id;
   const i = chats.findIndex((c) => c.id === id);
   const isOpen = id === chat().id;
@@ -591,6 +595,22 @@ function onChange(change: ChatChange) {
   } else if (i >= 0) {
     dropChat(chats[i], "That chat was deleted in another window.");
   }
+  if (!list.hidden) renderList();
+}
+
+/**
+ * New show or Load show: the show's chats (none for a new one) replace them
+ * all, here too. A request running here stops, as with New.
+ */
+function replaceChats(saved: unknown[]) {
+  running?.abort();
+  running = null;
+  turn++;
+  setBusy(false);
+  cancelSaves();
+  chats = readChats(saved);
+  if (!chats.length) chats.push(newChat());
+  openChat(byUse()[0], false);
   if (!list.hidden) renderList();
 }
 

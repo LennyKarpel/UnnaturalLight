@@ -63,6 +63,8 @@ export type StageLinkApi = {
     canForward: boolean;
     /** Whether there's a look before LIVE's (for ‹ Step). */
     canStepBack: boolean;
+    /** The console's step: "on step 2 of 4", "into step 3 of 4" while fading ("": LIVE has no steps). */
+    progress: string;
   };
   /** Set the LIVE cue's In time (the 3D view's test fade). */
   setTestFade: (seconds: number) => void;
@@ -70,12 +72,8 @@ export type StageLinkApi = {
   stepCue: (step: -1 | 1) => void;
   /** The console's ‹ Step: make the look before LIVE's LIVE, at once. */
   stepBack: () => void;
-  /**
-   * A live test: `start` makes the cue before LIVE the LIVE one (false: there's
-   * none), `go` is GO and `step` is Step (false: it can't), `stop` puts the
-   * tested cue back LIVE if the test hasn't got there.
-   */
-  liveTest: { start: () => boolean; go: () => boolean; step: () => boolean; stop: () => void };
+  /** The bar with Live ticked: `go` is the console's GO and `step` its › Step (false: it can't). */
+  liveTest: { go: () => boolean; step: () => boolean };
 };
 
 /** How long the test fade shows the cue before LIVE before fading. */
@@ -92,7 +90,6 @@ type Test = {
   to: number[];
   path: StepPath | null;
   totalMs: number;
-  live: boolean;
   labels: { from: string; to: string; fadeSeconds: number };
   start: number;
   /** After the hold: whether it plays to the next step only. */
@@ -101,11 +98,16 @@ type Test = {
   fade: { start: number; target: number; ms: number; at: number } | null;
 };
 let test: Test | null = null;
+/**
+ * The LIVE cue (its levels, by identity) whose test played all the way, or
+ * null: the next › goes on to the cue after it, instead of playing it again.
+ */
+let played: number[] | null = null;
 
 /** The test's output levels now (as the console would send them at that point of a GO), or null. */
 function testLevels(api: StageLinkApi, exact: boolean): Map<number, number> | null {
   // A live test is the console's own GO: the output shows it as it is.
-  if (!test || test.live) return null;
+  if (!test) return null;
   const mix: Mix = { master: api.live().master, cross: test.cross, fromSub: 100, toSub: 100, fromCue: 0, toCue: 1, toPath: test.path };
   const cues = [test.from, test.to];
   const level = (i: number) => exactLiveLevel(mix, cues, i);
@@ -113,35 +115,29 @@ function testLevels(api: StageLinkApi, exact: boolean): Map<number, number> | nu
 }
 
 function testInfo(api: StageLinkApi): TransitionTest {
-  const { from, to, canBack, canForward, canStepBack } = api.testCues();
+  const { from, to, canBack, canForward, canStepBack, progress } = api.testCues();
   const looks = (test ? test.path : to.path)?.steps.length ?? 0;
   const running = test && {
     phase: performance.now() < test.start + TEST_HOLD_MS ? "hold" as const : test.fade ? "fade" as const : "held" as const,
     seconds: Math.round((timeAt(test.cross) * test.totalMs) / 100) / 10,
-    live: test.live,
     step: test.path && test.cross > 0 ? stepAt(test.path, test.cross) + 1 : null,
   };
   return {
-    // While a test plays, the cues it plays (a live test moves LIVE back a cue meanwhile).
+    // While a test plays, the cues it plays.
     ...(test?.labels ?? { from: from?.label ?? "Dark", to: to.label, fadeSeconds: to.seconds }),
     steps: looks + 1,
     canBack,
     canForward,
+    progress,
     // A held stage-only test goes back in itself; otherwise ‹ Step is the console's.
-    canStepBack: !test ? canStepBack : running?.phase === "held" && (test.live ? canStepBack : test.cross > 0),
+    canStepBack: !test ? canStepBack : running?.phase === "held" && test.cross > 0,
     running,
   };
 }
 
-/** Fade on from where the test is: to the next step (`step`), else all the way. Live: the console's Step / GO. */
-function fadeOn(api: StageLinkApi, t: Test, step: boolean) {
+/** Fade on from where the test is: to the next step (`step`), else all the way. */
+function fadeOn(t: Test, step: boolean) {
   const target = step && t.path ? (stepArrivals(t.path).find((at) => at > t.cross + 1e-6) ?? 100) : 100;
-  if (t.live && !(step ? api.liveTest.step() : api.liveTest.go())) {
-    // e.g. the server is offline
-    api.liveTest.stop();
-    test = null;
-    return;
-  }
   t.fade = { start: t.cross, target, ms: (timeAt(target) - timeAt(t.cross)) * t.totalMs, at: performance.now() };
 }
 
@@ -149,17 +145,18 @@ function fadeOn(api: StageLinkApi, t: Test, step: boolean) {
  * Play the test fade, a frame at a time, then hand the stage back to the live
  * output. Live: step back to the cue before, and GO (or Step) when the hold is over.
  */
-function startTest(api: StageLinkApi, live: boolean, step: boolean) {
+function startTest(api: StageLinkApi, step: boolean, hold = true) {
   const { from, to } = api.testCues();
-  if (live && !api.liveTest.start()) return;
+  const liveLevels = to.levels;
+  played = null;
   const mine: Test = {
     from: [...(from?.levels ?? new Array(FADER_COUNT).fill(0))],
     to: [...to.levels],
     path: to.path && { fade: to.path.fade, steps: to.path.steps.map((s) => ({ ...s, levels: [...s.levels] })) },
     totalMs: to.seconds * 1000,
-    live,
     labels: { from: from?.label ?? "Dark", to: to.label, fadeSeconds: to.seconds },
-    start: performance.now(),
+    // No hold: it starts from the cue already shown (› on from a played cue).
+    start: performance.now() - (hold ? 0 : TEST_HOLD_MS),
     step,
     cross: 0,
     fade: null,
@@ -171,7 +168,7 @@ function startTest(api: StageLinkApi, live: boolean, step: boolean) {
     const now = performance.now();
     if (!went && now >= mine.start + TEST_HOLD_MS) {
       went = true;
-      fadeOn(api, mine, mine.step);
+      fadeOn(mine, mine.step);
     }
     const f = mine.fade;
     if (f) {
@@ -180,7 +177,10 @@ function startTest(api: StageLinkApi, live: boolean, step: boolean) {
       if (t >= 1) {
         mine.cross = f.target;
         mine.fade = null;
-        if (f.target >= 100) test = null; // done: the live output again (it's the same cue)
+        if (f.target >= 100) {
+          test = null; // done: the live output again (it's the same cue)
+          played = liveLevels;
+        }
       }
     }
     send();
@@ -191,19 +191,34 @@ function startTest(api: StageLinkApi, live: boolean, step: boolean) {
 
 /** Step: start a test that stops at LIVE's first step, or play a held one on to its next. */
 function stepTest(api: StageLinkApi, live: boolean) {
-  if (!test) return startTest(api, live, true);
+  if (live) {
+    // The console's › Step, on the lights.
+    test = null;
+    played = null;
+    api.liveTest.step();
+    return send();
+  }
+  if (!test) {
+    // LIVE's steps all played: on to the next cue's first step (as the console's › does).
+    const cues = api.testCues();
+    if (played && played === cues.to.levels && cues.canForward) {
+      api.stepCue(1);
+      return startTest(api, true, false);
+    }
+    return startTest(api, true);
+  }
   if (test.fade || performance.now() < test.start + TEST_HOLD_MS) return; // under way: wait for it
-  fadeOn(api, test, true);
+  fadeOn(test, true);
   send();
 }
 
 /**
  * ‹ Step: a held stage-only test goes back to its step before (or the cue
  * before, at its start), at once. Otherwise the console's ‹ Step: the look
- * before LIVE's is made LIVE (a live test ends there).
+ * before LIVE's is made LIVE.
  */
 function stepBackTest(api: StageLinkApi) {
-  if (test && !test.live) {
+  if (test) {
     if (test.fade || performance.now() < test.start + TEST_HOLD_MS) return; // under way
     const arrivals = test.path ? stepArrivals(test.path) : [];
     const cross = test.cross;
@@ -297,14 +312,20 @@ export function startStageLink(api: StageLinkApi) {
     aim: (list) => api.aim(list),
     reaim: (list) => api.reaim(list),
     testFade(on, live = false) {
-      // Test on a test held on a step: play the rest.
-      if (on && test && !test.fade && test.cross > 0) {
-        fadeOn(api, test, false);
+      if (live) {
+        // GO, on the lights.
+        test = null;
+        played = null;
+        if (on) api.liveTest.go();
         return send();
       }
-      if (test?.live) api.liveTest.stop();
+      // Test on a test held on a step: play the rest.
+      if (on && test && !test.fade && test.cross > 0) {
+        fadeOn(test, false);
+        return send();
+      }
       test = null;
-      if (on) startTest(api, live, false);
+      if (on) startTest(api, false);
       send();
     },
     testStep: (live = false) => stepTest(api, live),

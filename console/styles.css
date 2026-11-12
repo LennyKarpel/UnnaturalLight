@@ -266,6 +266,7 @@
 
   .fixture-field select {
     min-width: 9rem;
+    padding-right: var(--caret-room);
   }
 
   .fixture-field input[type="number"] {
@@ -519,7 +520,7 @@
   .fixture-row select {
     font-size: var(--text-md);
     font-weight: 600;
-    padding: 0.35rem 0.45rem;
+    padding: 0.35rem var(--caret-room) 0.35rem 0.45rem;
     min-width: 7.5rem;
   }
 
@@ -1464,7 +1465,7 @@
   .crossfade-head select {
     font-size: var(--text-base);
     font-weight: 600;
-    padding: 0.3rem 0.4rem;
+    padding: 0.3rem var(--caret-room) 0.3rem 0.4rem;
     text-transform: none;
     letter-spacing: 0;
   }

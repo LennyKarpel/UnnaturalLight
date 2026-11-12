@@ -36,28 +36,38 @@
   .group { display: flex; align-items: center; gap: 0.4rem; }
   .group > label { color: var(--muted); }
   .spacer { flex: 1; }
-  /* The test fade bar: centered at the top of the 3D view (the banner sits under it). */
+  /* The test fade bar, centered at the top of the 3D view (the banner sits under it).
+     Its buttons row has fixed widths (Test ⇄ GO ⇄ Stop, the time kept even while
+     hidden for steps), so the buttons never move; the line under them (cues,
+     steps, clock) takes the row's width and never widens the bar. */
   .test-fade {
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 0.4rem;
+    display: grid; justify-items: center; gap: 3px;
     max-width: calc(100% - 24px);
     background: rgba(18, 20, 24, 0.82);
     border: 1px solid var(--track);
     border-radius: 6px;
-    padding: 4px 6px;
+    padding: 4px 6px 3px;
   }
-  .test-fade-cues { color: var(--muted); max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .test-fade-row { display: flex; align-items: center; gap: 0.4rem; }
+  .test-fade-info {
+    width: 0; min-width: 100%;
+    display: flex; justify-content: center; gap: 0.6rem;
+    font-size: var(--text-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
+  }
+  .test-fade-cues { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .test-fade-step { padding-inline: 0.5rem; }
   .test-fade-live { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
-  /* A live test is on the lights: say so. */
+  /* Live: the buttons are the console's, on the lights. Say so. */
   .test-fade.is-live { border-color: var(--warn); }
-  .test-fade.is-live .test-fade-live { color: var(--warn); }
-  /* Fixed widths: the bar stays put while Test ⇄ Stop and the clock come and go. */
+  .test-fade.is-live .test-fade-live, .test-fade.is-live #testFadeBtn { color: var(--warn); }
   #testFadeBtn { min-width: 6.5em; }
-  .test-fade-clock { font-family: var(--mono); color: var(--muted); min-width: 10ch; }
-  .test-fade-clock.has-steps { min-width: 20ch; }
-  .test-fade-steps { font-family: var(--mono); color: var(--muted); border: 1px solid var(--track); border-radius: 4px; padding: 3px 8px; white-space: nowrap; }
-  .test-fade-clock.is-idle { visibility: hidden; }
+  #testFadeTime { min-width: 4.5em; }
+  /* With steps the time is the console's: hidden, still taking its room. */
+  #testFadeTime.is-off { visibility: hidden; }
+  .test-fade-clock, .test-fade-steps { font-family: var(--mono); flex: none; }
+  .test-fade-progress { flex: none; color: var(--ink); }
+  .test-fade-clock.is-idle { display: none; }
   #testFadeBtn.is-running { color: var(--warn); }
   input[type="number"], input[type="text"] {
     font-family: var(--mono);
@@ -313,7 +323,7 @@
   .fields.link-fields { margin-top: 10px; }
   .layout { display: flex; flex-wrap: wrap; gap: 4px; }
   .lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
-  .lay select { font-size: var(--text-xs); padding: 1px 2px; }
+  .lay select { font-size: var(--text-xs); padding: 1px var(--caret-room) 1px 3px; }
   .lay-btns { display: flex; gap: 4px; width: 100%; }
   .lay-btns button { padding: 1px 6px; font-size: var(--text-xs); }
   .lib { margin-top: 8px; }

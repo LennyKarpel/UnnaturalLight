@@ -293,7 +293,7 @@ elById("newShowBtn").addEventListener("click", async () => {
   if (!header) return;
   if (header.isDirty() && !(await ask({ title: "New show?", message: "Discard unsaved changes and start a blank show?", confirmLabel: "Continue" }))) return;
   const name = await ask({ title: "New show", confirmLabel: "Create", initial: "" });
-  if (name) header.newShow(name);
+  if (name) void header.newShow(name);
 });
 elById("saveBtn").addEventListener("click", () => header?.saveShow());
 elById("loadBtn").addEventListener("click", () => { loadFile.value = ""; loadFile.click(); });

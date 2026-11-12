@@ -674,3 +674,9 @@ export type SavedStage = ReturnType<typeof serializeStage>;
 export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[], positions: StagePosition[] = [], risers: Riser[] = []) {
   return { box, transparent, rigs, positions, risers, fixtures: fixtures.map(serializeFixture) };
 }
+
+/** The stage of a new show: the default box, nothing in it. */
+export function blankStage(): SavedStage {
+  const { box, fixtures, transparent, rigs, positions, risers } = parseStage({});
+  return serializeStage(box, fixtures, transparent, rigs, positions, risers);
+}

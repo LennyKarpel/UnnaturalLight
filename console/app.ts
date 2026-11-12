@@ -3,6 +3,7 @@
 // stage, the app header's hooks (consoleHeader), and the link to the show
 // server. The console's tabs themselves are in the modules imported below.
 import { startStageLink } from "./stage-link.ts";
+import { blankStage } from "../stage/stage-model.ts";
 import type { RegisterRequest, RegisterResult, StageLayout } from "../shared/console-stage.ts";
 import { createServerLink } from "./server-link.ts";
 import { LIVE_FIELDS } from "../shared/live-fields.ts";
@@ -20,7 +21,7 @@ import {
   serializeShow,
   normalizeUniverses,
 } from "./show.ts";
-import { type Cue, type Look, type Song, createCue, stepLook, stepPath, cueSeconds, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
+import { type Look, type Song, createCue, stepLook, stepPath, cueSeconds, createSong, MAX_CUES, MAX_SONGS, MIN_CUES, normalizeCueFadeTime, normalizeSongName, normalizeSongs, resolveActiveSong } from "./songs.ts";
 import {
   type PatchTarget,
   FADER_COUNT,
@@ -135,6 +136,7 @@ import {
   goNextCue,
   stepLiveCue,
   stepNextCue,
+  stepProgress,
   stepBackCue,
   previousLook,
   stepTarget,
@@ -432,32 +434,46 @@ function syncTransportFromState() {
   updateFadePauseButton();
 }
 
-/** Start a blank show called `name` (the page header asks first if there are unsaved changes). */
-function newShow(name?: string) {
+/**
+ * Start a blank show called `name` (the page header asks first if there are
+ * unsaved changes), and download its show file straight away, as Save show does.
+ */
+async function newShow(name?: string) {
   applyShow(blankShowState(name));
-  markClean();
   persistSession();
-  setStatus(`New show · ${state.showName}`, dmx.connected ? "connected" : "idle");
+  // Its stage and chats too: the show server keeps them with the show, and every window takes them.
+  // Sent before Save's request on the same connection, so the file has them.
+  serverLink().sendShowFile(blankStage(), []);
+  const saved = await downloadShowFile();
+  setStatus(saved ? `New show · ${state.showName} · saved` : `New show · ${state.showName} · saved without the stage and chats (the show server is offline)`, dmx.connected ? "connected" : "idle");
 }
 
-/** Download the show, with the stage the show server keeps alongside it. */
+/** Download the show, with the stage and chats the show server keeps alongside it. */
 async function saveShow() {
-  const reply = await serverLink().request({ type: "get-stage" });
-  downloadShow(currentShowState(), undefined, reply.ok ? reply.stage : null);
+  const saved = await downloadShowFile();
+  setStatus(saved ? "Show saved" : "Show saved (without the stage and chats: the show server is offline)", dmx.connected ? "connected" : "idle");
+}
+
+/** Download the show file; false if the show server was offline (the file then has no stage or chats). */
+async function downloadShowFile(): Promise<boolean> {
+  const reply = await serverLink().request({ type: "get-show-file" });
+  downloadShow(currentShowState(), undefined, reply.ok ? { stage: reply.stage, chats: reply.chats } : null);
   markClean();
-  setStatus(reply.ok ? "Show saved" : "Show saved (without the stage: the show server is offline)", dmx.connected ? "connected" : "idle");
+  return reply.ok;
 }
 
 /**
  * Load a show file's text (the page header asks first if there are unsaved
- * changes). Its stage, if it has one, replaces the stage.
+ * changes). Its stage and chats replace the stage and chats (a blank stage
+ * and no chats, if it has none).
  */
 function loadShow(text: string, fileName: string) {
   try {
     const data = JSON.parse(text);
     applyShow(parseShow(data));
     markClean();
-    if (data.stage && typeof data.stage === "object") serverLink().sendStage(data.stage);
+    // A file without them (older, or saved while the show server was offline) gets a blank stage and no chats, not the last show's.
+    serverLink().sendShowFile(data.stage && typeof data.stage === "object" ? data.stage : blankStage(), Array.isArray(data.chats) ? data.chats : []);
     setStatus(`Show loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
   } catch (err) {
     const message = errorMessage(err, "Failed to load show");
@@ -1049,7 +1065,10 @@ startStageLink({
     // LIVE's own look (not the step shown, if one is), through its steps.
     const cue = playbackCue(state, live);
     const to = { label: cueLabel(live), levels: cue?.levels ?? [], path: stepPath(cue), seconds: cue ? cueSeconds(cue) : 0 };
-    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1), canStepBack: !!previousLook() };
+    // On its own look after its steps, LIVE is on its last step.
+    const looks = cue ? cue.steps.length + 1 : 1;
+    const progress = stepProgress() || (looks > 1 ? `on step ${looks} of ${looks}` : "");
+    const steps = { canBack: !!stepTarget(-1), canForward: !!stepTarget(1), canStepBack: !!previousLook(), progress };
     if (live > 0) return { from: { label: cueLabel(live - 1), levels: levels[live - 1] ?? [] }, to, ...steps };
     const prev = previousSetSong(state);
     const last = prev?.song.cues.at(-1);
@@ -1065,28 +1084,14 @@ startStageLink({
   },
   stepCue: stepLiveCue,
   stepBack: stepBackCue,
-  liveTest: (() => {
-    /** The cue being tested (LIVE when the test started). */
-    let target: Cue | undefined;
-    return {
-      start() {
-        if (!stepTarget(-1)) return false;
-        target = playbackCue(state, state.fromCue);
-        stepLiveCue(-1);
-        return true;
-      },
-      go: () => consoleChat.go(),
-      step() {
-        if (!state.serverLive || !goTarget(state, true)) return false;
-        stepNextCue();
-        return true;
-      },
-      stop() {
-        if (target && playbackCue(state, state.fromCue) !== target) stepLiveCue(1);
-        target = undefined;
-      },
-    };
-  })(),
+  liveTest: {
+    go: () => consoleChat.go(),
+    step() {
+      if (!state.serverLive || !goTarget(state, true)) return false;
+      stepNextCue();
+      return true;
+    },
+  },
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
   hold: holdFromStage,

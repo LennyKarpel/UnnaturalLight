@@ -1,7 +1,8 @@
 // The chat panel's chats (page/chat/panel.ts), kept on the show server so
-// every app window, on this computer or another, shares them. They live
-// next to the show file but apart from it: server/data/session.show.json is the
-// show, session.chats.json its chats. Save show / Load show never include them.
+// every app window, on this computer or another, shares them. They're the
+// show's chats, kept in their own file next to it: server/data/session.show.json
+// is the show, session.chats.json its chats. A show file holds them too (Save
+// show), and New show / Load show replace them all (`replace`).
 //
 //   GET    /chat/chats       → { chats } (SavedChats)
 //   PUT    /chat/chats/<id>  a SavedChat: add or replace it
@@ -106,8 +107,17 @@ export function createChats(file: string) {
     }
   }
 
+  /** A new or loaded show: its chats (unchecked, from the file) replace them all, in every window. */
+  function replace(list: unknown[]) {
+    chats = list.map(parseChat).filter((c): c is SavedChat => !!c);
+    // Too many: keep the ones used most recently.
+    if (chats.length > MAX_CHATS) chats = [...chats].sort((a, b) => b.used - a.used).slice(0, MAX_CHATS);
+    scheduleSave();
+    tell({ type: "replaced", chats }, "");
+  }
+
   /** Write now if a save is waiting (the server is stopping). */
   const flush = () => { if (timer) saveNow(); };
 
-  return { handle, flush, put, remove, list: () => chats };
+  return { handle, flush, put, remove, replace, list: () => chats };
 }

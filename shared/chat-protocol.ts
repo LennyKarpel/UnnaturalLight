@@ -57,10 +57,11 @@ export type SavedChat = { id: string; name: string; history: ChatMessage[]; used
 export type SavedChats = { chats: SavedChat[] };
 /**
  * GET /chat/chats/events?window=<id> (server-sent events): each `data:` line is
- * one ChatChange, as another window saves or deletes a chat. A PUT or DELETE
+ * one ChatChange, as another window saves or deletes a chat, or a new or
+ * loaded show replaces them all (`replaced`, to every window). A PUT or DELETE
  * with ?window=<id> isn't sent back to that window.
  */
-export type ChatChange = { type: "saved"; chat: SavedChat } | { type: "deleted"; id: string };
+export type ChatChange = { type: "saved"; chat: SavedChat } | { type: "deleted"; id: string } | { type: "replaced"; chats: SavedChat[] };
 export const MAX_CHATS = 30;
 export const CHAT_NAME_MAX = 40;
 

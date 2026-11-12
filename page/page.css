@@ -18,7 +18,7 @@ body {
   border-bottom: 1px solid var(--track);
 }
 .show-controls button, .swap { padding: 3px 9px; white-space: nowrap; }
-.show-controls select { padding: 2px 4px; }
+.show-controls select { padding: 3px var(--caret-room) 3px 7px; }
 .show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
 
 /* Show name (click to rename) and its ⋮ menu, from the console. */

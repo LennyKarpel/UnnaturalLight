@@ -9,7 +9,7 @@
 //   - saves the show to server/data/session.show.json
 //   - answers the chat panel at POST /chat and /chat/summary (server/chat/:
 //     asks the model; the tools run in the page), and keeps its chats at
-//     /chat/chats (server/data/session.chats.json, apart from the show)
+//     /chat/chats (server/data/session.chats.json, the show's chats in their own file)
 //
 // Each app window talks to it over one WebSocket at /ws, shared by its
 // console (console/server-link.ts) and its stage (stage/show-link.ts).
@@ -47,7 +47,7 @@ const DATA_DIR = process.env.UNNATURALLIGHT_DATA_DIR ? path.resolve(process.env.
 /** The show (with the stage). Was session.json: renamed on start (below). */
 const SESSION_FILE = path.join(DATA_DIR, "session.show.json");
 const OLD_SESSION_FILE = path.join(DATA_DIR, "session.json");
-/** The chat panel's chats: next to the show file, named to match, but not part of it. */
+/** The chat panel's chats: the show's, in their own file next to it (a saved show file holds both). */
 const CHATS_FILE = path.join(DATA_DIR, "session.chats.json");
 /** DMX refresh / fade step (40 frames a second, as the browser used to send). */
 const FRAME_MS = 25;
@@ -180,14 +180,22 @@ async function onMessage(ws: WebSocket, client: { id: string }, msg: ClientMessa
       sendLive();
       return;
     case "stage":
-      // An edit on a stage (the other windows take it), or a show file
-      // loaded in a console (`file`: every window takes it, the sender's too).
+      // An edit on a stage: the other windows take it.
       if (!msg.stage || typeof msg.stage !== "object") return;
       stage = msg.stage;
-      broadcast({ type: "stage", stage }, msg.file ? null : ws);
+      broadcast({ type: "stage", stage }, ws);
       scheduleSave();
       return;
-    case "get-stage":
+    case "show-file":
+      // New show or Load show in a console: every window takes its stage
+      // (the sender's too) and its chats.
+      if (!msg.stage || typeof msg.stage !== "object") return;
+      stage = msg.stage;
+      broadcast({ type: "stage", stage }, null);
+      scheduleSave();
+      chats.replace(Array.isArray(msg.chats) ? msg.chats : []);
+      return;
+    case "get-show-file":
     case "dmx-connect":
     case "dmx-disconnect":
     case "net-set":
@@ -204,8 +212,8 @@ async function onMessage(ws: WebSocket, client: { id: string }, msg: ClientMessa
 /** Do what a request asks; throws when it can't (the reply carries the error). */
 async function answer(msg: Request): Promise<Reply> {
   switch (msg.type) {
-    case "get-stage":
-      return { ok: true, stage };
+    case "get-show-file":
+      return { ok: true, stage, chats: chats.list() };
     case "dmx-connect":
       await dmx.connect(msg.universe);
       return { ok: true };
