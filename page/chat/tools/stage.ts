@@ -508,7 +508,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "delete_fixtures",
-    description: "Delete stage fixtures, and the console fixtures the stage made for them. A fixture in a truss deletes its whole truss.",
+    description: "Delete stage fixtures, and the console fixtures the stage made for them. Deleting some of a truss's fixtures leaves the truss with the rest (re-laid-out; a truss left with fewer than 2 goes); to delete a whole truss, give its name.",
     schema: { type: "object", properties: { fixtures: FIXTURES }, required: ["fixtures"], additionalProperties: false },
     describe: (a) => `Delete ${who(a)}`,
     run: (a) => ({ deleted: stage().deleteFixtures(stageFixtures(a.fixtures).map((f) => f.id)) }),

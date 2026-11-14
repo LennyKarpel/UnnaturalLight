@@ -365,7 +365,7 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 ### Copy, delete, undo
 
 - **Duplicate** (right-click or inspector) copies the selected fixtures. If the original was set up in the console, the copy gets its own console fixture and faders too.
-- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a truss removes the whole truss. Fixtures the stage set up in the console are removed there too, and their faders freed.
+- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a truss removes just it: the truss closes up around the gap (one left with a single fixture stops being a truss). To delete a whole truss, double-click one of its fixtures first to select it all. Fixtures the stage set up in the console are removed there too, and their faders freed.
 - **⌘Z** brings back what you deleted: fixtures, trusses, a named position or a riser (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
 
 ### The right-click menu

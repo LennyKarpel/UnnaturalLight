@@ -15,7 +15,9 @@ import {
   homeFixture,
   applyFixture,
   linkChannels,
+  fitTrusses,
   type Fixture,
+  type Truss,
   type SavedStage,
 } from "./stage-model.ts";
 import { escapeHtml } from "../shared/html.ts";
@@ -431,8 +433,6 @@ export function openContextMenu(id: string, x: number, y: number) {
   const truss = trussOf(byId(id));
   const title = n === 1 ? byId(id)?.name ?? "" : `${n} fixtures`;
   const count = n > 1 ? ` ${n}` : "";
-  const delCount = deletionIds().size;
-  const delLabel = truss ? `Delete truss${delCount > 1 ? ` (${delCount})` : ""}` : `Delete${count}`;
   const item = (cmd: Action | "flash", label: string, key = "", cls = "") =>
     `<button type="button" data-cmd="${cmd}" class="menu-item ${cls}"><span>${label}</span><kbd>${key}</kbd></button>`;
   // Named positions in a sub-menu (opens on hover, focus or a click on it).
@@ -452,7 +452,7 @@ export function openContextMenu(id: string, x: number, y: number) {
     ${item("flash", "Flash (hold)", "F")}
     <hr />
     ${item("dup", `Duplicate${count}`)}
-    ${item("del", delLabel, "⌫", "danger")}`;
+    ${item("del", `Delete${count}`, "⌫", "danger")}`;
   ctxMenu.querySelectorAll<HTMLElement>("kbd:empty").forEach((k) => k.remove());
   ctxMenu.querySelectorAll<HTMLElement>("[data-position]").forEach((b) => {
     const span = b.querySelector("span");
@@ -586,8 +586,13 @@ export function duplicateFixtures(wanted: Fixture[]): Fixture[] {
  */
 const UNDO_KEY = `${STORAGE_KEY}.undo`;
 const MAX_UNDO = 50;
-/** One delete: where the fixtures (or a named position, or a riser) were in their list, and them (as a stage file). */
-type UndoEntry = { indexes?: number[]; positionIndex?: number; riserIndex?: number; data: SavedStage };
+/**
+ * One delete: where the fixtures (or a named position, or a riser) were in
+ * their list, and them (as a stage file). A delete from a truss also keeps
+ * the trusses it touched as they were, and every member's id in order, so ⌘Z
+ * puts the removed members back in their places.
+ */
+type UndoEntry = { indexes?: number[]; positionIndex?: number; riserIndex?: number; data: SavedStage; trusses?: Truss[]; members?: Record<string, string[]> };
 let undoMemory: UndoEntry[] = [];
 
 function readUndo(): UndoEntry[] {
@@ -622,35 +627,31 @@ function writeRedo(list: RedoEntry[]) {
   storeJson(REDO_KEY, redoMemory);
 }
 
-/** What a delete removes: the selection, widened to whole trusses. */
-function deletionIds() {
-  const ids = new Set(state.selected);
-  for (const fixture of selectedFixtures()) {
-    const truss = trussOf(fixture);
-    if (truss) trussMembers(truss).forEach((m) => ids.add(m.id));
-  }
-  return ids;
-}
-
+/**
+ * Delete the selected fixtures. A truss keeps the members left (re-laid-out
+ * to match), or goes when fewer than 2 are left; select the whole truss
+ * (double-click) to delete it all.
+ */
 export function deleteSelected({ redoing = false } = {}) {
-  const ids = deletionIds();
+  const ids = new Set(state.selected);
   const removed: { fixture: Fixture; index: number }[] = [];
   state.fixtures.forEach((fixture, index) => { if (ids.has(fixture.id)) removed.push({ fixture, index }); });
   if (!removed.length) return;
   const trussIds = new Set(removed.map((r) => r.fixture.trussId).filter(isPresent));
   const trusses = state.trusses.filter((r) => trussIds.has(r.id));
+  const members = Object.fromEntries(trusses.map((t) => [t.id, trussMembers(t).sort((a, b) => a.trussIndex - b.trussIndex).map((m) => m.id)]));
   writeUndo([...readUndo(), {
     indexes: removed.map((r) => r.index),
     data: serializeStage(state.box, removed.map((r) => r.fixture), state.transparent, trusses),
+    trusses: structuredClone(trusses),
+    members,
   }]);
   state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
-  state.trusses = state.trusses.filter((r) => !trussIds.has(r.id));
+  state.trusses = fitTrusses(state.trusses, state.fixtures);
   // Fixtures the stage registered leave the console too (their faders are freed).
   consoleLink.unregister(ownedConsoleIds(removed.map((r) => r.fixture)));
   select(null);
-  const what = trusses.length === 1 && removed.every((r) => r.fixture.trussId === trusses[0].id)
-    ? trusses[0].name
-    : fixturesLabel(removed.map((r) => r.fixture));
+  const what = wholeTruss(trusses, members, removed.map((r) => r.fixture.id))?.name ?? fixturesLabel(removed.map((r) => r.fixture));
   if (!redoing) writeRedo([]); // a new delete: nothing to redo any more
   setBanner(`Deleted ${what} · ⌘Z to undo`, 4000);
 }
@@ -694,10 +695,27 @@ export function undoDelete() {
   }
   writeUndo(list);
   if (!removed.length) return;
-  state.trusses.push(...trusses.filter((r) => !trussById(r.id)));
   // Re-insert in original order so each lands back at its old index.
   for (const { fixture, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, fixture);
-  trusses.forEach(syncTruss);
+  if (entry.trusses && entry.members) {
+    // The trusses as they were, with every member back in its place (the
+    // ones left after the delete were renumbered).
+    for (const saved of entry.trusses) {
+      const truss = trussById(saved.id);
+      if (truss) Object.assign(truss, saved);
+      else state.trusses.push(saved);
+    }
+    for (const [trussId, ids] of Object.entries(entry.members)) {
+      ids.forEach((id, k) => {
+        const fixture = byId(id);
+        if (fixture) { fixture.trussId = trussId; fixture.trussIndex = k; }
+      });
+    }
+    state.trusses = fitTrusses(state.trusses, state.fixtures);
+  } else {
+    state.trusses.push(...trusses.filter((r) => !trussById(r.id)));
+    trusses.forEach(syncTruss);
+  }
   // Their console fixtures were removed on delete: register them again.
   for (const { fixture } of removed) {
     if (!fixture.link.owned) continue;
@@ -708,8 +726,18 @@ export function undoDelete() {
   renderInspector();
   changed();
   writeRedo([...readRedo(), { fixtures: removed.map((r) => r.fixture.id), positions: [], risers: [] }]);
-  const what = trusses.length === 1 ? trusses[0].name : fixturesLabel(removed.map((r) => r.fixture));
+  const whole = entry.trusses && entry.members
+    ? wholeTruss(entry.trusses, entry.members, removed.map((r) => r.fixture.id))
+    : trusses.length === 1 ? trusses[0] : null;
+  const what = whole?.name ?? fixturesLabel(removed.map((r) => r.fixture));
   setBanner(`Restored ${what} · ⇧⌘Z to delete again`, 2500);
+}
+
+/** The one truss these fixtures are all of (for naming a delete), or null. */
+function wholeTruss(trusses: Truss[], members: Record<string, string[]>, ids: string[]): Truss | null {
+  if (trusses.length !== 1) return null;
+  const all = members[trusses[0].id] ?? [];
+  return all.length === ids.length && all.every((id) => ids.includes(id)) ? trusses[0] : null;
 }
 
 /** Delete again what the last ⌘Z put back (⇧⌘Z). */

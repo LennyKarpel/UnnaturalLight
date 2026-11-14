@@ -513,7 +513,7 @@ export function renderInspector() {
       <button data-act="zero" title="Make the current direction the new zero (Z)">Set zero here</button>
       <button data-act="aim" title="Point zero at the stage center">Aim zero at stage</button>`}
       <button data-act="dup" title="${truss ? "Copy as a free fixture (not part of the truss)" : "Copy"}">Duplicate</button>
-      <button data-act="del" class="danger" title="${truss ? "Delete the whole truss" : "Delete"} (⌫ or right-click) · ⌘Z to undo">${truss ? "Delete truss" : "Delete"}</button>
+      <button data-act="del" class="danger" title="Delete (⌫ or right-click) · double-click a truss's fixture to select the whole truss · ⌘Z to undo">Delete</button>
     </div>`;
   bindInspector();
   syncInspector();

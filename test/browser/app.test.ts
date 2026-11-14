@@ -58,6 +58,30 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.deepEqual((await stage(a)).risers.map((r) => r.name), ["Drum riser"]);
   });
 
+  test("Delete removes one fixture of a truss (the truss closes up), and ⌘Z puts it back in its place", async () => {
+    const undoShow = await a.hooks(({ c }) => c.editSnapshot());
+    const undoStage = await a.hooks(({ s }) => s.editSnapshot().data);
+    await a.hooks(({ s }) => s.addTruss({ type: "line", x: 0, y: 4, z: 0, count: 3, consoleType: "movable/multi", name: "Cut line" }));
+    const members = async () => (await stage(a)).fixtures.filter((f) => f.truss === "Cut line");
+    const before = await members();
+    assert.equal(before.length, 3);
+    await a.waitFor(`window.stageChat.stage().fixtures.filter((f) => f.truss === "Cut line").every((f) => f.console !== "registering")`, "the line's console fixtures");
+    await useStage(a);
+    await a.key("Escape"); // the riser the test before left picked out
+    await a.hooks(({ s }, id) => s.select([id]), before[1].id);
+    await a.key("Delete");
+    const left = await members();
+    assert.deepEqual(left.map((f) => f.id), [before[0].id, before[2].id], "just the middle one goes");
+    assert.equal((await stage(a)).trusses.find((t) => t.name === "Cut line")?.count, 2);
+    await a.key("z", { meta: true });
+    const back = await members();
+    assert.deepEqual(back.map((f) => [f.id, f.x, f.y, f.z]), before.map((f) => [f.id, f.x, f.y, f.z]), "all three, where they were");
+    assert.equal((await stage(a)).trusses.find((t) => t.name === "Cut line")?.count, 3);
+    await a.waitFor(`window.stageChat.stage().fixtures.filter((f) => f.truss === "Cut line").every((f) => f.console !== "registering")`, "the restored one's console fixture");
+    await a.hooks(({ c, s }, undoShow, undoStage) => { c.restoreEdits(undoShow); s.restoreEdits(undoStage); }, undoShow, undoStage);
+    assert.deepEqual(a.errors, []);
+  });
+
   test("Delete removes the position being looked at (with no fixtures selected)", async () => {
     await a.hooks(({ s }) => s.addPosition("DSC", { x: 0, y: 0, z: 3 }));
     await useStage(a);

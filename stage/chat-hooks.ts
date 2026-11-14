@@ -369,11 +369,10 @@ const stageChat = {
     return state.selected.map((id) => byId(id)?.name ?? id);
   },
 
-  /** Delete fixtures (a truss member takes its whole truss with it). Returns what was deleted. */
+  /** Delete fixtures (a truss keeps the members left; give all of its fixtures to delete it). Returns what was deleted. */
   deleteFixtures(ids: string[]) {
     const fixtures = ids.map(fixtureOrThrow);
-    const trusses = [...new Set(fixtures.map(trussOf).filter((r) => r != null))];
-    const names = [...trusses.map((r) => `${r.name} (${r.count} fixtures)`), ...fixtures.filter((f) => !f.trussId).map((f) => f.name)];
+    const names = fixtures.map((f) => f.name);
     state.selected = fixtures.map((f) => f.id);
     deleteSelected();
     return names;
