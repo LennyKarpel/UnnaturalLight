@@ -34,7 +34,6 @@ import {
 } from "./dom.ts";
 import { setStatus, persistSession, state } from "./state.ts";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.ts";
-import { dmx } from "./live.ts";
 import {
   makeChannelPickerButton,
   makeCountPickerButton,
@@ -252,7 +251,7 @@ function commitFixtureRange(
   persistSession();
   setStatus(
     `${fixture.name} → ${formatChannelRange(fixture)}`,
-    dmx.connected ? "connected" : "idle",
+    "done",
   );
   return true;
 }
@@ -750,7 +749,7 @@ export async function addFixtureGroup() {
   persistSession();
   setStatus(
     `Group “${group.name}” created`,
-    dmx.connected ? "connected" : "idle",
+    "done",
   );
 }
 

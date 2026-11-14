@@ -88,6 +88,7 @@ import {
   syncPlaybackPair,
   headerListeners,
   notifyHeader,
+  type FileState,
   setStatus,
   persistSession,
   currentShowState,
@@ -110,7 +111,6 @@ import {
 } from "./faders.ts";
 import {
   outputs,
-  dmx,
   liveUi,
   channelUi,
   selectedGroupUi,
@@ -191,14 +191,14 @@ async function toggleOutput(u: number) {
   if (out.connected) {
     await out.disconnect();
     renderOutputs();
-    setStatus(`${label} disconnected`, "idle");
+    setStatus(`${label} disconnected`, "info");
     return;
   }
   try {
-    setStatus(state.universes > 1 ? `Looking for the DMX USB Pro for universe ${u}…` : "Looking for the DMX USB Pro…", "idle");
+    setStatus(state.universes > 1 ? `Looking for the DMX USB Pro for universe ${u}…` : "Looking for the DMX USB Pro…", "info");
     await out.connect();
     renderOutputs();
-    setStatus(`${label} connected`, "connected");
+    setStatus(`${label} connected`, "info");
   } catch (err) {
     renderOutputs();
     setStatus(errorMessage(err, "Connection failed"), "error");
@@ -213,7 +213,7 @@ async function setNetworkOutput(u: number, output: NetOutputSetting | null) {
   try {
     await out.setNetwork(output);
     renderOutputs();
-    setStatus(out.network ? `${label} → ${out.network}` : `${label}: network output stopped`, out.network ? "connected" : "idle");
+    setStatus(out.network ? `${label} → ${out.network}` : `${label}: network output stopped`, "info");
   } catch (err) {
     setStatus(errorMessage(err, "Couldn't set the network output"), "error");
   }
@@ -257,7 +257,7 @@ function setUniverses(n: number) {
   renderChannelRow();
   ensureFixtureFormStartPicker();
   pushToDmx();
-  setStatus(state.universes === 1 ? "1 universe" : `${state.universes} universes · channels shown as universe/channel`, "idle");
+  setStatus(state.universes === 1 ? "1 universe" : `${state.universes} universes · channels shown as universe/channel`, "info");
 }
 meterUniverseSelect.className = "meter-universe";
 meterUniverseSelect.title = "Universe shown by the meters";
@@ -460,13 +460,19 @@ async function newShow(name?: string) {
   // Sent before Save's request on the same connection, so the file has them.
   serverLink().sendShowFile(blankStage(), []);
   const saved = await downloadShowFile();
-  setStatus(saved ? `New show · ${state.showName} · saved` : `New show · ${state.showName} · saved without the stage and chats (the show server is offline)`, dmx.connected ? "connected" : "idle");
+  noteFile("new", saved);
+}
+
+/** A show file was saved, loaded or started: the header shows it beside the show's name (a saved file missing the stage and chats is also an error). */
+function noteFile(how: FileState["how"], complete = true, file?: string) {
+  state.fileState = { how, at: Date.now(), file };
+  if (complete) notifyHeader();
+  else setStatus("Saved without the stage and chats: the show server is offline", "error");
 }
 
 /** Download the show, with the stage and chats the show server keeps alongside it. */
 async function saveShow() {
-  const saved = await downloadShowFile();
-  setStatus(saved ? "Show saved" : "Show saved (without the stage and chats: the show server is offline)", dmx.connected ? "connected" : "idle");
+  noteFile("saved", await downloadShowFile());
 }
 
 /** Download the show file; false if the show server was offline (the file then has no stage or chats). */
@@ -489,7 +495,7 @@ function loadShow(text: string, fileName: string) {
     markClean();
     // A file without them (older, or saved while the show server was offline) gets a blank stage and no chats, not the last show's.
     serverLink().sendShowFile(data.stage && typeof data.stage === "object" ? data.stage : blankStage(), Array.isArray(data.chats) ? data.chats : []);
-    setStatus(`Show loaded · ${fileName}`, dmx.connected ? "connected" : "idle");
+    noteFile("loaded", true, fileName);
   } catch (err) {
     const message = errorMessage(err, "Failed to load show");
     setStatus(message, "error");
@@ -588,7 +594,7 @@ fixtureForm.addEventListener("submit", (event) => {
     qty === 1
       ? `Added ${names[0]} · ${formatChannelRange(first)}`
       : `Added ${qty} · ${formatChannelRange({ channelStart: first.channelStart, channelEnd: last.channelEnd })}`,
-    dmx.connected ? "connected" : "idle",
+    "done",
   );
 });
 
@@ -787,6 +793,7 @@ const consoleHeader = {
   state: () => ({
     showName: state.showName,
     status: state.status,
+    file: state.fileState,
     serverLive: state.serverLive,
     serverHost: location.host,
     universes: state.universes,
@@ -1189,8 +1196,8 @@ state.serverLink = createServerLink({
     state.serverLive = connected;
     renderOutputs();
     if (connected) {
-      // The Server pill shows the connection; clear an "offline" message.
-      setStatus("", "idle");
+      // The Server pill shows the connection; clear the "offline" message.
+      setStatus("", "info");
     } else {
       setStatus("Show server offline — reconnecting…", "error");
     }

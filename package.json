@@ -1,5 +1,6 @@
 {
   "name": "unnaturallight",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "UnnaturalLight show server: serves the console and stage, owns the show state and drives the DMX USB Pro(s)",
@@ -14,14 +15,18 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "marked": "18.2.0",
     "serialport": "^13.0.0",
     "three": "0.160.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.5",
+    "@types/node": "^26.6.6",
     "@types/three": "^0.160.0",
     "@types/ws": "^8.18.2",
     "typescript": "5.9"
+  },
+  "allowScripts": {
+    "@serialport/bindings-cpp": false
   }
 }

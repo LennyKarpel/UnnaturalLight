@@ -40,7 +40,7 @@ import { createShow } from "./show.ts";
 import { handleChat, handleChatSummary } from "./chat/chat.ts";
 import { createChats } from "./chat/chats.ts";
 import type { ClientMessage, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
-import { errorMessage } from "../shared/guards.ts";
+import { errorMessage, isRecord } from "../shared/guards.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** server/data, or UNNATURALLIGHT_DATA_DIR (the browser tests use a temporary one, so they never touch the real show). */
@@ -60,6 +60,7 @@ const TYPES: Record<string, string> = {
   ".ts": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json",
+  ".md": "text/markdown; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
@@ -249,6 +250,21 @@ function stripped(file: string, data: Buffer): string {
   return js;
 }
 
+/** What the About box shows (../page/about.ts): this app's version and what it runs on. Read once, at start. */
+const ABOUT = {
+  version: String(readPackage("package.json").version ?? ""),
+  node: process.versions.node,
+  three: String(readPackage("node_modules/three/package.json").version ?? ""),
+};
+function readPackage(rel: string): Record<string, unknown> {
+  try {
+    const json: unknown = JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+    return isRecord(json) ? json : {};
+  } catch {
+    return {};
+  }
+}
+
 /** This machine, or another that has the token printed at start. */
 const allowed = (req: http.IncomingMessage, url: URL) => isLoopback(req) || isToken(url.searchParams.get("token"), TOKEN);
 
@@ -291,6 +307,11 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     // JSON only: a browser asks first before sending JSON to another site (and this never says yes).
     else if (!/^application\/json\b/i.test(req.headers["content-type"] ?? "")) res.writeHead(415).end("JSON only");
     else (url.pathname === "/chat" ? handleChat : handleChatSummary)(req, res).catch((err) => console.error(err));
+    return;
+  }
+  if (url.pathname === "/about") {
+    if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
+    else res.writeHead(200, { ...BASE_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(ABOUT));
     return;
   }
   if (url.pathname === "/chat/chats" || url.pathname.startsWith("/chat/chats/")) {

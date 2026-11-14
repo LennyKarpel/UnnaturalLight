@@ -61,7 +61,7 @@ export type Page = Awaited<ReturnType<typeof openPage>>;
 
 /** One tab, over its DevTools socket. */
 async function openPage(debugPort: number, url: string) {
-  const target = (await (await fetch(`http://127.0.0.1:${debugPort}/json/new?${url}`, { method: "PUT" })).json()) as { id: string; webSocketDebuggerUrl: string };
+  const target = (await (await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(url)}`, { method: "PUT" })).json()) as { id: string; webSocketDebuggerUrl: string };
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
   let next = 0;
@@ -170,8 +170,9 @@ async function openPage(debugPort: number, url: string) {
       await fetch(`http://127.0.0.1:${debugPort}/json/close/${target.id}`).catch(() => {});
     },
   };
-  // Ready: the console and the stage are up, and connected to the server.
-  await page.waitFor("document.readyState === 'complete' && !!window.consoleChat && !!window.stageChat && document.querySelector('#chatPanel .chat-name')", "the app to start", 15000);
+  // Ready: the console and the stage are up, and connected to the server (another page: loaded).
+  if (new URL(url).pathname === "/index.html") await page.waitFor("document.readyState === 'complete' && !!window.consoleChat && !!window.stageChat && document.querySelector('#chatPanel .chat-name')", "the app to start", 15000);
+  else await page.waitFor("document.readyState === 'complete'", "the page to load", 15000);
   return page;
 }
 
@@ -214,8 +215,9 @@ export async function startApp({ data }: { data?: string } = {}) {
     dataDir,
     /** The server's output so far (to show when something fails). */
     serverLog: () => serverLog,
-    async page() {
-      const p = await openPage(debugPort, url);
+    /** A new tab with the app, or another of its pages (e.g. "page/help.html#…"). */
+    async page(rel = "index.html") {
+      const p = await openPage(debugPort, new URL(rel, url).href);
       pages.push(p);
       return p;
     },

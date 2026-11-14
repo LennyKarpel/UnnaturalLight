@@ -5,7 +5,7 @@
  */
 
 import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatRequest, ChatSummary, ChatSummaryRequest, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
-import { accessToken } from "../../shared/server-socket.ts";
+import { serverUrl } from "../../shared/server-socket.ts";
 import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { TOOLS, toolByName, type ToolDef } from "./tools.ts";
 
@@ -26,12 +26,7 @@ export type TurnView = {
   tool: (call: ChatToolCall, description: string) => { done: (ok: boolean, note?: string) => void };
 };
 
-export const chatUrl = (path = "/chat") => {
-  const url = new URL(path, location.href);
-  const token = accessToken();
-  if (token) url.searchParams.set("token", token);
-  return url;
-};
+export const chatUrl = (path = "/chat") => serverUrl(path);
 
 /** The connection to the show server broke (not a refusal or an API error). */
 const LOST = "Lost the connection to the show server (it may have restarted). Send your message again.";

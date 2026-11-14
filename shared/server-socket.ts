@@ -28,6 +28,14 @@ export function accessToken() {
   }
 }
 
+/** The address of one of the show server's HTTP requests (e.g. "/about"), with this tab's token when it has one. */
+export function serverUrl(path: string): URL {
+  const url = new URL(path, location.href);
+  const token = accessToken();
+  if (token) url.searchParams.set("token", token);
+  return url;
+}
+
 type Listener = {
   onMessage: (msg: ServerMessage) => void;
   /** The connection dropped (it reconnects by itself). */

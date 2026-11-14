@@ -62,7 +62,11 @@ test("only the app's files and the vendor folders are served, wherever a path re
   assert.equal(publicFile(root, "page/../stage/stage.ts"), "/app/stage/stage.ts");
   assert.equal(publicFile(root, "vendor/three/build/three.module.js"), "/app/node_modules/three/build/three.module.js");
   assert.equal(publicFile(root, "vendor/three/examples/jsm/controls/OrbitControls.js"), "/app/node_modules/three/examples/jsm/controls/OrbitControls.js");
+  assert.equal(publicFile(root, "USER-GUIDE.md"), "/app/USER-GUIDE.md");
+  assert.equal(publicFile(root, "vendor/marked/marked.esm.js"), "/app/node_modules/marked/lib/marked.esm.js");
   for (const rel of [
+    "README.md",
+    "vendor/marked/../package.json",
     "page/../server/data/session.show.json", // what an encoded ..%2f decodes to
     "page/../package.json",
     "page/../node_modules/ws/package.json",
@@ -99,11 +103,13 @@ test("the policy runs the server's scripts, the import map (by hash) and three.j
   assert.ok(p.get("connect-src")?.includes("ws://localhost:8080"));
 });
 
-test("index.html has no inline script but its import map (the policy runs no other)", () => {
-  const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  const inline = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(([, attrs]) => !/\bsrc\s*=/i.test(attrs));
-  assert.deepEqual(inline.map(([, attrs]) => attrs.trim()), ['type="importmap"']);
-  assert.doesNotMatch(html, /\son[a-z]+\s*=/i, "inline event handlers never run under the policy");
+test("the pages have no inline script but their import map (the policy runs no other)", () => {
+  for (const page of ["index.html", "page/help.html"]) {
+    const html = fs.readFileSync(path.join(ROOT, page), "utf8");
+    const inline = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(([, attrs]) => !/\bsrc\s*=/i.test(attrs));
+    assert.deepEqual(inline.map(([, attrs]) => attrs.trim()), ['type="importmap"'], page);
+    assert.doesNotMatch(html, /\son[a-z]+\s*=/i, `${page}: inline event handlers never run under the policy`);
+  }
 });
 
 test("the policy lets the page reach every address the fixture library uses", () => {
@@ -190,6 +196,19 @@ test("an encoded ../ can't reach the show, the server or node_modules; three.js 
   }
   assert.equal(await request({ path: "/vendor/three/build/three.module.js", headers: { Host: self } }), 200);
   assert.equal(await request({ path: "/vendor/three/examples/jsm/controls/OrbitControls.js", headers: { Host: self } }), 200);
+  // The user guide and what shows it; the developer README stays private.
+  for (const p of ["/USER-GUIDE.md", "/page/help.html", "/vendor/marked/marked.esm.js"]) assert.equal(await request({ path: p, headers: { Host: self } }), 200, p);
+  assert.equal(await request({ path: "/README.md", headers: { Host: self } }), 404);
+});
+
+test("/about gives the app's version and what it runs on, only to the app", async () => {
+  const self = `localhost:${port}`;
+  const res = await fetch(`http://127.0.0.1:${port}/about`, { headers: { Host: self } });
+  assert.equal(res.status, 200);
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  assert.deepEqual(await res.json(), { version: pkg.version, node: process.versions.node, three: pkg.dependencies.three });
+  assert.equal(await request({ path: "/about", headers: { Host: `rebind.evil.example:${port}` } }), 403);
+  assert.equal(await request({ path: "/about", headers: { Host: self, Origin: "https://evil.example" } }), 403);
 });
 
 test("every file is sent with the frame and type headers, and the page with its policy", async () => {
@@ -197,14 +216,14 @@ test("every file is sent with the frame and type headers, and the page with its 
   const get = (p: string) => new Promise<http.IncomingHttpHeaders>((resolve, reject) => {
     http.get({ host: "127.0.0.1", port, path: p, headers: { Host: self } }, (res) => { res.resume(); resolve(res.headers); }).on("error", reject);
   });
-  for (const p of ["/index.html", "/", "/shared/html.ts", "/shared/theme.css"]) {
+  for (const p of ["/index.html", "/", "/shared/html.ts", "/shared/theme.css", "/page/help.html", "/USER-GUIDE.md"]) {
     const h = await get(p);
     for (const [name, value] of Object.entries(BASE_HEADERS)) assert.equal(h[name.toLowerCase()], value, `${name} on ${p}`);
   }
   const csp = policy(String((await get("/index.html"))["content-security-policy"]));
   assert.deepEqual(csp.get("frame-ancestors"), ["'none'"]);
   // three.js comes from the server (vendor/): no script from anywhere else.
-  assert.ok(csp.get("script-src")?.every((s) => s === "'self'" || s.startsWith("'sha256-")), csp.get("script-src")?.join(" "));
+  assert.ok(csp.get("script-src")?.every((s) => s === "'self'" || s.startsWith("'sha256-")), csp.get("script-src")?.join(" ") ?? "no script-src");
   assert.ok(csp.get("connect-src")?.includes(`ws://${self}`));
 });
 

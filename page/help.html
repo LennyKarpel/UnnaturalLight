@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UnnaturalLight — User Guide</title>
+    <link rel="stylesheet" href="../shared/theme.css" />
+    <link rel="stylesheet" href="help.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "marked": "../vendor/marked/marked.esm.js"
+        }
+      }
+    </script>
+    <script type="module" src="help.ts"></script>
+  </head>
+  <body>
+    <!-- The user guide (../USER-GUIDE.md), shown by help.ts. Opened from the app's Help menu. -->
+    <header class="bar">
+      <h1 class="app-title">UnnaturalLight <span>User Guide</span></h1>
+    </header>
+    <div class="help">
+      <nav id="helpToc" class="help-toc thin-scroll" aria-label="Contents"></nav>
+      <main id="guide" class="guide">
+        <p class="help-status">Loading the user guide…</p>
+      </main>
+    </div>
+  </body>
+</html>

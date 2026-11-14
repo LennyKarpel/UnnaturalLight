@@ -7,11 +7,13 @@ import { ask } from "../shared/ask.ts";
 import { setActivePane, type Pane } from "../shared/panes.ts";
 import { elById } from "../shared/query.ts";
 import type { ConsoleHeader } from "../console/app.ts";
+import type { StatusKind } from "../console/state.ts";
 import type { ArtNetNode, NetOutputSetting } from "../shared/protocol.ts";
 import { errorMessage, isRecord } from "../shared/guards.ts";
 import { readStoredJson, storeJson } from "../shared/storage.ts";
 import { el, button } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
+import { GUIDE_SECTIONS, openGuide, showAbout } from "./help-menu.ts";
 
 const KEY = "unnaturallight.shell";
 const MIN = 20; // % each side keeps in Both view
@@ -119,16 +121,63 @@ let header: ConsoleHeader | null = null;
 let unsubscribe: (() => void) | null = null;
 let outputsKey = "";
 
+/** The last status message shown (console state's status.seq). */
+let statusSeq = 0;
+let toastTimer = 0;
+/** How long a "done" message stays (an error stays until it's clicked). */
+const TOAST_MS = 3500;
+/**
+ * Show one of the console's messages (console/state.ts StatusKind): "done" as
+ * a toast under the header for a few seconds, "error" as a red one that stays
+ * until clicked; "info" repeats what a control shows, so isn't shown (an empty
+ * one clears the toast, e.g. the server's back).
+ */
+function showToast(text: string, kind: StatusKind) {
+  if (kind === "info" && text) return;
+  clearTimeout(toastTimer);
+  statusEl.textContent = text;
+  statusEl.dataset.state = kind;
+  statusEl.title = kind === "error" ? "Click to dismiss" : "";
+  statusEl.classList.toggle("is-shown", !!text);
+  if (text && kind === "done") toastTimer = window.setTimeout(hideToast, TOAST_MS);
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  statusEl.classList.remove("is-shown");
+}
+statusEl.addEventListener("click", hideToast);
+
+/** Shortcuts read ⌘ on a Mac, Ctrl elsewhere. */
+const MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
+const saveStateEl = elById("saveState");
+const timeOf = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const FILE_WORDS = { saved: "Saved", loaded: "Loaded", new: "New show" } as const;
+/** Beside the show's name: "Unsaved changes" since the last save, else when it was saved / loaded / started (nothing before any of those). */
+function renderSaveState() {
+  if (!header) return;
+  const dirty = header.isDirty();
+  const file = header.state().file;
+  saveStateEl.hidden = !dirty && !file;
+  saveStateEl.classList.toggle("is-dirty", dirty);
+  saveStateEl.textContent = dirty ? "Unsaved changes" : file ? `${FILE_WORDS[file.how]} ${timeOf(file.at)}` : "";
+  saveStateEl.title = dirty
+    ? `Changed since the show file was last ${file ? FILE_WORDS[file.how].toLowerCase() : "saved"} — Show → Save show (${MAC ? "⌘S" : "Ctrl+S"}) keeps a file`
+    : file ? `${FILE_WORDS[file.how]} at ${timeOf(file.at)}${file.file ? ` (${file.file})` : ""}` : "";
+}
+// Edits don't tell the header, so it checks for unsaved changes every second (cheap: one show snapshot).
+setInterval(renderSaveState, 1000);
+
 function render() {
   if (!header) return;
   const st = header.state();
   showNameEl.textContent = st.showName;
   showNameEl.hidden = showMenuBtn.hidden = false;
-  showMenuBtn.setAttribute("aria-label", `Options for show ${st.showName}`);
   document.title = `${st.showName} · UnnaturalLight`;
-  statusEl.textContent = st.status.text;
-  statusEl.title = st.status.text;
-  statusEl.dataset.state = st.status.state;
+  renderSaveState();
+  if (st.status.seq !== statusSeq) {
+    statusSeq = st.status.seq;
+    showToast(st.status.text, st.status.state);
+  }
   serverPill.textContent = st.serverLive ? "Server · live" : "Server · offline";
   serverPill.classList.toggle("is-on", st.serverLive);
   serverPill.title = st.serverLive
@@ -289,14 +338,16 @@ if (window.consoleHeader) window.onConsoleHeader(window.consoleHeader);
 
 universeCount.addEventListener("change", () => header?.setUniverses(Number(universeCount.value)));
 
-elById("newShowBtn").addEventListener("click", async () => {
+async function newShow() {
   if (!header) return;
   if (header.isDirty() && !(await ask({ title: "New show?", message: "Discard unsaved changes and start a blank show?", confirmLabel: "Continue" }))) return;
   const name = await ask({ title: "New show", confirmLabel: "Create", initial: "" });
   if (name) void header.newShow(name);
-});
-elById("saveBtn").addEventListener("click", () => header?.saveShow());
-elById("loadBtn").addEventListener("click", () => { loadFile.value = ""; loadFile.click(); });
+}
+function chooseShowFile() {
+  loadFile.value = "";
+  loadFile.click();
+}
 loadFile.addEventListener("change", async () => {
   const file = loadFile.files?.[0];
   if (!file || !header) return;
@@ -336,33 +387,115 @@ function beginRename() {
   });
   input.addEventListener("blur", () => finish(true));
 }
+
+/** Save the show under a new name: rename it, then save its file (named after the show), as Save show does. */
+async function saveShowAs() {
+  const h = header;
+  if (!h) return;
+  const name = await ask({ title: "Save show as", message: "The show takes this name, and its file is saved under it.", confirmLabel: "Save", initial: h.state().showName });
+  if (!name) return;
+  h.rename(name);
+  await h.saveShow();
+}
+
 showNameEl.addEventListener("click", beginRename);
 showNameEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); beginRename(); }
 });
 
-// ⋮ menu (Rename).
-const closeShowMenu = () => {
-  showMenu.hidden = true;
-  showMenuBtn.setAttribute("aria-expanded", "false");
-};
-showMenuBtn.addEventListener("click", () => {
-  if (!showMenu.hidden) { closeShowMenu(); return; }
-  const r = showMenuBtn.getBoundingClientRect();
-  showMenu.hidden = false;
-  showMenu.style.top = `${r.bottom + 4}px`;
-  showMenu.style.left = `${clamp(r.left, 8, innerWidth - showMenu.offsetWidth - 8)}px`;
-  showMenuBtn.setAttribute("aria-expanded", "true");
+/** One of the menu bar's menus: its button, and the menu (of [data-act] items) that opens under it. */
+type BarMenu = { btn: HTMLElement; menu: HTMLElement; open: () => void; close: () => void; isOpen: () => boolean };
+
+/** A menu bar menu: `onAct` gets the chosen item's data-act. Clicking elsewhere and Esc close it. */
+function barMenu(btn: HTMLElement, menu: HTMLElement, onAct: (act: string) => void): BarMenu {
+  const close = () => {
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  };
+  const open = () => {
+    const r = btn.getBoundingClientRect();
+    menu.hidden = false;
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.left = `${clamp(r.left, 8, innerWidth - menu.offsetWidth - 8)}px`;
+    btn.setAttribute("aria-expanded", "true");
+  };
+  btn.addEventListener("click", () => (menu.hidden ? open() : close()));
+  menu.addEventListener("click", (e) => {
+    const act = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-act]")?.dataset.act : undefined;
+    if (!act) return;
+    close();
+    onAct(act);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    const target = e.target instanceof Node ? e.target : null;
+    if (!menu.hidden && !menu.contains(target) && !btn.contains(target)) close();
+  }, true);
+  return { btn, menu, open, close, isOpen: () => !menu.hidden };
+}
+
+const menubar: BarMenu[] = [
+  // Show: New, Save (⌘S), Save as (⇧⌘S), Load, Rename.
+  barMenu(showMenuBtn, showMenu, (act) => {
+    if (act === "new") void newShow();
+    else if (act === "save") void header?.saveShow();
+    else if (act === "save-as") void saveShowAs();
+    else if (act === "load") chooseShowFile();
+    else if (act === "rename") beginRename();
+  }),
+  // Help: the user guide (in its own tab), its keys and mouse section, About.
+  barMenu(elById("helpMenuBtn"), elById("helpMenu"), (act) => {
+    if (act === "guide") openGuide();
+    else if (act === "keys") openGuide(GUIDE_SECTIONS.keys);
+    else if (act === "about") void showAbout();
+  }),
+];
+/** Open `m` (closing the others), its first item focused when `focus`. */
+function openBarMenu(m: BarMenu, focus: boolean) {
+  for (const other of menubar) if (other !== m) other.close();
+  m.open();
+  if (focus) m.menu.querySelector<HTMLElement>(".menu-item")?.focus();
+}
+// As in a desktop app: with one menu open, pointing at another opens it instead.
+for (const m of menubar) {
+  m.btn.addEventListener("pointerenter", () => { if (!m.isOpen() && menubar.some((o) => o.isOpen())) openBarMenu(m, false); });
+}
+// Keys while a menu is open: ↑ ↓ move through its items, ← → go to the next menu, Esc closes it.
+document.addEventListener("keydown", (e) => {
+  const current = menubar.find((m) => m.isOpen());
+  if (!current) return;
+  if (e.key === "Escape") { current.close(); current.btn.focus(); return; }
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    const shown = menubar.filter((m) => !m.btn.hidden);
+    const at = shown.indexOf(current);
+    e.preventDefault();
+    openBarMenu(shown[(at + (e.key === "ArrowRight" ? 1 : shown.length - 1)) % shown.length], true);
+    return;
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const items = [...current.menu.querySelectorAll<HTMLElement>(".menu-item:not(:disabled)")];
+    if (!items.length) return;
+    e.preventDefault();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const step = e.key === "ArrowDown" ? 1 : -1;
+    items[at < 0 ? (step > 0 ? 0 : items.length - 1) : (at + step + items.length) % items.length].focus();
+  }
 });
-showMenu.addEventListener("click", (e) => {
-  const act = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-act]")?.dataset.act : undefined;
-  if (!act) return;
-  closeShowMenu();
-  if (act === "rename") beginRename();
+
+for (const k of showMenu.querySelectorAll<HTMLElement>("kbd[data-shortcut]")) {
+  const shift = k.dataset.shortcut === "save-as";
+  k.textContent = MAC ? `${shift ? "⇧" : ""}⌘S` : `Ctrl+${shift ? "Shift+" : ""}S`;
+}
+// ⌘S saves the show and ⇧⌘S is Save as, from anywhere on the page (not the browser's Save Page), unless a dialog is open.
+document.addEventListener("keydown", (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.code !== "KeyS") return;
+  e.preventDefault();
+  if (!header || e.repeat || document.querySelector("dialog[open]")) return;
+  if (e.shiftKey) void saveShowAs();
+  else void header.saveShow();
 });
+
 document.addEventListener("pointerdown", (e) => {
   const target = e.target instanceof Node ? e.target : null;
-  if (!showMenu.hidden && !showMenu.contains(target) && !showMenuBtn.contains(target)) closeShowMenu();
   if (!outputMenu.hidden && !outputMenu.contains(target) && !outputBtns.contains(target)) closeOutputMenu();
 }, true);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeShowMenu(); closeOutputMenu(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeOutputMenu(); });

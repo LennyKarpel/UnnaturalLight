@@ -14,11 +14,11 @@
 //     sites) or POST to it. A request without one isn't from a web page
 //     (curl, the tests): the Host check and the token still apply.
 //
-// And what a page may do once it's loaded (BASE_HEADERS, contentSecurityPolicy): it can't be put
-// in another site's frame (so no site can trick clicks on it), and its
-// Content-Security-Policy runs only the app's own scripts, so text that gets
-// into the page as HTML by mistake (a name in a show file, say) can't run
-// as code.
+// And what a page may do once it's loaded (BASE_HEADERS,
+// contentSecurityPolicy): it can't be put in another site's frame (so no
+// site can trick clicks on it), and its Content-Security-Policy runs only
+// the app's own scripts, so text that gets into the page as HTML by mistake
+// (a name in a show file, say) can't run as code.
 
 import crypto from "node:crypto";
 import path from "node:path";
@@ -71,11 +71,12 @@ export function isToken(given: string | null, token: string): boolean {
 export const LOOPBACK_NAMES = ["localhost", "127.0.0.1", "[::1]"];
 
 /** The app's own files and folders: the only things served (never server/, its data or node_modules). */
-export const PUBLIC = ["index.html", "page/", "console/", "stage/", "shared/"];
-/** Packages the page runs, served from node_modules under vendor/ (just these folders): three.js, so the stage needs no internet. */
+export const PUBLIC = ["index.html", "USER-GUIDE.md", "page/", "console/", "stage/", "shared/"];
+/** Packages the pages run, served from node_modules under vendor/ (just these folders), so nothing needs the internet: three.js for the stage, marked for the user guide (../page/help.ts). */
 export const VENDOR: Readonly<Record<string, string>> = {
   "vendor/three/build/": "node_modules/three/build/",
   "vendor/three/examples/jsm/": "node_modules/three/examples/jsm/",
+  "vendor/marked/": "node_modules/marked/lib/",
 };
 
 /**
@@ -115,10 +116,11 @@ export const BASE_HEADERS: Readonly<Record<string, string>> = {
 /**
  * The Content-Security-Policy for an HTML page, from its own source: the
  * only scripts it runs are the server's files, the page's inline scripts as
- * they are now (by hash: in practice the import map) and what that import
- * map points to (three.js on its CDN, that version only). Inline event
- * handlers (onerror="…") and javascript: URLs never run. `host`: the Host
- * the page was asked for (already checked), for its WebSocket.
+ * they are now (by hash: in practice the import maps) and any https address
+ * an import map points to (none today: three.js and marked are served from
+ * vendor/). Inline event handlers (onerror="…") and javascript: URLs never
+ * run. `host`: the Host the page was asked for (already checked), for its
+ * WebSocket.
  */
 export function contentSecurityPolicy(html: string, host: string): string {
   const scripts = new Set(["'self'"]);

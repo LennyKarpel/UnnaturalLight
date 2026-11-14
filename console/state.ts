@@ -74,7 +74,15 @@ const bootSongs = normalizeSongs(boot.songs);
 const bootGroups = normalizeFixtureGroups(boot.fixtureGroups);
 const bootSets = normalizeSets(boot.sets, bootSongs);
 
-export type StatusKind = "idle" | "connected" | "error";
+/**
+ * What a console message is, for the page header (../page/page.ts), which shows it accordingly:
+ * - info: what a control already shows (DMX connected, universes): not shown again
+ * - done: the result of something you did that nothing else shows (fixture added): a toast for a few seconds
+ * - error: something went wrong: a red toast that stays until it's clicked
+ */
+export type StatusKind = "info" | "done" | "error";
+/** The show file last saved, loaded or started (New show) in this window, and when: shown beside the show's name. */
+export type FileState = { how: "saved" | "loaded" | "new"; at: number; file?: string };
 
 /** The console's working show and the UI state its tabs share. */
 export type ConsoleState = {
@@ -112,8 +120,10 @@ export type ConsoleState = {
   selectedFader: number;
   /** The show server's timed fade (it runs there): null = none. */
   fadeState: FadeInfo | null;
-  /** Last status message. */
-  status: { text: string; state: StatusKind };
+  /** Last status message; `seq` counts them, so the same message twice (two saves) still shows twice. */
+  status: { text: string; state: StatusKind; seq: number };
+  /** The show file last saved, loaded or started here (null: none yet). */
+  fileState: FileState | null;
   serverLive: boolean;
   serverBlackedOut: Set<number>;
   serverFlashing: Set<number>;
@@ -148,10 +158,11 @@ export const state: ConsoleState = {
   liveStep: boot.liveStep ?? -1,
   selectedFader: 0,
   fadeState: null,
-  // The show name, show buttons, DMX outputs and status are drawn in the header
+  // The show name, show menu, DMX outputs and status (a toast) are drawn in the header
   // of the page around the console (../index.html), which calls consoleHeader
   // (app.ts) and is told (notifyHeader) when any of it changes.
-  status: { text: "", state: "idle" },
+  status: { text: "", state: "info", seq: 0 },
+  fileState: null,
   serverLive: false,
   serverBlackedOut: new Set(),
   serverFlashing: new Set(),
@@ -223,8 +234,8 @@ export const notifyHeader = () => { for (const fn of headerListeners) fn(); };
 /** Snapshot of last explicitly saved/loaded show (or boot state). */
 let cleanSnapshot = "";
 
-export function setStatus(text: string, kind: StatusKind = "idle") {
-  state.status = { text, state: kind };
+export function setStatus(text: string, kind: StatusKind) {
+  state.status = { text, state: kind, seq: state.status.seq + 1 };
   notifyHeader();
 }
 

@@ -218,7 +218,8 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.evaluate(`fetch("/chat/chats/old-chat", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "old-chat", name: "Old chat", history: [{ role: "user", text: "hi" }], used: Date.now() }) })`);
     const chatNames = `fetch("/chat/chats").then((r) => r.json()).then((b) => b.chats.map((c) => c.name).join())`;
     await a.waitFor(`${chatNames}.then((n) => n.includes("Old chat"))`, "the old chat on the server");
-    await a.click("#newShowBtn");
+    await a.click("#showMenuBtn");
+    await a.click(`#showMenu [data-act="new"]`);
     const open = `document.querySelector("dialog.ask[open]")`;
     await a.waitFor(`!!${open}`, "the first question");
     // "Discard unsaved changes?" first, if there are any; then the name.
@@ -234,7 +235,78 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     }
     assert.equal(await a.evaluate(`${chatNames}`), "");
     // Its show file is saved (downloaded) straight away.
-    await a.waitFor(`document.getElementById("status").textContent === "New show · Fresh · saved"`, "the new show's file saved");
+    await a.waitFor(`document.getElementById("saveState").textContent.startsWith("New show ")`, "the new show's file saved");
+  });
+
+  test("the Show menu holds the show's actions, ⌘S saves, and → moves along the menu bar", async () => {
+    await a.click("#showMenuBtn");
+    await a.waitFor(`!document.getElementById("showMenu").hidden`, "the Show menu");
+    assert.deepEqual(await a.evaluate(`[...document.querySelectorAll("#showMenu [data-act]")].map((b) => b.dataset.act)`), ["new", "save", "save-as", "load", "rename"]);
+    // Beside the name: unsaved changes after an edit, then when it was saved (and no toast for a save).
+    const saveState = `document.getElementById("saveState").textContent`;
+    await a.evaluate(`window.consoleHeader.rename("Edited")`);
+    await a.waitFor(`${saveState} === "Unsaved changes"`, "unsaved changes shown");
+    await a.click(`#showMenu [data-act="save"]`);
+    await a.waitFor(`${saveState}.startsWith("Saved ")`, "Save show from the menu");
+    await a.evaluate(`window.consoleHeader.rename("Edited again")`);
+    await a.waitFor(`${saveState} === "Unsaved changes"`, "unsaved changes again");
+    await a.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyS", key: "s", metaKey: true, bubbles: true, cancelable: true }))`);
+    await a.waitFor(`${saveState}.startsWith("Saved ")`, "⌘S saving the show");
+    assert.equal(await a.evaluate(`document.getElementById("status").classList.contains("is-shown")`), false);
+    // A menu bar: → goes from Show to Help, Esc closes it.
+    await a.click("#showMenuBtn");
+    const key = (k: string) => a.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "${k}", bubbles: true, cancelable: true }))`);
+    await key("ArrowRight");
+    assert.deepEqual(await a.evaluate(`["showMenu", "helpMenu"].map((id) => document.getElementById(id).hidden)`), [true, false]);
+    assert.equal(await a.evaluate(`document.activeElement.dataset.act`), "guide");
+    await key("Escape");
+    assert.equal(await a.evaluate(`document.getElementById("helpMenu").hidden`), true);
+  });
+
+  test("Show → Save as renames the show and saves it", async () => {
+    await a.click("#showMenuBtn");
+    await a.click(`#showMenu [data-act="save-as"]`);
+    await a.waitFor(`!!document.querySelector("dialog.ask[open]") && document.activeElement === document.querySelector("dialog.ask input")`, "the name question");
+    await a.type("Second Night");
+    await a.click(`dialog.ask[open] button[value="confirm"]`);
+    for (const p of [a, b]) await p.waitFor(`document.getElementById("showName").textContent === "Second Night"`, "the new name, in both windows");
+    await a.waitFor(`document.getElementById("saveState").textContent.startsWith("Saved ")`, "the show saved");
+  });
+
+  test("Help opens the user guide, its keys section and About", async () => {
+    await a.click("#helpMenuBtn");
+    await a.waitFor(`!document.getElementById("helpMenu").hidden`, "the ? menu");
+    assert.deepEqual(await a.evaluate(`[...document.querySelectorAll("#helpMenu [data-act]")].map((b) => b.textContent)`), ["User guide", "Keys and mouse", "About UnnaturalLight"]);
+    // Opening the guide's tab: the address it asks for (the tab itself is tested below).
+    await a.evaluate(`window.openedGuide = []; window.open = (url, name) => { window.openedGuide.push([String(url), name]); return null; }`);
+    await a.click(`#helpMenu [data-act="keys"]`);
+    assert.equal(await a.evaluate(`document.getElementById("helpMenu").hidden`), true);
+    assert.deepEqual(await a.evaluate("window.openedGuide"), [[new URL("page/help.html#9-reference-keys-and-mouse", app.url).href, "unnaturallight-guide"]]);
+    // About: the version and what the show server runs on, from the server.
+    await a.click("#helpMenuBtn");
+    await a.click(`#helpMenu [data-act="about"]`);
+    await a.waitFor(`!!document.querySelector("dialog.about[open]")`, "the About box");
+    const facts = await a.evaluate<string[]>(`[...document.querySelectorAll("dialog.about dd")].map((d) => d.textContent)`);
+    assert.equal(facts.length, 3);
+    assert.match(facts[0], /^\d+\.\d+\.\d+$/);
+    assert.equal(facts[1], `Node.js ${process.versions.node}`);
+    assert.match(facts[2], /^three\.js \d/);
+    await a.click(`dialog.about button[type="submit"]`);
+    await a.waitFor(`!document.querySelector("dialog.about")`, "the About box closed");
+  });
+
+  test("the user guide page shows USER-GUIDE.md, at the section asked for", async () => {
+    const help = await app.page("page/help.html#9-reference-keys-and-mouse");
+    try {
+      await help.waitFor(`document.querySelectorAll("#helpToc a").length > 5`, "the guide and its contents");
+      assert.equal(await help.evaluate("document.title"), "UnnaturalLight — User Guide");
+      // Every #link in the guide has its heading (anchors as GitHub makes them).
+      assert.deepEqual(await help.evaluate(`[...document.querySelectorAll("#guide a[href^='#'], #helpToc a")].map((a) => a.getAttribute("href").slice(1)).filter((id) => !document.getElementById(decodeURIComponent(id)))`), []);
+      assert.ok(await help.evaluate(`document.getElementById("9-reference-keys-and-mouse").getBoundingClientRect().top < innerHeight`), "scrolled to the section");
+      assert.deepEqual(help.errors, []);
+    } finally {
+      await help.close();
+    }
   });
 
   test("no window logged an error", () => {

@@ -21,36 +21,48 @@ body {
 .show-controls select { padding: 3px var(--caret-room) 3px 7px; }
 .show-controls button.connected { color: var(--ok); border-color: #3d6b45; }
 
-/* Show name (click to rename) and its ⋮ menu, from the console. */
+/* The menu bar (Show, Help) and the show's name (click to rename), after the app's title. */
 .brand { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Set off by a rule on each side: from the app's title, and from the show's name. */
+.menubar { display: flex; align-items: center; margin-left: 6px; padding: 0 8px; border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
+.menubar-item {
+  padding: 3px 9px;
+  border-color: transparent;
+  background: none;
+  color: var(--ink);
+  font-size: var(--text-md);
+}
+.menubar-item:hover, .menubar-item[aria-expanded="true"] { background: var(--panel-2); border-color: var(--line); }
+/* The show's name: the document's title, so in full ink, after the menu bar's rule (messages show as a toast, .toast). */
 .show-name {
   min-width: 0;
   max-width: 22rem;
+  margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
-  padding: 1px 4px;
+  color: var(--ink);
+  font-weight: 600;
+  padding: 1px 6px;
   border-radius: 4px;
   cursor: pointer;
 }
-.show-name:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.show-name:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+/* Beside the name, smaller and gray so it never reads as part of it: "Saved 9:41", or "Unsaved changes" after a gold dot. */
+.save-state {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.save-state.is-dirty::before { content: "●"; margin-right: 5px; color: var(--accent); font-size: 0.8em; vertical-align: 1px; }
 .show-name-input {
   width: 14rem;
+  margin-left: 6px;
   border-color: var(--accent);
   padding: 1px 4px;
 }
-.dots { padding: 3px 7px; }
-.dots span {
-  display: block;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
-  margin: 5px 0;
-}
-/* The header's own menus (show ⋮, DMX output): children of <body>, so these
+/* The header's own menus (Show, Help, DMX output): children of <body>, so these
    rules don't reach the console's and the stage's menus in the panes. */
 body > .menu {
   position: fixed;
@@ -62,16 +74,37 @@ body > .menu {
 body > .menu .menu-item:disabled { color: var(--muted); cursor: default; background: none; }
 
 /* Console status message, then the show and DMX buttons. */
-.status {
-  flex: 1;
-  min-width: 0;
+/* The console's messages that need showing (page.ts showToast): a toast under the header, for a few seconds ("done") or, red, until clicked ("error"). */
+.toast {
+  position: fixed;
+  top: calc(var(--bar) + 10px);
+  left: 50%;
+  z-index: 20;
+  max-width: min(36rem, calc(100vw - 32px));
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--muted);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -6px);
+  transition: opacity 0.2s, transform 0.2s, visibility 0s 0.2s;
 }
-.status[data-state="connected"] { color: var(--ok); }
-.status[data-state="error"] { color: var(--warn); }
+.toast.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast[data-state="error"] { border-left-color: var(--warn); color: var(--warn); }
+.toast[data-state="error"]::after { content: "✕"; margin-left: 12px; color: var(--muted); }
 .show-controls { display: inline-flex; align-items: center; gap: 6px; }
 .show-controls[hidden] { display: none; }
 .sep { width: 1px; height: 18px; background: var(--track); }
@@ -141,3 +174,15 @@ body.dragging { cursor: col-resize; user-select: none; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* About box (help-menu.ts): the confirm dialog's look (dialog.ask, theme.css) with a list of facts. */
+dialog.about { width: min(26rem, calc(100vw - 2rem)); }
+.about-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0.9rem 0 0;
+}
+.about-facts dt { color: var(--muted); }
+.about-facts dd { margin: 0; font-family: var(--mono), monospace; }
+dialog.about p.about-credits { font-size: var(--text-sm); color: var(--faint); }
