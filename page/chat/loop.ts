@@ -1,6 +1,6 @@
 /**
  * One chat turn: send the conversation to the show server (POST /chat),
- * stream the model's reply, run the tools it calls (./tools.ts), send their
+ * stream the model's reply, run the tools it calls (./tools.ts, ./tools/), send their
  * results back, and repeat until it answers without calling any.
  */
 

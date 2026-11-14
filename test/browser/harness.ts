@@ -13,6 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import type { ConsoleChat } from "../../console/chat-hooks.ts";
+import type { StageChat } from "../../stage/chat-hooks.ts";
+
+/** The chat's hooks, as page.hooks hands them to its function: the console's (c) and the stage's (s). */
+export type Hooks = { c: ConsoleChat; s: StageChat };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -110,6 +115,13 @@ async function openPage(debugPort: number, url: string) {
     evaluate,
     /** Any DevTools protocol command on this tab (e.g. the profiler), for what the helpers here don't cover. */
     cdp: send,
+    /**
+     * Call the chat's hooks in the page, type-checked against them: `fn`
+     * runs there, so it can't use this file's variables (pass them as `args`,
+     * as JSON). Returns its (awaited) value as JSON.
+     */
+    hooks: <A extends unknown[], T>(fn: (h: Hooks, ...args: A) => T, ...args: A) =>
+      evaluate<Awaited<T>>(`(${fn.toString()})({ c: window.consoleChat, s: window.stageChat }, ...${JSON.stringify(args)})`),
     /** Wait until `expr` is truthy in the page. */
     waitFor: <T = unknown>(expr: string, what = expr, timeout?: number) => waitFor(() => evaluate<T>(expr), what, timeout),
     /** A real key press (keydown + keyup), e.g. key("z", { meta: true }). */

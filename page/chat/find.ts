@@ -1,4 +1,4 @@
-/** Finding songs and fixtures by what the model calls them (for ./tools.ts, ./stage-tools.ts). */
+/** Finding songs and fixtures by what the model calls them (for the tools in ./tools/). */
 
 /** A song by its number (1 = first in the show) or name (exact, else the one whose name contains it). */
 export function findSong(songs: { id: string; name: string; cues: number }[], query: unknown) {

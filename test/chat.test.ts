@@ -2,7 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseChatRequest as parseWith, parseModel } from "../server/chat/chat.ts";
 import { createAnthropicModel, MODELS, serverTools, toApiMessage, toApiTools } from "../server/chat/anthropic.ts";
-import { findSong, TOOLS, toolByName } from "../page/chat/tools.ts";
+import { TOOLS, toolByName } from "../page/chat/tools.ts";
+import { findSong } from "../page/chat/find.ts";
+import type { ConsoleChat } from "../console/chat-hooks.ts";
+import type { StageChat } from "../stage/chat-hooks.ts";
+
+/** Any part of a T (all the way down). */
+type Loose<T> = T extends (infer U)[] ? Loose<U>[] : T extends object ? { [K in keyof T]?: Loose<T[K]> } : T;
+/**
+ * A stand-in for the chat's hooks: any of their methods, type-checked against
+ * the real ones (their arguments), returning any part of what they return.
+ */
+type Fake<T> = { [K in keyof T]?: T[K] extends (...a: infer A) => infer R ? (...a: A) => R extends Promise<infer P> ? Promise<Loose<P>> : Loose<R> : never };
 
 const parseChatRequest = (body: unknown) => parseWith(body, MODELS);
 
@@ -92,7 +103,8 @@ test("summaries: accepted in requests, sent to Claude as context, written out pl
 
 // --- round 2: fixtures ---------------------------------------------------------
 
-import { findFixtures, fixtureLevels, fixtureRoles, roleFromName, type FixtureInfo } from "../page/chat/tools.ts";
+import { findFixtures } from "../page/chat/find.ts";
+import { fixtureLevels, fixtureRoles, roleFromName, type FixtureInfo } from "../page/chat/tools/fixtures.ts";
 
 const fx = (name: string, group: string | null, roles: (string | null)[], firstFader: number): FixtureInfo => ({
   id: name,
@@ -167,7 +179,7 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
     { id: "r1", name: "Ring 1 · 1", rig: "Ring 1", selected: false },
     { id: "r2", name: "Ring 1 · 2", rig: "Ring 1", selected: false },
   ];
-  const fake = {
+  const fake: Fake<StageChat> = {
     stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [{ id: "rig1", name: "Ring 1" }], fixtures, positions: [{ id: "p1", name: "DSC", x: 0, y: 0, z: 3 }, { id: "p2", name: "Drum riser", x: 0, y: 0.6, z: -2 }] }),
     aimFixtures: (ids: string[], at: unknown) => { calls.push(["aim", ids, at]); return {}; },
     aimAtPosition: (ids: string[], id: string) => { calls.push(["follow", ids, id]); return {}; },
@@ -205,7 +217,7 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
 
 test("stage tools: risers by name; sizes and center passed through in meters", () => {
   const calls: unknown[][] = [];
-  const fake = {
+  const fake: Fake<StageChat> = {
     stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [], fixtures: [], positions: [], risers: [{ id: "k1", name: "Drum riser", x: 0, z: -2, width: 2.4, depth: 2.4, height: 0.6, yaw: 0 }, { id: "k2", name: "Keys riser", x: 3, z: -2, width: 2.4, depth: 1.2, height: 0.4, yaw: 0 }] }),
     addRiser: (cfg: unknown) => { calls.push(["add", cfg]); return {}; },
     editRiser: (id: string, change: unknown) => { calls.push(["edit", id, change]); return {}; },
@@ -238,16 +250,16 @@ test("set tools: sets by number or name (default: the running one); songs by num
     { id: "s1", name: "Friday", running: false, songs: [{ id: "a", name: "Intro" }, { id: "b", name: "Ballad" }, { id: "a", name: "Intro" }] },
     { id: "s2", name: "Saturday", running: true, songs: [{ id: "c", name: "Encore" }] },
   ];
-  const fake = {
+  const fake: Fake<ConsoleChat> = {
     songs: () => songs,
     sets: () => sets,
     show: () => ({ playing: {} }),
-    addToSet: (...a: unknown[]) => calls.push(["add", ...a]),
-    removeFromSet: (...a: unknown[]) => calls.push(["remove", ...a]),
-    moveInSet: (...a: unknown[]) => calls.push(["move", ...a]),
-    runSet: (...a: unknown[]) => calls.push(["run", ...a]),
-    newSet: (...a: unknown[]) => { calls.push(["new", ...a]); return "s1"; },
-    moveSong: (...a: unknown[]) => calls.push(["moveSong", ...a]),
+    addToSet: (...a) => calls.push(["add", ...a]),
+    removeFromSet: (...a) => calls.push(["remove", ...a]),
+    moveInSet: (...a) => calls.push(["move", ...a]),
+    runSet: (...a) => calls.push(["run", ...a]),
+    newSet: (...a) => { calls.push(["new", ...a]); return "s1"; },
+    moveSong: (...a) => calls.push(["moveSong", ...a]),
   };
   (globalThis as { window?: unknown }).window = { consoleChat: fake };
   try {
@@ -291,24 +303,24 @@ test("step, cue, patch, fixture and output tools: what they pass to the console"
     { name: "", fadeSeconds: 4, levels: blank(), aims: [], steps: [] },
   ];
   const fixtures = [
-    { id: "p1", name: "Par 1", group: "Pars", channels: [{ channel: 1, role: "dimmer", faders: [1] }] },
-    { id: "p2", name: "Par 2", group: "Pars", channels: [{ channel: 2, role: "dimmer", faders: [6] }] },
+    { id: "p1", name: "Par 1", group: "Pars", channels: [{ channel: 1, role: "dimmer" as const, faders: [1] }] },
+    { id: "p2", name: "Par 2", group: "Pars", channels: [{ channel: 2, role: "dimmer" as const, faders: [6] }] },
   ];
-  const fake = {
+  const fake: Fake<ConsoleChat> = {
     songs: () => [{ id: "s", name: "Song", cues: 2 }],
     show: () => ({ playing: { song: { number: 1 }, live: { cue: 2 } }, songs: [{ cues: [{ number: 1, name: "" }, { number: 2, name: "" }] }] }),
     cue: (_: unknown, i: number) => cues[i],
     fixtures: () => fixtures,
-    setCueLevels: (...a: unknown[]) => calls.push(["levels", a[1], (a[2] as [number, number][]).filter(([, v]) => v), a[3]]),
-    addStep: (...a: unknown[]) => { calls.push(["addStep", ...a.slice(1)]); return 0; },
-    editStep: (...a: unknown[]) => { calls.push(["editStep", ...a.slice(1)]); return {}; },
-    moveCue: (...a: unknown[]) => calls.push(["moveCue", ...a.slice(1)]),
-    patchFader: (...a: unknown[]) => calls.push(["patch", ...a]),
+    setCueLevels: (...a) => calls.push(["levels", a[1], (a[2] as [number, number][]).filter(([, v]) => v), a[3]]),
+    addStep: (...a) => { calls.push(["addStep", ...a.slice(1)]); return 0; },
+    editStep: (...a) => { calls.push(["editStep", ...a.slice(1)]); return {}; },
+    moveCue: (...a) => calls.push(["moveCue", ...a.slice(1)]),
+    patchFader: (...a) => { calls.push(["patch", ...a]); return {}; },
     addFixtures: (o: unknown) => { calls.push(["addFixtures", o]); return [{ name: "Mover" }]; },
     deleteFixtures: (ids: unknown) => calls.push(["deleteFixtures", ids]),
     outputs: () => ({ universes: 2, maxUniverses: 4, outputs: [{ universe: 1 }, { universe: 2 }] }),
-    usbPro: async (...a: unknown[]) => { calls.push(["usb", ...a]); },
-    network: async (...a: unknown[]) => { calls.push(["net", ...a]); },
+    usbPro: async (...a) => { calls.push(["usb", ...a]); },
+    network: async (...a) => { calls.push(["net", ...a]); },
   };
   (globalThis as { window?: unknown }).window = { consoleChat: fake, stageChat: { consoleIds: () => ["p2"] } };
   try {
@@ -353,7 +365,7 @@ test("step, cue, patch, fixture and output tools: what they pass to the console"
 test("library, link, step, submaster, fixture, group and show tools: what they pass on", async () => {
   const calls: unknown[][] = [];
   const profile = { model: "Spot 7" };
-  const stageFake = {
+  const stageFake: Fake<StageChat> = {
     stage: () => ({ fixtures: [
       { id: "a", name: "Spot 7 1", rig: null, selected: false, console: null },
       { id: "b", name: "Spot 7 2", rig: null, selected: false, console: null },
@@ -369,17 +381,17 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
     addFixtures: (points: unknown[], type: string, p: unknown) => { calls.push(["place", points.length, type, p]); return []; },
     linkToConsole: (ids: string[], id: string) => { calls.push(["link", ids, id]); return ids.length; },
     linkManual: (ids: string[], start: number, layout: unknown) => calls.push(["manual", ids, start, layout]),
-    register: (...a: unknown[]) => calls.push(["register", ...a]),
+    register: (...a) => calls.push(["register", ...a]),
     unlink: (ids: string[]) => calls.push(["unlink", ids]),
     parseAddress: (t: string) => (t === "2/1" ? 513 : null),
   };
-  const consoleFake = {
+  const consoleFake: Fake<ConsoleChat> = {
     fixtures: () => [{ id: "c1", name: "Wash 1", group: "Washes", channels: [] }, { id: "c2", name: "Wash 2", group: "Washes", channels: [] }],
     show: () => ({ serverConnected: true, playing: {}, master: 100, crossfader: 0, submasters: { live: 50, upNext: 100 }, showName: "Tour" }),
     step: (back: boolean) => { calls.push(["step", back]); return true; },
-    setSubmasters: (...a: unknown[]) => calls.push(["subs", ...a]),
-    editFixture: (...a: unknown[]) => { calls.push(["editFixture", ...a]); return {}; },
-    renameGroup: (...a: unknown[]) => { calls.push(["renameGroup", ...a]); return a[1]; },
+    setSubmasters: (...a) => calls.push(["subs", ...a]),
+    editFixture: (...a) => { calls.push(["editFixture", ...a]); return {}; },
+    renameGroup: (...a) => { calls.push(["renameGroup", ...a]); return a[1]; },
     renameShow: (n: string) => { calls.push(["renameShow", n]); return n; },
     saveShow: async () => { calls.push(["save"]); return true; },
   };

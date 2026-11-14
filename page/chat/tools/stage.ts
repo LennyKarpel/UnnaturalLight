@@ -5,11 +5,11 @@
  * (window.stageChat, stage/chat-hooks.ts) the same as its own controls.
  */
 
-import type { StageChat } from "../../stage/chat-hooks.ts";
-import type { Args, ToolDef } from "./tools.ts";
-import { findByName, findFixtures } from "./find.ts";
-import { DMX_ATTRS, isDmxAttr, type DmxAttr } from "../../shared/attributes.ts";
-import type { FixtureProfile } from "../../stage/fixture-library.ts";
+import type { StageChat } from "../../../stage/chat-hooks.ts";
+import type { Args, ToolDef } from "./common.ts";
+import { findByName, findFixtures } from "../find.ts";
+import { DMX_ATTRS, isDmxAttr, type DmxAttr } from "../../../shared/attributes.ts";
+import type { FixtureProfile } from "../../../stage/fixture-library.ts";
 
 function stage(): StageChat {
   const s = window.stageChat;

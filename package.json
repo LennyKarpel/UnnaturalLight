@@ -8,7 +8,8 @@
     "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/server.ts",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"test/*.test.ts\"",
     "typecheck": "tsc -p .",
-    "test:browser": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/browser/*.test.ts\""
+    "test:browser": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/browser/*.test.ts\"",
+    "test:model": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/model/*.test.ts\""
   },
   "engines": {
     "node": ">=22.13"
