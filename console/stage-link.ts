@@ -56,6 +56,8 @@ export type StageLinkApi = {
   goArea: () => GoArea;
   /** Press a GO area button: exactly what the console's own button does. */
   goPress: (button: GoButton) => void;
+  /** Drag the crossfader: exactly what dragging the console's does. */
+  crossTo: (pct: number) => void;
 };
 
 /** Call the stage (null until the link starts). */
@@ -138,6 +140,9 @@ export function startStageLink(api: StageLinkApi) {
     aim: (list) => api.aim(list),
     reaim: (list) => api.reaim(list),
     go: (button) => api.goPress(button),
+    cross: (pct) => {
+      if (Number.isFinite(pct)) api.crossTo(pct);
+    },
   });
   toStage = call;
   send();

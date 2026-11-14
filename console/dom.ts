@@ -255,7 +255,6 @@ export const crossTicks = elById("crossTicks");
 export const prevCueBtn = elById("prevCueBtn", HTMLButtonElement);
 export const nextCueBtn = elById("nextCueBtn", HTMLButtonElement);
 export const goNextFade = elById("goNextFade");
-export const fadePauseBtn = elById("fadePauseBtn", HTMLButtonElement);
 export const addCueBtn = elById("addCueBtn", HTMLButtonElement);
 export const addSongBtn = elById("addSongBtn", HTMLButtonElement);
 export const songScroll = elById("songScroll");

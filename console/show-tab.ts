@@ -5,7 +5,7 @@ import { addSongBtn, songScroll, songList, songEmpty, tabShow, dropSlot, showDro
 import { renderSetBar } from "./set-bar.ts";
 import { getActiveEntry, getActiveSet, bindActiveSong, persistSession, state } from "./state.ts";
 import { abortInlineEdits, confirmAction, promptName } from "./faders.ts";
-import { pushToDmx, refreshCueSelects, renderSelectedGroup, syncCrossUi, stopTimedFade, updateFadePauseButton } from "./live.ts";
+import { pushToDmx, refreshCueSelects, renderSelectedGroup, syncCrossUi, stopTimedFade, syncGoButton } from "./live.ts";
 import { renderCues, openActionMenu } from "./cues.ts";
 import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
@@ -275,7 +275,7 @@ async function deleteSong(id: string) {
 export function refreshUpNext() {
   bindActiveSong();
   refreshCueSelects();
-  updateFadePauseButton();
+  syncGoButton();
   renderCues();
   syncSongUi();
   pushToDmx();

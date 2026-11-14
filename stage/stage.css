@@ -10,14 +10,18 @@
     --riser: #c9b58a;
     background: var(--bg);
     color: var(--ink);
-    font-family: var(--font);
+    font-family: var(--font), sans-serif;
     font-size: var(--text-md);
   }
   .app {
+    /* The panel sizes the dividers set (stage/panel.ts sets these on .app; removed, they're back to these). */
+    --side-width: 340px;
+    --plan-size: 100%;
+    --fixtures-height: 300px;
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr;
-    grid-template-columns: minmax(0, 1fr) var(--side-width, 340px);
+    grid-template-columns: minmax(0, 1fr) var(--side-width);
     grid-template-areas: "head head" "view side";
     min-height: 0;
   }
@@ -36,38 +40,91 @@
   .group { display: flex; align-items: center; gap: 0.4rem; }
   .group > label { color: var(--muted); }
   .spacer { flex: 1; }
-  /* The GO bar (the console's GO area), centered at the top of the 3D view (the
-     banner sits under it). The buttons have fixed widths, so they never move;
-     the line under them (LIVE → UP NEXT, the fade, the readout) is cut
-     short (…) rather than widen the bar. */
+  /* The GO bar: the console's GO area in miniature, centered at the top of the
+     3D view (the banner sits under it). The buttons have fixed widths and the
+     side columns are equal, so they never move; long cue names are cut short
+     (…) rather than widen the bar. */
   .stage-go {
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    display: grid; justify-items: center; gap: 3px;
-    /* A fixed width: room for the line under the buttons, and nothing moves as it changes. */
-    width: min(30rem, calc(100% - 24px));
+    display: grid; gap: 4px;
+    /* A fixed width: room for LIVE, the buttons and UP NEXT, and nothing moves as they change. */
+    width: min(34rem, calc(100% - 24px));
     background: rgba(18, 20, 24, 0.82);
     border: 1px solid var(--track);
     border-radius: 6px;
-    padding: 4px 6px 3px;
+    padding: 6px 10px 5px;
   }
-  .stage-go-row { display: flex; align-items: center; gap: 0.4rem; }
-  .stage-go-info {
-    width: 0; min-width: 100%;
-    display: flex; justify-content: center; gap: 0.6rem;
-    font-size: var(--text-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
+  /* As the console's GO area: equal side columns, so « ‹ GO › » stay centered whatever the cue names. */
+  .stage-go-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.6rem; align-items: end; }
+  .stage-go-slot { display: grid; gap: 1px; min-width: 0; }
+  .stage-go-slot.is-next { justify-items: end; text-align: right; }
+  .stage-go-slot-label {
+    font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
   }
-  .stage-go-cues { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .stage-go-fade, .stage-go-readout { flex: none; }
-  .stage-go-readout { color: var(--accent); font-variant-numeric: tabular-nums; }
-  .stage-go-step { padding-inline: 0.5rem; }
-  .stage-go-btn { min-width: 5.5em; font-weight: 700; letter-spacing: 0.04em; }
-  /* As the console's GO while a fade plays. */
+  /* Long names (a cue with steps) are cut short (…); the tooltip has all of it. */
+  .stage-go-slot-name {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--display), sans-serif; font-size: var(--text-md); font-weight: 700;
+  }
+  .stage-go-slot.is-live .stage-go-slot-name { color: var(--cross-from); }
+  .stage-go-slot.is-next .stage-go-slot-name { color: var(--cross-to); }
+  .stage-go-fade { font-size: var(--text-xs); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stage-go-center { display: grid; justify-items: center; gap: 2px; }
+  .stage-go-row { display: flex; align-items: center; gap: 0.3rem; }
+  .stage-go-readout { font-size: var(--text-sm); color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stage-go-step { align-self: stretch; padding-inline: 0.45rem; color: var(--muted); }
+  .stage-go-step:hover:not(:disabled) { color: var(--ink); }
+  /* As the console's GO: its display face, tinted, lit while a fade plays. */
+  .stage-go-btn {
+    /* Wide enough for "Resume", so the buttons beside it never move. */
+    min-width: 5.6em; font-family: var(--display), sans-serif; font-weight: 800; letter-spacing: 0.06em;
+    border-color: color-mix(in srgb, var(--select) 55%, var(--line-strong));
+    background: color-mix(in srgb, var(--select) 28%, var(--panel));
+  }
+  .stage-go-btn:hover:not(:disabled) { border-color: var(--select); background: color-mix(in srgb, var(--select) 42%, var(--panel)); }
   .stage-go-btn.is-running { border-color: var(--select); background: color-mix(in srgb, var(--select) 55%, var(--panel)); }
+  .stage-go-btn.is-paused { border-color: var(--accent); color: var(--accent); }
+  /* The crossfader, the bar's last row: a track in the console's colors
+     (LIVE | UP NEXT), its thumb, and UP NEXT's step ticks. */
+  .stage-go-cross {
+    position: relative; width: 100%; height: 16px; margin-bottom: 1px;
+  }
+  #stageGoCross {
+    --cross-pct: 0%;
+    -webkit-appearance: none; appearance: none;
+    position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+    background: linear-gradient(to right, var(--cross-from) var(--cross-pct), var(--cross-to) var(--cross-pct)) center / 100% 6px no-repeat;
+    border-radius: 3px;
+    cursor: pointer; outline: none;
+  }
+  #stageGoCross::-webkit-slider-runnable-track { height: 16px; background: transparent; }
+  #stageGoCross::-moz-range-track { height: 16px; background: transparent; border: none; }
+  #stageGoCross::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; margin-top: 1px; border-radius: 50%;
+    background: #f2efe8; border: 2px solid var(--field);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  #stageGoCross::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #f2efe8; border: 1px solid var(--field);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  #stageGoCross:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--select); }
+  #stageGoCross:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--select); }
+  /* Lined up with the thumb's center (7px in from each end). */
+  .stage-go-ticks { position: absolute; inset: 3px 7px; pointer-events: none; }
+  .stage-go-tick {
+    --at: 0; /* where it lands, 0–1 (set on each tick: go-bar.ts) */
+    position: absolute; top: 0; bottom: 0; left: calc(var(--at) * 100%);
+    width: 2px; margin-left: -1px; border-radius: 1px;
+    background: var(--ink); opacity: 0.7;
+  }
   input[type="number"], input[type="text"] {
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     width: 64px;
   }
-  input[type="text"] { width: 100%; font-family: var(--font); }
+  input[type="text"] { width: 100%; font-family: var(--font), sans-serif; }
   input[type="color"] {
     width: 32px; height: 24px; padding: 0; border: 1px solid var(--track);
     background: none; border-radius: 4px;
@@ -85,11 +142,11 @@
     border: 1px solid var(--track);
     border-radius: 6px;
     padding: 8px 10px;
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     pointer-events: none;
     min-width: 210px;
   }
-  .hud .name { font-family: var(--font); font-weight: 600; margin-bottom: 4px; }
+  .hud .name { font-family: var(--font), sans-serif; font-weight: 600; margin-bottom: 4px; }
   .hud .row { display: flex; justify-content: space-between; gap: 1rem; }
   .hud .row span:first-child { color: var(--muted); }
   .keys {
@@ -103,7 +160,7 @@
   .keys .kbd {
     pointer-events: auto;
     font: inherit;
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     border: 1px solid var(--track);
     border-bottom-width: 2px;
     border-radius: 3px;
@@ -121,7 +178,7 @@
   .keys .kbd:disabled { opacity: 0.35; cursor: default; border-color: var(--track); color: var(--ink); }
   .keys .kbd:not(:disabled):active, .keys .kbd.held { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   kbd {
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     border: 1px solid var(--track);
     border-bottom-width: 2px;
     border-radius: 3px;
@@ -130,7 +187,8 @@
     background: var(--panel);
   }
   .banner {
-    position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+    /* Under the GO bar (12px down, about 80px tall). */
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
     background: var(--select); color: #021414; padding: 4px 12px; border-radius: 4px;
     font-weight: 600; pointer-events: none;
   }
@@ -188,11 +246,11 @@
   .collapse-btn svg { transition: transform 0.15s; }
 
   /* Plan: square, as wide as the panel unless the divider under it makes it smaller. */
-  #plan { width: min(100%, var(--plan-size, 100%)); margin: 0 auto; aspect-ratio: 1 / 1; display: block; border-radius: 4px; background: #0c0e11; touch-action: none; }
+  #plan { width: min(100%, var(--plan-size)); margin: 0 auto; aspect-ratio: 1 / 1; display: block; border-radius: 4px; background: #0c0e11; touch-action: none; }
 
   /* Fixtures and Inspector: the heading stays put and the part under it scrolls,
      edge to edge (its scrollbar starts below the heading). */
-  aside > #fixtures { max-height: var(--fixtures-height, 300px); }
+  aside > #fixtures { max-height: var(--fixtures-height); }
   aside > #fixtures, aside > #inspector { display: flex; flex-direction: column; padding-bottom: 0; }
   #fixtures > h2, #inspector > h2 { flex: none; margin-bottom: 0; }
   #fixtures > .list, #inspector > .inspector-body {
@@ -207,7 +265,7 @@
   }
   .list .item:hover { background: var(--panel-2); }
   .list .item.sel { border-color: var(--select); background: rgba(0, 221, 221, 0.08); }
-  .list .pct { font-family: var(--mono); color: var(--muted); text-align: right; }
+  .list .pct { font-family: var(--mono), monospace; color: var(--muted); text-align: right; }
   .swatch { width: 10px; height: 10px; border-radius: 50%; }
   .bar { height: 4px; background: var(--track); border-radius: 2px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--accent); }
@@ -288,7 +346,7 @@
   .dmx-row { display: grid; grid-template-columns: 1fr 52px 78px; gap: 6px; align-items: center; }
   .dmx-row input[type="number"] { width: 100%; }
   /* Color channels: an upright strip between the label and the slider, in the emitter's color (like the console's color faders). */
-  .dmx-row.has-emitter { position: relative; }
+  .dmx-row.has-emitter { position: relative; --emitter: transparent; /* its own, from its style attribute (sidebar.ts) */ }
   .dmx-row.has-emitter::before { content: ""; position: absolute; left: -5px; top: 15%; bottom: 15%; width: 3px; border-radius: 2px; background: var(--emitter); }
   /* Pan and tilt rows, with the pan / tilt pad (shared/pan-tilt-pad.js) upright across both, in the color strips' column (ending where they end). */
   .pt-block { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: 4px; }
@@ -305,7 +363,7 @@
   .dim-btn:hover { color: var(--ink); border-color: var(--muted); }
   .dim-blackout.on, .dim-blackout:active { background: var(--warn); border-color: var(--warn); color: #1a0d0a; }
   .dim-flash.on, .dim-flash:active { background: #fff; border-color: #fff; color: #111; }
-  .dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
+  .dmx-note { display: flex; justify-content: space-between; gap: 4px; font-family: var(--mono), monospace; font-size: var(--text-xs); color: var(--muted); }
   .chan { border: 1px solid var(--track); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
   /* Other channels (link.js): sliders for channels the stage doesn't draw, under the DMX rows. */
   .other-chans { grid-column: 1 / -1; display: grid; grid-template-columns: 90px 1fr; gap: 6px 8px; align-items: center; }
@@ -316,7 +374,7 @@
   .chan.on { border-color: var(--ok); color: var(--ok); }
   .fields.link-fields { margin-top: 10px; }
   .layout { display: flex; flex-wrap: wrap; gap: 4px; }
-  .lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono); font-size: var(--text-xs); color: var(--muted); }
+  .lay { display: flex; align-items: center; gap: 3px; font-family: var(--mono), monospace; font-size: var(--text-xs); color: var(--muted); }
   .lay select { font-size: var(--text-xs); padding: 1px var(--caret-room) 1px 3px; }
   .lay-btns { display: flex; gap: 4px; width: 100%; }
   .lay-btns button { padding: 1px 6px; font-size: var(--text-xs); }
@@ -324,7 +382,7 @@
   .lib select[size] { width: 100%; }
   .lib-info { margin-top: 6px; font-size: var(--text-sm); color: var(--muted); max-height: 180px; overflow: auto; }
   .lib-info[data-tone="warn"], .hint.warn { color: var(--accent); }
-  .lib-chans { margin: 4px 0; padding-left: 0; list-style: none; columns: 2; font-family: var(--mono); font-size: var(--text-xs); }
+  .lib-chans { margin: 4px 0; padding-left: 0; list-style: none; columns: 2; font-family: var(--mono), monospace; font-size: var(--text-xs); }
   .lib-chans span { color: var(--muted); display: inline-block; min-width: 18px; }
   .lib-chans b { color: var(--ok); font-weight: 500; }
   .lib-note { font-size: var(--text-xs); }
@@ -361,7 +419,7 @@
   .follow-note span { flex: none; white-space: nowrap; }
   .follow-note select { flex: 1; min-width: 0; }
   .follow-note [hidden] { display: none; }
-  .readout { grid-column: 1 / -1; font-family: var(--mono); color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+  .readout { grid-column: 1 / -1; font-family: var(--mono), monospace; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
   .readout b { color: var(--ink); font-weight: 500; }
 
   @container (max-width: 820px) {

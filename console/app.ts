@@ -65,7 +65,6 @@ import {
   goStepBackBtn,
   prevCueBtn,
   nextCueBtn,
-  fadePauseBtn,
   addCueBtn,
   addSongBtn,
   identityBtn,
@@ -130,7 +129,7 @@ import {
   syncSubmasterUi,
   setSubmasterFromLive,
   setCross,
-  updateFadePauseButton,
+  syncGoButton,
   stopTimedFade,
   goNextCue,
   stepLiveCue,
@@ -307,10 +306,27 @@ crossfader.addEventListener("input", () => {
   setCross(Number(crossfader.value), { fromUser: true });
 });
 
+/**
+ * A GO pressed twice in quick succession (to be sure) mustn't pause the fade
+ * the first press started: GO only becomes Pause this long after.
+ */
+const PAUSE_GUARD_MS = 600;
+let lastGoAt = -Infinity;
+
 /** The GO area's buttons: here, and the 3D view's GO bar (console/stage-link.ts), which does exactly the same. */
 function goPress(button: GoButton) {
-  if (!goArea().buttons[button].enabled) return;
-  if (button === "go") goNextCue();
+  const area = goArea();
+  if (!area.buttons[button].enabled) return;
+  if (button === "go") {
+    // GO is Pause while its fade plays, Resume once paused.
+    if (area.goMode === "pause") {
+      if (performance.now() - lastGoAt >= PAUSE_GUARD_MS) toggleFadePause();
+    } else if (area.goMode === "resume") toggleFadePause();
+    else {
+      lastGoAt = performance.now();
+      goNextCue();
+    }
+  }
   else if (button === "step") stepNextCue();
   else if (button === "stepBack") stepBackCue();
   else stepLiveCue(button === "prevCue" ? -1 : 1);
@@ -320,10 +336,6 @@ goStepBtn.addEventListener("click", () => goPress("step"));
 goStepBackBtn.addEventListener("click", () => goPress("stepBack"));
 prevCueBtn.addEventListener("click", () => goPress("prevCue"));
 nextCueBtn.addEventListener("click", () => goPress("nextCue"));
-
-fadePauseBtn.addEventListener("click", () => {
-  toggleFadePause();
-});
 
 wireCurrentCueTitle(currentCueTitle);
 
@@ -416,7 +428,7 @@ function applyShow(next: ShowData, { fromServer = false } = {}) {
   syncMasterUi();
   syncSubmasterUi();
   syncCrossUi();
-  updateFadePauseButton();
+  syncGoButton();
 
   renderCues();
   renderLiveRow();
@@ -434,7 +446,7 @@ function syncTransportFromState() {
   syncSubmasterUi();
   syncCrossUi();
   refreshCueSelects();
-  updateFadePauseButton();
+  syncGoButton();
 }
 
 /**
@@ -1064,6 +1076,8 @@ startStageLink({
   // The 3D view's GO bar: the GO area as shown here, and its buttons are these.
   goArea,
   goPress,
+  // The GO bar's crossfader: as dragging this one.
+  crossTo: (pct) => setCross(pct, { fromUser: true }),
   adoptRoles: adoptRolesFromStage,
   reveal: revealFixtures,
   hold: holdFromStage,
@@ -1129,7 +1143,7 @@ function applyServerLive(live: Partial<Live>) {
   syncMasterUi();
   syncSubmasterUi();
   syncCrossUi();
-  updateFadePauseButton();
+  syncGoButton();
   // A step shown before or now (picked on another console, or GO arrived): the rows' faders are other levels.
   if (state.liveStep !== before.liveStep) { renderCues(); renderSelectedGroup(); }
   if (state.fromCue !== before.fromCue || state.selectedCue !== before.selectedCue) showArrivedCue();

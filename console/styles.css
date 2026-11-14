@@ -13,7 +13,7 @@
       radial-gradient(900px 500px at 100% 0%, #1a2430 0%, transparent 50%),
       var(--bg);
     color: var(--ink);
-    font-family: var(--font);
+    font-family: var(--font), sans-serif;
   }
 
   .app {
@@ -207,7 +207,7 @@
 
   .tab-intro h2 {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-2xl);
   }
 
@@ -375,7 +375,7 @@
 
   .fixture-group-name {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-xl);
     font-weight: 600;
     color: var(--select);
@@ -495,7 +495,7 @@
 
   .fixture-row-name {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 600;
     min-width: 0;
@@ -738,7 +738,7 @@
   }
 
   .active-song-name {
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 700;
     color: var(--select);
@@ -803,7 +803,7 @@
   .song-row-name {
     justify-self: start; /* only the text renames; the rest of the row plays the song */
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 700;
     cursor: text;
@@ -863,7 +863,7 @@
 
   .set-column-head h3 {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
   }
 
@@ -1110,9 +1110,10 @@
   }
 
   .go-btn {
-    min-width: 4.5rem;
+    /* Wide enough for "Resume" (GO while a fade is paused), so the buttons beside it never move. */
+    min-width: 6.5rem;
     padding: 0.45rem 0.9rem;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-xl);
     font-weight: 800;
     letter-spacing: 0.06em;
@@ -1156,6 +1157,7 @@
   }
 
   .cross-tick {
+    --at: 0; /* where the step lands, 0–1 (set on each tick: live.ts) */
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1170,6 +1172,12 @@
   .go-btn.is-running {
     border-color: var(--select);
     background: color-mix(in srgb, var(--select) 55%, var(--panel));
+  }
+
+  /* Paused: GO says Resume, in the accent (as the Pause button used to). */
+  .go-btn.is-paused {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .go-progress {
@@ -1193,7 +1201,7 @@
   }
 
   .go-slot-name {
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 700;
     color: var(--ink);
@@ -1280,7 +1288,7 @@
     border-radius: 4px;
     background: var(--field);
     color: var(--ink);
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
   }
@@ -1300,7 +1308,7 @@
   }
 
   .cue-step-add {
-    font-family: var(--font);
+    font-family: var(--font), sans-serif;
   }
 
   .cue-step-plus:hover,
@@ -1310,7 +1318,7 @@
 
   .cue-steps-total {
     margin-left: 0.2rem;
-    font-family: var(--mono);
+    font-family: var(--mono), monospace;
     font-size: var(--text-sm);
     color: var(--muted);
   }
@@ -1318,6 +1326,7 @@
   /* The cue's parts sized by time; fills as GO runs into it (--done, 0…1). */
   /* Each bar is 6px to see, with 4px above and below to click. */
   .cue-timeline {
+    --done: 0; /* how much of a GO through the steps is done, 0–1 (set while one runs: cues.ts) */
     position: relative;
     display: flex;
     gap: 3px;
@@ -1347,7 +1356,7 @@
   .cue-timeline-fill {
     position: absolute;
     inset: 4px auto 4px 0;
-    width: calc(var(--done, 0) * 100%);
+    width: calc(var(--done) * 100%);
     background: color-mix(in srgb, var(--cross-from) 75%, transparent);
     pointer-events: none;
   }
@@ -1536,25 +1545,6 @@
     cursor: pointer;
   }
 
-  .timed-crossfade {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    align-items: center;
-    justify-content: center;
-    margin-top: 0.65rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid var(--line);
-  }
-
-  #fadePauseBtn {
-    min-width: 4.5rem;
-  }
-
-  #fadePauseBtn.is-paused {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
 
 
 
@@ -1669,7 +1659,7 @@
   .fader-row-head h3,
   .cue-title {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 700;
     line-height: 1.2;
@@ -1681,7 +1671,7 @@
     max-width: min(16rem, 50vw);
     width: 12ch;
     field-sizing: content;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     font-weight: 700;
     line-height: 1.2;
@@ -1812,7 +1802,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    height: 0%;
+    height: 0;
     background: linear-gradient(180deg, var(--accent), var(--accent-dim));
     transition: height 40ms linear;
   }
@@ -1859,7 +1849,7 @@
 
   .selected-group-head h3 {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-lg);
     color: var(--select);
   }
@@ -1943,6 +1933,7 @@
 
   /* A line around each run of faders that control one fixture, with its name (look: theme.css). */
   .fixture-outline {
+    --outline: var(--accent); /* its fixture's color (set on each: faders.ts) */
     grid-row: 1;
     z-index: 1;
     margin: -3px -2px;
@@ -1950,7 +1941,7 @@
   }
 
   .fixture-outline.is-revealed {
-    box-shadow: 0 0 0 2px var(--outline, var(--accent)), 0 0 14px var(--outline, var(--accent));
+    box-shadow: 0 0 0 2px var(--outline), 0 0 14px var(--outline);
     transition: box-shadow 0.2s;
   }
 
@@ -2080,6 +2071,7 @@
   /* Color faders: a strip along the bottom in the emitter's color (faders.js),
      clear of the fixture outline's name label at the top. */
   .fader.has-emitter {
+    --emitter: transparent; /* the emitter's color (set on each: faders.ts) */
     box-shadow: inset 0 -3px 0 var(--emitter);
   }
 
@@ -2316,7 +2308,7 @@
 
   .patch-card-head h3 {
     margin: 0;
-    font-family: var(--display);
+    font-family: var(--display), sans-serif;
     font-size: var(--text-xl);
     min-width: 2.5rem;
   }

@@ -105,12 +105,14 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
 
   test("the 3D view's GO bar is the console's GO area: the same text and buttons, doing the same", async () => {
     const liveRow = `document.querySelector("#cues .fader-row.is-current")?.dataset.row`;
-    const bar = `document.getElementById("stageGoCues").textContent`;
+    const bar = `document.getElementById("stageGoLive").textContent + " → " + document.getElementById("stageGoNext").textContent`;
     /** Each of the five buttons, here and in the console: disabled and tooltip, side by side. */
     const same = `[["prevCueBtn", "stageGoPrevCue"], ["goStepBackBtn", "stageGoStepBack"], ["goBtn", "stageGoBtn"], ["goStepBtn", "stageGoStep"], ["nextCueBtn", "stageGoNextCue"]]
       .every(([c, s]) => document.getElementById(c).disabled === document.getElementById(s).disabled && document.getElementById(c).title === document.getElementById(s).title)
       && document.getElementById("stageGoReadout").textContent === document.getElementById("crossValue").textContent
-      && document.getElementById("stageGoFade").textContent === document.getElementById("goNextFade").textContent`;
+      && document.getElementById("stageGoFade").textContent === document.getElementById("goNextFade").textContent
+      && Math.round(Number(document.getElementById("stageGoCross").value)) === Number(document.getElementById("crossfader").value)
+      && document.getElementById("stageGoTicks").childElementCount === document.getElementById("crossTicks").childElementCount`;
     await a.waitFor(`${bar} === "Cue 1 → Cue 2" && !document.getElementById("stageGoBtn").disabled`, "LIVE → UP NEXT in the bar");
     await a.waitFor(same, "the bar as the console");
     // GO here is the console's GO: the fade plays (GO lit, the readout as the console's), then cue 2 is LIVE.
@@ -125,6 +127,42 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.waitFor(`${liveRow} === "1"`, "cue 2 LIVE from »");
     await a.click("#stageGoPrevCue");
     await a.waitFor(`${liveRow} === "0" && ${same}`, "cue 1 LIVE, the bar as the console");
+    // Its crossfader is the console's: dragging it blends LIVE into UP NEXT there too (and the bar doesn't change size as it moves).
+    const height = await a.evaluate<number>(`document.getElementById("stageGo").offsetHeight`);
+    const drag = (pct: number) => a.evaluate(`(() => { const c = document.getElementById("stageGoCross"); c.value = "${pct}"; c.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+    await drag(40);
+    await a.waitFor(`document.getElementById("crossfader").value === "40" && document.getElementById("crossValue").textContent.startsWith("40%")`, "the console's crossfader at 40%");
+    await a.waitFor(same, "the bar as the console at 40%");
+    assert.equal(await a.evaluate<number>(`document.getElementById("stageGo").offsetHeight`), height);
+    await drag(0);
+    await a.waitFor(`document.getElementById("crossfader").value === "0"`, "the crossfader back at 0");
+  });
+
+  test("GO is Pause while its fade plays and Resume once paused, in the console and the GO bar", async () => {
+    const liveRow = `document.querySelector("#cues .fader-row.is-current")?.dataset.row`;
+    const says = (text: string) => `document.getElementById("goBtn").textContent === "${text}" && document.getElementById("stageGoBtn").textContent === "${text}"`;
+    const cross = `Number(document.getElementById("crossfader").value)`;
+    await a.waitFor(`${liveRow} === "0" && ${says("GO")}`, "GO, with cue 1 LIVE");
+    // GO, and GO again at once (to be sure): the second press doesn't pause it.
+    await a.click("#goBtn");
+    await a.waitFor(says("Pause"), "Pause while the fade plays");
+    await a.click("#stageGoBtn");
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(await a.evaluate(says("Pause")), true, "a quick second GO doesn't pause");
+    // Pause (from the GO bar): the fade holds, and both say Resume.
+    await new Promise((r) => setTimeout(r, 400));
+    await a.click("#stageGoBtn");
+    await a.waitFor(`${says("Resume")} && document.getElementById("goBtn").classList.contains("is-paused")`, "Resume once paused");
+    const held = await a.evaluate<number>(cross);
+    assert.ok(held > 0 && held < 100, `paused part way (${held}%)`);
+    await new Promise((r) => setTimeout(r, 500));
+    assert.equal(await a.evaluate<number>(cross), held, "the fade holds while paused");
+    // Resume (from the console): it plays on to cue 2, and GO is GO again.
+    await a.click("#goBtn");
+    await a.waitFor(says("Pause"), "playing again");
+    await a.waitFor(`${liveRow} === "1" && ${says("GO")}`, "cue 2 LIVE, GO again", 8000);
+    await a.click("#stageGoPrevCue");
+    await a.waitFor(`${liveRow} === "0"`, "cue 1 LIVE again");
   });
 
   test("steps: added in the console, picked with ‹ › and the bars, and the console's (and the 3D bar's) › ‹ and GO", async () => {
@@ -159,7 +197,7 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.click("#goStepBtn");
     await a.waitFor(`${row} === "1" && ${readout} === "0% · on step 1 of 4"`, "LIVE on cue 2's step 1", 6000);
     // The 3D bar shows the same: LIVE's step, UP NEXT (the rest of cue 2) and the readout.
-    await a.waitFor(`document.getElementById("stageGoCues").textContent === "Cue 2 · step 1 of 4 → Cue 2 · step 2–4" && document.getElementById("stageGoReadout").textContent === "0% · on step 1 of 4"`, "the steps in the 3D bar");
+    await a.waitFor(`document.getElementById("stageGoLive").textContent === "Cue 2 · step 1 of 4" && document.getElementById("stageGoNext").textContent === "Cue 2 · step 2–4" && document.getElementById("stageGoReadout").textContent === "0% · on step 1 of 4"`, "the steps in the 3D bar");
     // ‹ Step: back to cue 1 at once.
     await a.click("#goStepBackBtn");
     await a.waitFor(`${row} === "0" && ${readout} === "0%"`, "cue 1 again");

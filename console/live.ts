@@ -16,7 +16,7 @@ import {
 } from "./patch.ts";
 import { MAX_CUES } from "./songs.ts";
 import { goTarget } from "./sets.ts";
-import type { GoArea } from "../shared/console-stage.ts";
+import { GO_LABELS, type GoArea, type GoMode } from "../shared/console-stage.ts";
 import {
   cuesEl,
   liveFadersEl,
@@ -40,7 +40,6 @@ import {
   prevCueBtn,
   nextCueBtn,
   goNextFade,
-  fadePauseBtn,
   addCueBtn,
   openPopup,
   menuItem,
@@ -299,8 +298,7 @@ export function refreshCueSelects() {
     tick.style.setProperty("--at", String(at / 100));
     return tick;
   }));
-  goBtn.setAttribute("aria-label", go ? `GO to ${goAreaName(go)} in ${go.seconds} seconds` : "GO: nothing up next");
-  notifyStage();
+  syncGoButton();
   // The readout says where in the steps LIVE is: it changes with LIVE too.
   syncCrossUi();
   syncSubmasterLabels();
@@ -500,16 +498,19 @@ export function setCross(value: number, { fromUser = false, persist = true } = {
   pushToDmx({ persist });
 }
 
-export function updateFadePauseButton() {
-  const running = state.fadeState != null;
-  const paused = state.fadeState?.paused ?? false;
-  fadePauseBtn.disabled = !running;
-  fadePauseBtn.textContent = paused ? "Resume" : "Pause";
-  fadePauseBtn.classList.toggle("is-paused", paused);
-  goBtn.classList.toggle("is-running", running && !paused);
-  // Nothing up next: the set's last song's last cue.
-  goBtn.disabled = !goTarget(state);
-  notifyStage(); // the 3D view's GO bar shows it playing, too
+/** The GO button: GO, or Pause while its fade plays and Resume once paused (goArea). */
+export function syncGoButton() {
+  const area = goArea();
+  const go = goTarget(state);
+  goBtn.textContent = GO_LABELS[area.goMode];
+  goBtn.classList.toggle("is-running", area.goMode === "pause");
+  goBtn.classList.toggle("is-paused", area.goMode === "resume");
+  // Nothing up next (the set's last song's last cue) and no fade: off.
+  goBtn.disabled = !area.buttons.go.enabled;
+  goBtn.title = area.buttons.go.title;
+  goBtn.setAttribute("aria-label", area.goMode === "pause" ? "Pause the fade" : area.goMode === "resume" ? "Resume the fade"
+    : go ? `GO to ${goAreaName(go)} in ${go.seconds} seconds` : "GO: nothing up next");
+  notifyStage(); // the 3D view's GO bar shows the same
 }
 
 // Timed fades run on the show server (server/show.ts), so a hidden or closed
@@ -519,7 +520,7 @@ export function updateFadePauseButton() {
 export function stopTimedFade() {
   if (state.fadeState) state.serverLink?.command("stop");
   followFade(null);
-  updateFadePauseButton();
+  syncGoButton();
 }
 
 // The server steps a fade 40 times a second and its updates arrive
@@ -635,6 +636,7 @@ const goAreaName = (go: NonNullable<ReturnType<typeof goTarget>>) => cueLabel(go
  */
 export function goArea(): GoArea {
   const go = goTarget(state);
+  const goMode: GoMode = !state.fadeState ? "go" : state.fadeState.paused ? "resume" : "pause";
   const stepTo = goTarget(state, true);
   const live = getActiveSong().cues[state.fromCue];
   const liveLooks = live ? live.steps.length + 1 : 1;
@@ -653,11 +655,17 @@ export function goArea(): GoArea {
     nextFade: !go ? "" : looksLeft > 1 ? `${looksLeft} steps · ${go.seconds}s` : `${go.seconds}s`,
     readout: crossReadout(),
     running: state.fadeState != null && !state.fadeState.paused,
+    goMode,
+    cross: shownCross(),
+    ticks: go?.path ? stepArrivals(go.path).slice(0, -1).map((at) => at / 100) : [],
     buttons: {
       prevCue: cueStep(-1, "Previous"),
       // ‹ / ›: the look before (at once) / the next look (a fade, as GO's but one step).
       stepBack: { enabled: !!back, title: back ? `Previous step — make ${back.label} LIVE now (no fade)` : "Previous step — nothing before" },
-      go: { enabled: !!go, title: go ? `GO — fade to ${goAreaName(go)} (${go.seconds}s${looksLeft > 1 ? `, through ${looksLeft} steps` : ""})` : "GO — nothing up next" },
+      // While its fade plays GO is Pause, and Resume once paused.
+      go: goMode === "pause" ? { enabled: true, title: "Pause the fade where it is (press again to resume)" }
+        : goMode === "resume" ? { enabled: true, title: "Resume the paused fade" }
+        : { enabled: !!go, title: go ? `GO — fade to ${goAreaName(go)} (${go.seconds}s${looksLeft > 1 ? `, through ${looksLeft} steps` : ""})` : "GO — nothing up next" },
       step: { enabled: !!stepTo, title: stepTo ? `Next step — fade to ${lookName(stepTo.cue, stepTo.step, stepTo.looks)} (${stepTo.seconds}s) and make it LIVE` : "Next step — nothing up next" },
       nextCue: cueStep(1, "Next"),
     },

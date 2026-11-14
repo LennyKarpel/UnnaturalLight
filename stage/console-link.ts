@@ -156,6 +156,10 @@ export function createConsoleLink({
     goPress(button: GoButton) {
       toConsole((c) => c.go(button));
     },
+    /** Drag the crossfader (0–100): the console does what dragging its own does. */
+    crossTo(pct: number) {
+      toConsole((c) => c.cross(pct));
+    },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
     setChannel(channel: number, value: number) {
       if (levels == null) return;

@@ -79,7 +79,14 @@ export type ConsoleEnd = {
   aim: (list: AimRequest[]) => void;
   reaim: (list: Reaim[]) => void;
   go: (button: GoButton) => void;
+  /** Move the crossfader (0–100), as dragging the console's does. */
+  cross: (pct: number) => void;
 };
+
+/** What the GO button does now: GO, or Pause / Resume the fade it started. */
+export type GoMode = "go" | "pause" | "resume";
+/** What GO says in each mode (the console's and the 3D view's GO bar's). */
+export const GO_LABELS: Record<GoMode, string> = { go: "GO", pause: "Pause", resume: "Resume" };
 
 /** The GO area's buttons: « ‹ GO › ». */
 export type GoButton = "prevCue" | "stepBack" | "go" | "step" | "nextCue";
@@ -100,6 +107,12 @@ export type GoArea = {
   readout: string;
   /** A GO fade is playing (not paused). */
   running: boolean;
+  /** What GO does now, and says: "go" (GO), "pause" (Pause: a fade is playing) or "resume" (Resume: it's paused). */
+  goMode: GoMode;
+  /** The crossfader as shown (0 = all LIVE, 100 = all UP NEXT; between server updates, where a running fade is now). */
+  cross: number;
+  /** Where UP NEXT's steps land on the crossfader (0–1), as the console's ticks. */
+  ticks: number[];
   /** Each button: whether it can be pressed, and what it does (its tooltip). */
   buttons: Record<GoButton, { enabled: boolean; title: string }>;
 };

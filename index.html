@@ -72,20 +72,34 @@
 
         <div class="view" id="view">
           <div class="hud" id="hud" hidden></div>
-          <!-- The console's GO area at the top of the 3D view (stage/go-bar.ts): the
-               same buttons, doing the same, and under them LIVE → UP NEXT, its fade and the readout. -->
+          <!-- The console's GO area, in miniature, at the top of the 3D view (stage/go-bar.ts):
+               LIVE | « ‹ GO › » and the readout | UP NEXT and its fade, then the crossfader.
+               The same buttons and crossfader as the console's, doing the same. -->
           <div class="stage-go" id="stageGo">
-            <div class="stage-go-row">
-              <button type="button" id="stageGoPrevCue" class="stage-go-step" aria-label="Previous cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
-              <button type="button" id="stageGoStepBack" class="stage-go-step" aria-label="Previous step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
-              <button type="button" id="stageGoBtn" class="stage-go-btn" disabled>GO</button>
-              <button type="button" id="stageGoStep" class="stage-go-step" aria-label="Next step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
-              <button type="button" id="stageGoNextCue" class="stage-go-step" aria-label="Next cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
+            <div class="stage-go-head">
+              <div class="stage-go-slot is-live">
+                <span class="stage-go-slot-label" title="The cue on stage now">Live</span>
+                <span id="stageGoLive" class="stage-go-slot-name">—</span>
+              </div>
+              <div class="stage-go-center">
+                <div class="stage-go-row">
+                <button type="button" id="stageGoPrevCue" class="stage-go-step" aria-label="Previous cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3 3 8l5 5M13 3 8 8l5 5"/></svg></button>
+                <button type="button" id="stageGoStepBack" class="stage-go-step" aria-label="Previous step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+                <button type="button" id="stageGoBtn" class="stage-go-btn" disabled>GO</button>
+                <button type="button" id="stageGoStep" class="stage-go-step" aria-label="Next step" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+                <button type="button" id="stageGoNextCue" class="stage-go-step" aria-label="Next cue" disabled><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 5 5-5 5m5-10 5 5-5 5"/></svg></button>
+                </div>
+                <span id="stageGoReadout" class="stage-go-readout"></span>
+              </div>
+              <div class="stage-go-slot is-next">
+                <span class="stage-go-slot-label" title="The cue GO fades to">Up next</span>
+                <span id="stageGoNext" class="stage-go-slot-name">—</span>
+                <span id="stageGoFade" class="stage-go-fade" hidden></span>
+              </div>
             </div>
-            <div class="stage-go-info">
-              <span id="stageGoCues" class="stage-go-cues">—</span>
-              <span id="stageGoFade" class="stage-go-fade" hidden></span>
-              <span id="stageGoReadout" class="stage-go-readout"></span>
+            <div class="stage-go-cross">
+              <input id="stageGoCross" type="range" min="0" max="100" step="0.1" value="0" aria-label="Blend Live to Up next" title="Crossfade: drag to blend LIVE into UP NEXT (as the console's crossfader)" />
+              <div id="stageGoTicks" class="stage-go-ticks" aria-hidden="true"></div>
             </div>
           </div>
           <div class="banner" id="banner" hidden>Click a surface (inside) · ⌥-click a wall (outside) · click the ground off the box · or click the plan · Esc cancels</div>
@@ -332,9 +346,6 @@
                       <input id="crossfader" type="range" min="0" max="100" value="0" aria-label="Blend Live to Up next" />
                       <!-- Where UP NEXT's steps land (cues with steps only). -->
                       <div id="crossTicks" class="cross-ticks" aria-hidden="true"></div>
-                    </div>
-                    <div class="timed-crossfade">
-                      <button id="fadePauseBtn" type="button" disabled>Pause</button>
                     </div>
                   </div>
                 </div>
