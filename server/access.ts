@@ -48,10 +48,20 @@ export function accessProblem(headers: AccessHeaders, names: ReadonlySet<string>
   return null;
 }
 
+/**
+ * The app's address on a host: appUrl("10.0.0.5:8080", "/index.html") → "http://10.0.0.5:8080/index.html",
+ * or with no path its origin. Plain HTTP, as the server serves; a host the URL can't take is left as localhost.
+ */
+export function appUrl(host: string, path = ""): string {
+  const url = new URL(path || "/", "http://localhost");
+  url.host = host;
+  return path ? url.href : url.origin;
+}
+
 /** "localhost:8080" → { name: "localhost", port: 8080 } (port 80 when none); null if it isn't a host. */
 function parseHost(host: string): { name: string; port: number } | null {
   try {
-    const url = new URL(`http://${host}`);
+    const url = new URL(appUrl(host));
     if (url.host.toLowerCase() !== host.toLowerCase() || url.pathname !== "/") return null;
     return { name: url.hostname.toLowerCase(), port: url.port ? Number(url.port) : 80 };
   } catch {

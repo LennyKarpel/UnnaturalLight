@@ -30,9 +30,10 @@ import { stripTypeScriptTypes } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_UNIVERSES } from "../console/patch.ts";
-import { accessProblem, BASE_HEADERS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "./access.ts";
+import { accessProblem, appUrl, BASE_HEADERS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "./access.ts";
 import { readJsonFile, writeJsonFile } from "./files.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
@@ -350,17 +351,41 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
         return;
       }
     }
-    res.writeHead(200, {
+    const type = TYPES[path.extname(file)] ?? "application/octet-stream";
+    const packed = packedFile(file, body, type);
+    const headers = {
       ...BASE_HEADERS,
       // Pages get their script policy (from what they hold; req.headers.host was checked above).
       ...(file.endsWith(".html") ? { "Content-Security-Policy": contentSecurityPolicy(String(body), req.headers.host ?? "") } : {}),
-      "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      Pragma: "no-cache",
-      Expires: "0",
-    });
-    res.end(body);
+      "Content-Type": type,
+      // Always asked again (an edit shows on reload), but unchanged files come back as a bodiless 304.
+      "Cache-Control": "no-cache",
+      ETag: packed.etag,
+      Vary: "Accept-Encoding",
+    };
+    if (req.headers["if-none-match"] === packed.etag) {
+      res.writeHead(304, headers).end();
+      return;
+    }
+    const gzip = packed.gzip && /\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""));
+    res.writeHead(200, gzip ? { ...headers, "Content-Encoding": "gzip" } : headers);
+    res.end(gzip ? packed.gzip : body);
   });
+}
+
+/** A file as sent: its ETag (a hash of what's sent) and, for text worth it, gzipped. Kept until the file changes. */
+type Packed = { etag: string; gzip: Buffer | null };
+const packedCache = new Map<string, { body: Buffer | string; packed: Packed }>();
+
+function packedFile(file: string, body: Buffer | string, type: string): Packed {
+  const hit = packedCache.get(file);
+  if (hit && (typeof body === "string" ? hit.body === body : Buffer.isBuffer(hit.body) && hit.body.equals(body))) return hit.packed;
+  const etag = `"${crypto.createHash("sha1").update(body).digest("base64url")}"`;
+  const text = /^(text\/|application\/(javascript|json)|image\/svg)/.test(type);
+  const gzip = text && Buffer.byteLength(body) > 1024 ? zlib.gzipSync(body) : null;
+  const packed = { etag, gzip };
+  packedCache.set(file, { body, packed });
+  return packed;
 }
 
 /** The biggest message a window may send: far above any show, stage or show file's chats (a show is tens of KB), far below what would tie up the server. */
@@ -441,7 +466,7 @@ server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   for (const line of netDmx.describe()) console.log(`    network   : ${line}`);
   console.log(`    this Mac  : ${local}`);
   if (LAN) {
-    for (const ip of lanAddresses()) console.log(`    remote    : http://${ip}:${PORT}/index.html?token=${TOKEN}`);
+    for (const ip of lanAddresses()) console.log(`    remote    : ${appUrl(`${ip}:${PORT}`, `/index.html?token=${TOKEN}`)}`);
   } else {
     console.log("    remote    : off (start with --lan to allow other machines)");
   }

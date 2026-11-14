@@ -113,6 +113,18 @@ export function showRisers({ rename }: { rename?: string } = {}) {
   }
 }
 
+/** What the fixture rows show apart from levels: the rows are only rebuilt when this changes. */
+let fixtureListKey = "";
+const fixtureRowsKey = () =>
+  state.fixtures.map((f) => [f.id, f.name, followingOf(f)?.name ?? "", isInside(f, state.box), state.selected.includes(f.id)].join("\u0001")).join("\n");
+
+/** A fixture row's color swatch, dimmer bar and dimmer value. */
+function showRowLevels(row: HTMLElement, fixture: Fixture) {
+  $(row, ".swatch").style.background = fixture.color;
+  $(row, ".bar > div").style.width = `${Math.round(fixture.intensity * 100)}%`;
+  $(row, ".pct").textContent = String(fixture.dmx.dimmer);
+}
+
 export function renderList() {
   document.querySelectorAll<HTMLElement>("[data-list-tab]").forEach((b) => {
     const on = b.dataset.listTab === listTab;
@@ -127,20 +139,27 @@ export function renderList() {
   elById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
   if (!state.fixtures.length) {
     listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Place fixture”.</div>`;
+    fixtureListKey = "";
     return;
   }
+  // Only the levels changed (a fade, many times a second): update the rows in place.
+  const key = fixtureRowsKey();
+  if (key === fixtureListKey) {
+    state.fixtures.forEach((fixture, i) => { const row = listEl.children[i]; if (row instanceof HTMLElement) showRowLevels(row, fixture); });
+    return;
+  }
+  fixtureListKey = key;
   // The list scrolls on its own; rebuilding it would jump back to the top.
   const scrollTop = listEl.scrollTop;
   listEl.innerHTML = "";
   for (const fixture of state.fixtures) {
     const row = el("div", "item" + (state.selected.includes(fixture.id) ? " sel" : ""));
     row.innerHTML = `
-      <span class="swatch" style="background:${fixture.color}"></span>
+      <span class="swatch"></span>
       <span></span>
       <div class="bar"><div></div></div>
-      <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
-    // The dimmer bar's fill (set here, not in the HTML string above).
-    $(row, ".bar > div").style.width = `${Math.round(fixture.intensity * 100)}%`;
+      <span class="pct" title="Dimmer (0–255)"></span>`;
+    showRowLevels(row, fixture);
     const follows = followingOf(fixture);
     row.children[1].textContent = fixture.name + (follows ? `  → ${follows.name}` : "") + (isInside(fixture, state.box) ? "" : "  ·  outside");
     row.addEventListener("click", (e) => {

@@ -737,6 +737,7 @@ export function refreshColorBars() {
       levels[role] = Math.max(levels[role] ?? 0, cue ? cue[Number(fader)] ?? 0 : liveLevel(Number(fader)));
     }
     const color = colorFromLevels(levels);
+    if (bar.style.getPropertyValue("--rgb") === color) continue; // unchanged: skip the style write
     bar.style.setProperty("--rgb", color);
     const input = bar.querySelector("input");
     if (input && document.activeElement !== input) setValue(input, color);

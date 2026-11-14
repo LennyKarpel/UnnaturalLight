@@ -216,7 +216,22 @@ function planRiserAt(px: number, py: number): Riser | null {
   return null;
 }
 
+let planQueued = false;
+/**
+ * Redraw the plan on the next frame: once, however many changes ask for it
+ * before then (a fade sends levels many times a second). Not while the
+ * page is hidden (the browser holds the frame until it's shown).
+ */
 export function drawPlan() {
+  if (planQueued) return;
+  planQueued = true;
+  requestAnimationFrame(() => {
+    planQueued = false;
+    drawPlanNow();
+  });
+}
+
+function drawPlanNow() {
   const size = plan.clientWidth;
   if (!size) return;
   const dpr = window.devicePixelRatio || 1;

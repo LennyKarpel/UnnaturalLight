@@ -38,7 +38,7 @@ function place(pane: HTMLElement, left: number, width: number, z: number, shown 
   pane.style.left = `${left}%`;
   pane.style.width = `${width}%`;
   pane.style.zIndex = String(z);
-  pane.style.visibility = shown ? "visible" : "hidden";
+  pane.style.visibility = shown ? "visible" : "hidden"; // the stage reads this to skip drawing while hidden (stage/view3d.ts)
   pane.inert = !shown || z < 2;
 }
 

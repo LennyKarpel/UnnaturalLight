@@ -790,14 +790,20 @@ for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown
 }
 setInterval(requestRender, 500);
 
-/** The stage's pane of the app: while it's hidden (Console view), nothing is drawn; the scene still keeps up. */
+/**
+ * The stage's pane of the app: while it's hidden (Console view), nothing is
+ * drawn; the scene still keeps up. The page hides it with an inline
+ * `visibility` (../page/page.ts place()), read here as is: asking for the
+ * computed style every frame made the browser recalculate the page's styles
+ * each time (1.6 ms a frame during a fade, more than drawing the stage).
+ */
 const pane = view.closest<HTMLElement>("[data-pane]");
 
 renderer.setAnimationLoop(() => {
   runFrameStart();
   const moved = controls.update();
   if (!moved && !needsRender) return;
-  if (pane && getComputedStyle(pane).visibility === "hidden") { needsRender = true; return; }
+  if (pane?.style.visibility === "hidden") { needsRender = true; return; }
   needsRender = false;
   renderer.render(scene, camera);
 });

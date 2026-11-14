@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { freePort } from "./browser/harness.ts";
-import { accessProblem, BASE_HEADERS, CONNECT_ORIGINS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "../server/access.ts";
+import { accessProblem, appUrl, BASE_HEADERS, CONNECT_ORIGINS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "../server/access.ts";
 
 // --- the check -----------------------------------------------------------------
 
@@ -18,7 +18,7 @@ const check = (host: string | undefined, origin?: string) => accessProblem({ hos
 test("this machine's own names are let in, with or without a matching Origin", () => {
   for (const host of ["localhost:8080", "127.0.0.1:8080", "[::1]:8080", "LocalHost:8080", "192.168.1.20:8080", "stage-mac.local:8080"]) {
     assert.equal(check(host), null, host);
-    assert.equal(check(host, `http://${host}`), null, host);
+    assert.equal(check(host, appUrl(host)), null, host);
   }
 });
 
@@ -36,6 +36,12 @@ test("the wrong port, or junk, is refused", () => {
   assert.match(check("localhost:8080/x") ?? "", /unknown host/);
   assert.match(check("user@localhost:8080") ?? "", /unknown host/);
   assert.equal(accessProblem({ host: "localhost" }, NAMES, 80), null);
+});
+
+test("appUrl builds the app's address on a host, and keeps a bad host from becoming one", () => {
+  assert.equal(appUrl("10.0.0.5:8080", "/index.html?token=abc"), "http://10.0.0.5:8080/index.html?token=abc");
+  assert.equal(appUrl("localhost:8080"), "http://localhost:8080");
+  assert.equal(appUrl("evil.example/x"), "http://evil.example");
 });
 
 test("pages from other sites are refused", () => {
@@ -183,7 +189,7 @@ function openSocket(headers: { origin?: string; host?: string }): Promise<string
 test("the server's pages load for this machine, and not under another name", async () => {
   const self = `localhost:${port}`;
   assert.equal(await request({ headers: { Host: self } }), 200);
-  assert.equal(await request({ headers: { Host: self, Origin: `http://${self}` } }), 200);
+  assert.equal(await request({ headers: { Host: self, Origin: appUrl(self) } }), 200);
   assert.equal(await request({ headers: { Host: `rebind.evil.example:${port}` } }), 403);
   assert.equal(await request({ path: "/chat/chats", headers: { Host: `rebind.evil.example:${port}` } }), 403);
 });
@@ -235,9 +241,33 @@ test("every file is sent with the frame and type headers, and the page with its 
   assert.ok(csp.get("connect-src")?.includes(`ws://${self}`));
 });
 
+test("files come gzipped when asked, and an unchanged file is a bodiless 304", async () => {
+  const self = `localhost:${port}`;
+  const get = (p: string, headers: Record<string, string>) => new Promise<{ status: number; headers: http.IncomingHttpHeaders; bytes: number }>((resolve, reject) => {
+    http.get({ host: "127.0.0.1", port, path: p, headers: { Host: self, ...headers } }, (res) => {
+      let bytes = 0;
+      res.on("data", (c: Buffer) => { bytes += c.length; });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, bytes }));
+    }).on("error", reject);
+  });
+  const plain = await get("/vendor/three/build/three.core.js", {});
+  const packed = await get("/vendor/three/build/three.core.js", { "Accept-Encoding": "gzip, br" });
+  assert.equal(plain.headers["content-encoding"], undefined);
+  assert.equal(packed.headers["content-encoding"], "gzip");
+  assert.ok(packed.bytes < plain.bytes / 3, `${packed.bytes} of ${plain.bytes} bytes`);
+  const etag = String(plain.headers.etag);
+  assert.equal(packed.headers.etag, etag);
+  const again = await get("/vendor/three/build/three.core.js", { "If-None-Match": etag });
+  assert.equal(again.status, 304);
+  assert.equal(again.bytes, 0);
+  // Still asked each time, so an edited file shows on reload.
+  assert.equal(again.headers["cache-control"], "no-cache");
+  assert.equal((await get("/shared/html.ts", { "If-None-Match": etag })).status, 200);
+});
+
 test("the WebSocket opens for the app and not for another site", async () => {
   const self = `localhost:${port}`;
-  assert.equal(await openSocket({ origin: `http://${self}`, host: self }), "open");
+  assert.equal(await openSocket({ origin: appUrl(self), host: self }), "open");
   assert.equal(await openSocket({ host: self }), "open"); // not a web page (no Origin)
   assert.equal(await openSocket({ origin: "https://evil.example", host: self }), "403");
   assert.equal(await openSocket({ origin: "null", host: self }), "403");
@@ -263,7 +293,7 @@ test("another site can't POST to the chat; the app's own JSON gets through to it
   assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: "https://evil.example", "Content-Type": "text/plain" }, body }), 403);
   assert.equal(await request({ method: "POST", path: "/chat/summary", headers: { Host: self, Origin: "https://evil.example", "Content-Type": "text/plain" }, body }), 403);
   // Not JSON, even from the app itself: refused before the model is asked.
-  assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: `http://${self}`, "Content-Type": "text/plain" }, body }), 415);
+  assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: appUrl(self), "Content-Type": "text/plain" }, body }), 415);
   // The app's own request reaches the chat (which streams back 200; the test provider then reports its error inside the stream).
-  assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: `http://${self}`, "Content-Type": "application/json" }, body }), 200);
+  assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: appUrl(self), "Content-Type": "application/json" }, body }), 200);
 });

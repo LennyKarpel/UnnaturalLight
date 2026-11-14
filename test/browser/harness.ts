@@ -108,6 +108,8 @@ async function openPage(debugPort: number, url: string) {
   const page = {
     errors,
     evaluate,
+    /** Any DevTools protocol command on this tab (e.g. the profiler), for what the helpers here don't cover. */
+    cdp: send,
     /** Wait until `expr` is truthy in the page. */
     waitFor: <T = unknown>(expr: string, what = expr, timeout?: number) => waitFor(() => evaluate<T>(expr), what, timeout),
     /** A real key press (keydown + keyup), e.g. key("z", { meta: true }). */
