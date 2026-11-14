@@ -15,6 +15,7 @@
  */
 
 import type { ClientMessage, ServerMessage } from "./protocol.ts";
+import { unhandled } from "./guards.ts";
 
 const RECONNECT_MS = 1000;
 const TOKEN_KEY = "unnaturallight.token";
@@ -39,7 +40,7 @@ export function serverUrl(path: string): URL {
 type Listener = {
   onMessage: (msg: ServerMessage) => void;
   /** The connection dropped (it reconnects by itself). */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 };
 
 /** Every side's handlers. */
@@ -57,7 +58,9 @@ function track(msg: ServerMessage) {
   else if (msg.type === "live") hello = { ...hello, live: msg.live };
   else if (msg.type === "stage") hello = { ...hello, stage: msg.stage };
   else if (msg.type === "dmx") hello = { ...hello, outputs: msg.outputs };
-  // `levels` (single fader cells) only matter to the console, which is there from the start.
+  // Single fader cells and request replies only matter to the console, which is there from the start.
+  else if (msg.type === "levels" || msg.type === "reply") return;
+  else unhandled(msg);
 }
 
 function connect() {

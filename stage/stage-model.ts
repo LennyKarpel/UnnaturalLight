@@ -11,6 +11,7 @@ import { isOneOf, isRecord } from "../shared/guards.ts";
 import { DMX_ATTRS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../shared/attributes.ts";
 import type { ColorMode, MountType } from "../console/fixtures.ts";
 import { MAX_RISERS, normalizeRiser, type Riser } from "./risers.ts";
+import { asChannel, type Channel } from "../shared/address.ts";
 
 // ---------------------------------------------------------------------
 // Coordinates (meters): origin at floor center of the box.
@@ -187,17 +188,17 @@ export function layoutFor(mount: string, color: string, count: number): (DmxAttr
  * `also` channels, e.g. Red after Deep Red): set along with `attr` when it's
  * changed here, but not listened on (the first channel is the color).
  */
-export function followerChannels(fixture: Fixture): { channel: number; attr: DmxAttr }[] {
+export function followerChannels(fixture: Fixture): { channel: Channel; attr: DmxAttr }[] {
   const { start, fixture: profile } = fixture.link;
   if (!start || !profile) return [];
-  return profile.channels.flatMap((c, k) => (c.also ? [{ channel: start + k, attr: c.also }] : []));
+  return profile.channels.flatMap((c, k) => (c.also ? [{ channel: asChannel(start + k), attr: c.also }] : []));
 }
 
 /** [{ channel, attr }] a fixture listens on / sends to (none if unlinked). */
-export function linkChannels(fixture: Fixture): { channel: number; attr: DmxAttr }[] {
+export function linkChannels(fixture: Fixture): { channel: Channel; attr: DmxAttr }[] {
   const { start, layout } = fixture.link;
   if (!start) return [];
-  return layout.flatMap((attr, k) => (attr ? [{ channel: start + k, attr }] : []));
+  return layout.flatMap((attr, k) => (attr ? [{ channel: asChannel(start + k), attr }] : []));
 }
 
 export const round = (v: number, n = 2) => Math.round(v * 10 ** n) / 10 ** n;

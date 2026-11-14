@@ -16,7 +16,7 @@ import { button, el } from "../../shared/html.ts";
 import { ask } from "../../shared/ask.ts";
 import { newId } from "../../shared/ids.ts";
 import { elById } from "../../shared/query.ts";
-import { errorMessage, isRecord } from "../../shared/guards.ts";
+import { errorMessage, isRecord, unhandled } from "../../shared/guards.ts";
 import { readStoredJson, storeJson } from "../../shared/storage.ts";
 import { promptCount, repairHistory, runTurn, summarize, summaryCut, type TurnView } from "./loop.ts";
 import { toolByName } from "./tools.ts";
@@ -592,8 +592,10 @@ function onChange(change: ChatChange) {
       renderHistory();
       scrollDown();
     }
-  } else if (i >= 0) {
-    dropChat(chats[i], "That chat was deleted in another window.");
+  } else if (change.type === "deleted") {
+    if (i >= 0) dropChat(chats[i], "That chat was deleted in another window.");
+  } else {
+    unhandled(change);
   }
   if (!list.hidden) renderList();
 }

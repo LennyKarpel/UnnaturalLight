@@ -45,7 +45,7 @@ export type TraceTarget =
   | { kind: "channel"; channel: number }
   | { kind: "fixture"; id: string }
   | { kind: "stageFixture"; id: string };
-export type Row = { label: string; value?: string | number; note?: string; depth?: number; tone?: "on" | "muted" | "warn" };
+export type Row = { label: string; value?: string | number | undefined; note?: string | undefined; depth?: number | undefined; tone?: "on" | "muted" | "warn" | undefined };
 export type Trace = { title: string; subtitle: string; sections: { heading: string; rows: Row[] }[] };
 
 const scaled = (level: number, max: number) => Math.round((level * max) / 255);

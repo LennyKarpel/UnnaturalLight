@@ -8,6 +8,7 @@ import { parseShow, serializeShow } from "../console/show.ts";
 import { copyCue, cueSeconds, shownLevels, stepPath } from "../console/songs.ts";
 import { easeFade, exactLiveLevel, fadeCross, stepArrivals, stepAt, type Mix } from "../shared/engine.ts";
 import { createShow } from "../server/show.ts";
+import { asChannel as ch } from "../shared/address.ts";
 
 const level = (first: number) => [first, ...new Array(FADER_COUNT - 1).fill(0)];
 const mixOf = (m: Partial<Mix>): Mix => ({ master: 100, cross: 0, fromSub: 100, toSub: 100, fromCue: 0, toCue: 1, ...m });
@@ -83,7 +84,7 @@ test("a GO passes through the steps, on time", () => {
 
 test("the server: Step lands on the next cue's step, LIVE; GO plays the rest of the cue", () => {
   const show = createShow(serializeShow(parseShow(showData())));
-  const f1 = () => show.levels().get(1) ?? 0;
+  const f1 = () => show.levels().get(ch(1)) ?? 0;
   show.go(0, { step: true });
   assert.equal(show.live()!.fade!.durationMs, 1000, "the step's fade");
   show.tick(500);
@@ -125,7 +126,7 @@ test("the server: a level edit by step id lands in the step", () => {
 test("the server: LIVE on a step outputs the step", () => {
   const show = createShow(serializeShow(parseShow(showData())));
   show.applyLive({ fromCue: 1, selectedCue: 1, liveStep: 0 });
-  assert.equal(show.levels().get(1), 100);
+  assert.equal(show.levels().get(ch(1)), 100);
   show.applyLive({ liveStep: 3 }); // no such step: the cue's own look
-  assert.equal(show.levels().get(1), 200);
+  assert.equal(show.levels().get(ch(1)), 200);
 });

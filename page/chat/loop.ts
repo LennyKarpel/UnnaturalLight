@@ -6,7 +6,7 @@
 
 import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatRequest, ChatSummary, ChatSummaryRequest, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
 import { serverUrl } from "../../shared/server-socket.ts";
-import { errorMessage, isRecord } from "../../shared/guards.ts";
+import { errorMessage, isRecord, unhandled } from "../../shared/guards.ts";
 import { TOOLS, toolByName, type ToolDef } from "./tools.ts";
 
 /** Most model calls in one turn (each tool round is one). */
@@ -45,7 +45,7 @@ async function ask(history: ChatMessage[], view: TurnView, signal: AbortSignal):
 
 /** POST JSON to the show server's chat (`body` typed by what each endpoint takes). */
 const post = (path: string, body: ChatRequest | ChatSummaryRequest, signal?: AbortSignal) =>
-  fetch(chatUrl(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  fetch(chatUrl(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: signal ?? null });
 
 async function stream(history: ChatMessage[], view: TurnView, signal: AbortSignal): Promise<{ message: ChatAssistantMessage; model: string }> {
   const tools = TOOLS.map(({ name, description, schema, deferred }) => ({ name, description, schema, deferred }));
@@ -66,6 +66,7 @@ async function stream(history: ChatMessage[], view: TurnView, signal: AbortSigna
       if (event.type === "text") view.text(event.text);
       else if (event.type === "error") throw new Error(event.error);
       else if (event.type === "done") return { message: event.message, model: event.model };
+      else unhandled(event);
     }
   }
   throw new Error(LOST);

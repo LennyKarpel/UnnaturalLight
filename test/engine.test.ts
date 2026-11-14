@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeChannelLevels, liveLevel, setChannelLevels, type Mix } from "../shared/engine.ts";
-import { FADER_COUNT, type FaderPatch } from "../console/patch.ts";
+import { FADER_COUNT, asChannel as ch, type FaderPatch } from "../console/patch.ts";
 
 /** A patch: fader index → [{ channel, max }]. */
 function patchOf(entries: number[][]): FaderPatch[] {
   const patch: FaderPatch[] = Array.from({ length: FADER_COUNT }, () => []);
-  for (const [fader, channel, max = 255] of entries) patch[fader].push({ channel, max });
+  for (const [fader, channel, max = 255] of entries) patch[fader].push({ channel: ch(channel), max });
   return patch;
 }
 const cues = () => [new Array(FADER_COUNT).fill(0), new Array(FADER_COUNT).fill(0)];
@@ -28,8 +28,8 @@ test("computeChannelLevels: patch max scales, highest fader wins", () => {
   const patch = patchOf([[0, 1], [1, 1, 128], [2, 2, 128]]);
   const levels = [255, 255, 255];
   const out = computeChannelLevels(patch, (i) => levels[i] ?? 0);
-  assert.equal(out.get(1), 255);
-  assert.equal(out.get(2), 128);
+  assert.equal(out.get(ch(1)), 255);
+  assert.equal(out.get(ch(2)), 128);
 });
 
 test("setChannelLevels: the channel then outputs the value asked for (when it can reach it)", () => {
@@ -45,8 +45,8 @@ test("setChannelLevels: the channel then outputs the value asked for (when it ca
       const patch = patchOf([[4, 10, max]]);
       const mix = mixOf(m);
       const c = cues();
-      assert.equal(setChannelLevels(patch, mix, c, [{ channel: 10, value: 90 }]), true);
-      const got = output(patch, mix, c).get(10) ?? NaN;
+      assert.equal(setChannelLevels(patch, mix, c, [{ channel: ch(10), value: 90 }]), true);
+      const got = output(patch, mix, c).get(ch(10)) ?? NaN;
       assert.ok(Math.abs(got - 90) <= 2, `${JSON.stringify(m)} max ${max}: ${got}`);
     }
   }
@@ -57,14 +57,14 @@ test("setChannelLevels: beyond what the mix allows, the cue goes to full", () =>
   const patch = patchOf([[4, 10, 200]]);
   const mix = mixOf({ fromSub: 70 });
   const c = cues();
-  setChannelLevels(patch, mix, c, [{ channel: 10, value: 150 }]);
+  setChannelLevels(patch, mix, c, [{ channel: ch(10), value: 150 }]);
   assert.equal(c[0][4], 255);
-  assert.equal(output(patch, mix, c).get(10), 140);
+  assert.equal(output(patch, mix, c).get(ch(10)), 140);
 });
 
 test("setChannelLevels: nothing moves with no fader patched or the master at 0", () => {
   const c = cues();
-  assert.equal(setChannelLevels(patchOf([[0, 1]]), mixOf({}), c, [{ channel: 2, value: 100 }]), false);
-  assert.equal(setChannelLevels(patchOf([[0, 1]]), mixOf({ master: 0 }), c, [{ channel: 1, value: 100 }]), false);
+  assert.equal(setChannelLevels(patchOf([[0, 1]]), mixOf({}), c, [{ channel: ch(2), value: 100 }]), false);
+  assert.equal(setChannelLevels(patchOf([[0, 1]]), mixOf({ master: 0 }), c, [{ channel: ch(1), value: 100 }]), false);
   assert.deepEqual(c, cues());
 });

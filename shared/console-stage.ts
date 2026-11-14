@@ -11,6 +11,7 @@
 
 import type { ChannelRole, ColorMode, Fixture, FixtureGroup, MountType } from "../console/fixtures.ts";
 import type { ChannelValue } from "./engine.ts";
+import type { Channel } from "./address.ts";
 
 /** The stage asks the console to create a fixture for one placed on the stage. */
 export type RegisterRequest = {
@@ -31,7 +32,7 @@ export type RegisterRequest = {
 
 /** What became of a RegisterRequest. */
 export type RegisterResult =
-  | { stageId: string; ok: true; consoleId: string; start: number; faders: number[] }
+  | { stageId: string; ok: true; consoleId: string; start: Channel; faders: number[] }
   | { stageId: string; ok: false; error: string };
 
 /** A stage fixture's channel layout, for the console fixture it's linked to. */

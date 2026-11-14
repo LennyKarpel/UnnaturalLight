@@ -8,6 +8,7 @@
 import path from "node:path";
 import { SerialPort } from "serialport";
 import { errorMessage } from "../shared/guards.ts";
+import type { Channel } from "../shared/address.ts";
 import { readJsonFile, writeJsonFile } from "./files.ts";
 
 const ENTTEC_START = 0x7e;
@@ -44,7 +45,7 @@ async function listDevices(): Promise<Device[]> {
  * @param byChannel continuous channel numbers (513 = universe 2/1)
  * @param universeCount how many universes the show uses (channels past them are dropped)
  */
-export function fillFrames(frames: Uint8Array[], byChannel: Map<number, number>, universeCount: number) {
+export function fillFrames(frames: Uint8Array[], byChannel: ReadonlyMap<Channel, number>, universeCount: number) {
   for (const f of frames) f.fill(0);
   for (const [channel, level] of byChannel) {
     const n = Math.floor((channel - 1) / CHANNEL_COUNT) + 1;
@@ -242,7 +243,7 @@ export function createDmx({ dataDir, maxUniverses, fake = false, onChange }: { d
      * @param byChannel continuous channel numbers (513 = universe 2/1)
      * @param universeCount how many universes the show uses
      */
-    write(byChannel: Map<number, number>, universeCount: number) {
+    write(byChannel: ReadonlyMap<Channel, number>, universeCount: number) {
       fillFrames(universes.map((u) => u.frame), byChannel, universeCount);
       for (const u of universes) u.send();
     },

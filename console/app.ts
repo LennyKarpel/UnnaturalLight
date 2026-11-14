@@ -174,6 +174,7 @@ import {
 import { errorMessage } from "../shared/guards.ts";
 import { el } from "../shared/html.ts";
 import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
+import { asUniverse } from "../shared/address.ts";
 
 // ---------------------------------------------------------------------
 // Universes: count, outputs (DMX USB Pro / Art-Net / sACN), Channels-tab meter universe
@@ -248,7 +249,7 @@ function setUniverses(n: number) {
   }
   state.universes = next;
   setUniverseCount(state.universes);
-  if (state.meterUniverse > state.universes) state.meterUniverse = state.universes;
+  if (state.meterUniverse > state.universes) state.meterUniverse = asUniverse(state.universes);
   renderOutputs();
   renderFixtures();
   suggestFixtureFormStart();
@@ -262,7 +263,7 @@ function setUniverses(n: number) {
 meterUniverseSelect.className = "meter-universe";
 meterUniverseSelect.title = "Universe shown by the meters";
 meterUniverseSelect.addEventListener("change", () => {
-  state.meterUniverse = Number(meterUniverseSelect.value) || 1;
+  state.meterUniverse = asUniverse(Number(meterUniverseSelect.value) || 1);
   renderChannelRow();
 });
 tabChannels.querySelector<HTMLElement>(".tab-intro")?.append(meterUniverseSelect);
@@ -644,7 +645,7 @@ function registerFromStage(requests: RegisterRequest[]): RegisterResult[] {
     const width = clampInt(req.width, 1, MAX_FIXTURE_CHANNELS);
     if (state.fixtures.length >= MAX_FIXTURES) { fail(`the console already has its maximum of ${MAX_FIXTURES} fixtures`); continue; }
     const u = req.universe;
-    const universe = u != null && Number.isInteger(u) && u >= 1 && u <= state.universes ? u : null;
+    const universe = u != null && Number.isInteger(u) && u >= 1 && u <= state.universes ? asUniverse(u) : null;
     const range = nextAvailableRange(state.fixtures, width, universe);
     if (!range) { fail(`no free block of ${width} DMX channel${width > 1 ? "s" : ""} left${universe ? ` in universe ${universe}` : ""}`); continue; }
     // Per channel: a fader already patched to just that channel and still
@@ -920,7 +921,7 @@ const consoleChat = {
     pushToDmx();
   },
   /** Add a cue after `after` (0-based; default: at the end), blank or a copy of cue `copyOf`. LIVE stays where it is. Returns its index. */
-  addCue(songId: string | null, opts: { after?: number; copyOf?: number; name?: string; fadeSeconds?: number }) {
+  addCue(songId: string | null, opts: { after?: number | undefined; copyOf?: number | undefined; name?: string | undefined; fadeSeconds?: number | undefined }) {
     const song = chatSong(songId);
     if (song.cues.length >= MAX_CUES) throw new Error("The song has its maximum of cues");
     const source = opts.copyOf == null ? null : song.cues[opts.copyOf];
@@ -931,7 +932,7 @@ const consoleChat = {
     return at;
   },
   /** Rename a cue ("" = just "Cue N") and/or set its In time (seconds). */
-  editCue(songId: string | null, index: number, opts: { name?: string; fadeSeconds?: number }) {
+  editCue(songId: string | null, index: number, opts: { name?: string | undefined; fadeSeconds?: number | undefined }) {
     const song = chatSong(songId);
     const c = song.cues[index];
     if (!c) throw new Error("No such cue");

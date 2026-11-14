@@ -562,7 +562,7 @@ function duplicateSelected() {
     ...structuredClone(fixture), id: newId("fixture"), name: `${fixture.name} copy`, x: round(fixture.x + 0.5),
     rigId: null, rigIndex: 0, follow: null,
     // Copies get their own console fixture if the original came from the stage.
-    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.owned ? fixture.link.type : fixture.link.register, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
+    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: (fixture.link.owned ? fixture.link.type : fixture.link.register) ?? null, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
   }));
   state.fixtures.push(...copies);
   state.selected = copies.map((c) => c.id);
@@ -695,7 +695,7 @@ export function undoDelete() {
   // Their console fixtures were removed on delete: register them again.
   for (const { fixture } of removed) {
     if (!fixture.link.owned) continue;
-    fixture.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.type, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null };
+    fixture.link = { consoleId: null, start: null, layout: [], owned: false, type: null, register: fixture.link.type ?? null, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null };
   }
   requestRegistrations();
   state.selected = removed.map((r) => r.fixture.id).filter((id) => byId(id));

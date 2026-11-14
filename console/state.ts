@@ -30,6 +30,7 @@ import type { ServerLink } from "./server-link.ts";
 import type { OutputStatus } from "../shared/protocol.ts";
 import { clamp } from "../shared/numbers.ts";
 import type { FadeInfo } from "../server/show.ts";
+import { asUniverse, type Universe } from "../shared/address.ts";
 
 export function zeros(): number[] {
   return new Array(FADER_COUNT).fill(0);
@@ -82,7 +83,7 @@ const bootSets = normalizeSets(boot.sets, bootSongs);
  */
 export type StatusKind = "info" | "done" | "error";
 /** The show file last saved, loaded or started (New show) in this window, and when: shown beside the show's name. */
-export type FileState = { how: "saved" | "loaded" | "new"; at: number; file?: string };
+export type FileState = { how: "saved" | "loaded" | "new"; at: number; file?: string | undefined };
 
 /** The console's working show and the UI state its tabs share. */
 export type ConsoleState = {
@@ -127,7 +128,7 @@ export type ConsoleState = {
   serverLive: boolean;
   serverBlackedOut: Set<number>;
   serverFlashing: Set<number>;
-  meterUniverse: number;
+  meterUniverse: Universe;
 };
 
 export const state: ConsoleState = {
@@ -166,7 +167,7 @@ export const state: ConsoleState = {
   serverLive: false,
   serverBlackedOut: new Set(),
   serverFlashing: new Set(),
-  meterUniverse: 1,
+  meterUniverse: asUniverse(1),
 };
 
 setUniverseCount(state.universes);

@@ -40,7 +40,7 @@ import { createShow } from "./show.ts";
 import { handleChat, handleChatSummary } from "./chat/chat.ts";
 import { createChats } from "./chat/chats.ts";
 import type { ClientMessage, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
-import { errorMessage, isRecord } from "../shared/guards.ts";
+import { errorMessage, isRecord, unhandled } from "../shared/guards.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** server/data, or UNNATURALLIGHT_DATA_DIR (the browser tests use a temporary one, so they never touch the real show). */
@@ -206,6 +206,8 @@ async function onMessage(ws: WebSocket, client: { id: string }, msg: ClientMessa
         reply({ ok: false, error: errorMessage(err) });
       }
       return;
+    default:
+      unhandled(msg);
   }
 }
 

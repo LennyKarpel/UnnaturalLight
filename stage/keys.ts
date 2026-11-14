@@ -46,7 +46,7 @@ installColorPicker({ scope: elById("stagePane"), usedLabel: "On stage", usedColo
 // does (it sends the same key press). Hold to repeat; ⇧-click for steps of 10.
 document.querySelectorAll<HTMLButtonElement>(".keys [data-key]").forEach((btn) => {
   const press = (shift: boolean) => window.dispatchEvent(new KeyboardEvent("keydown", {
-    key: btn.dataset.key, code: btn.dataset.code, shiftKey: shift, metaKey: btn.hasAttribute("data-meta"), bubbles: true,
+    key: btn.dataset.key ?? "", code: btn.dataset.code ?? "", shiftKey: shift, metaKey: btn.hasAttribute("data-meta"), bubbles: true,
   }));
   let delay = 0;
   let repeat = 0;

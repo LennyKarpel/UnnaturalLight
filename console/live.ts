@@ -79,6 +79,7 @@ import {
 } from "./patch-tab.ts";
 import { el } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
+import { asChannel, type Channel } from "../shared/address.ts";
 
 /**
  * Each universe's outputs from the show server (index 0 = universe 1): a DMX
@@ -109,7 +110,7 @@ export const outputs = Array.from({ length: MAX_UNIVERSES }, (_, i) => ({
 /** Universe 1's output (status messages ask whether it's connected). */
 export const dmx = outputs[0];
 export let liveUi: { valueEls: HTMLElement[]; patchLabelEls: HTMLElement[]; fillEls: HTMLElement[] } = { valueEls: [], patchLabelEls: [], fillEls: [] };
-export let channelUi: { channels: number[]; valueEls: Map<number, HTMLElement>; fillEls: Map<number, HTMLElement>; wrapEls: Map<number, HTMLElement> } = { channels: [], valueEls: new Map(), fillEls: new Map(), wrapEls: new Map() };
+export let channelUi: { channels: Channel[]; valueEls: Map<Channel, HTMLElement>; fillEls: Map<Channel, HTMLElement>; wrapEls: Map<Channel, HTMLElement> } = { channels: [], valueEls: new Map(), fillEls: new Map(), wrapEls: new Map() };
 let channelRowKey = "";
 export let selectedGroupUi: { valueEls: HTMLElement[]; patchLabelEls: HTMLElement[]; sliders: HTMLInputElement[] } = { valueEls: [], patchLabelEls: [], sliders: [] };
 
@@ -156,7 +157,7 @@ function displayedChannels() {
   for (const channel of patched) {
     if (channel > highest && channel <= lastInUniverse) highest = channel;
   }
-  return Array.from({ length: highest - first + 1 }, (_, i) => first + i);
+  return Array.from({ length: highest - first + 1 }, (_, i) => asChannel(first + i));
 }
 
 export function refreshChannelRow() {
@@ -601,7 +602,7 @@ function lookName(cue: number, step: number, looks: number) {
  * step, or a cue without steps) the cue before's own look, across set songs
  * as ◀ does. null at the start of the set.
  */
-export function previousLook(): { cue: number; step: number; label: string; song?: { songId: string; entryId: string } } | null {
+export function previousLook(): { cue: number; step: number; label: string; song?: { songId: string; entryId: string } | undefined } | null {
   const live = getActiveSong().cues[state.fromCue];
   const k = state.liveStep;
   const looks = live ? live.steps.length + 1 : 1;

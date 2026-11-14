@@ -69,7 +69,7 @@ function explain(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-export function createAnthropicModel(opts: { model?: string; effort?: string }): ChatModel {
+export function createAnthropicModel(opts: { model?: string | undefined; effort?: string | undefined }): ChatModel {
   const model = opts.model || "claude-opus-5-5";
   const effort: Effort = isOneOf(EFFORTS, opts.effort) ? opts.effort : "low";
   let client: Anthropic | null = null;
@@ -92,7 +92,7 @@ export function createAnthropicModel(opts: { model?: string; effort?: string }):
               max_tokens: 16000,
               system,
               messages: content.length ? [...apiMessages, { role: "assistant", content: [...content] }] : apiMessages,
-              tools: apiTools,
+              ...(apiTools ? { tools: apiTools } : {}),
               output_config: { effort },
               // Claude's thinking blocks are tied to the system prompt, tools and
               // earlier messages they were made with. A saved conversation outlives

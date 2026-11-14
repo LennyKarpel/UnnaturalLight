@@ -286,7 +286,7 @@ export function createFixturePicker(
 
   const saved = readStoredJson(LAST_KEY);
   const text = (v: unknown) => (typeof v === "string" ? v : undefined);
-  const last: { manufacturer?: string; fixture?: string; mode?: string } = isRecord(saved)
+  const last: { manufacturer?: string | undefined; fixture?: string | undefined; mode?: string | undefined } = isRecord(saved)
     ? { manufacturer: text(saved.manufacturer), fixture: text(saved.fixture), mode: text(saved.mode) }
     : {};
   const remember = () => storeJson(LAST_KEY, last);

@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addressOf, formatAddress, parseAddress, universeOf, universeStart } from "../shared/address.ts";
+import { addressOf, asChannel as ch, asUniverse, channelAt, formatAddress, parseAddress, universeOf, universeStart } from "../shared/address.ts";
 
 test("channels run on across universes (513 = universe 2 channel 1)", () => {
-  assert.equal(universeOf(512), 1);
-  assert.equal(universeOf(513), 2);
-  assert.equal(addressOf(513), 1);
-  assert.equal(universeStart(3), 1025);
+  assert.equal(universeOf(ch(512)), 1);
+  assert.equal(universeOf(ch(513)), 2);
+  assert.equal(addressOf(ch(513)), 1);
+  assert.equal(universeStart(asUniverse(3)), 1025);
+  assert.equal(channelAt(asUniverse(2), 45), 557);
 });
 
 test("formatAddress: plain with one universe, universe/channel with several", () => {

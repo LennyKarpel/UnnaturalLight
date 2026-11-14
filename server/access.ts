@@ -24,7 +24,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 
 /** A request's Host and Origin headers (as Node gives them). */
-export type AccessHeaders = { host?: string; origin?: string };
+export type AccessHeaders = { host?: string | undefined; origin?: string | undefined };
 
 /**
  * Why a request is refused, or null when it may go on.

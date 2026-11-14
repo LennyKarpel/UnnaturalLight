@@ -3,6 +3,7 @@
 
 import { type FaderPatch, FADER_COUNT, scaledLevel } from "../console/patch.ts";
 import { clampByte } from "./numbers.ts";
+import type { Channel } from "./address.ts";
 
 /**
  * The looks a GO into a cue passes through before the cue's own (its steps):
@@ -16,7 +17,7 @@ export type StepPath = { steps: { levels: number[]; fade: number; hold: number }
  * (the LIVE cue's next step or own look, or UP NEXT's first step); `toPath`:
  * the steps on the way to it (none, or null: straight to it).
  */
-export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number; toLevels?: number[]; toPath?: StepPath | null };
+export type Mix = { master: number; cross: number; fromSub: number; toSub: number; fromCue: number; toCue: number; toLevels?: number[] | undefined; toPath?: StepPath | null | undefined };
 
 /** Live fader level after submasters + crossfade + master (0–255), before per-channel max. */
 export function liveLevel(mix: Mix, cueLevels: number[][], faderIndex: number): number {
@@ -100,8 +101,8 @@ export function computeChannelLevels(
   patch: FaderPatch[],
   levelOf: (faderIndex: number) => number,
   scale: (level: number, max: number) => number = scaledLevel,
-): Map<number, number> {
-  const byChannel = new Map<number, number>();
+): Map<Channel, number> {
+  const byChannel = new Map<Channel, number>();
   for (let i = 0; i < FADER_COUNT; i++) {
     const targets = patch[i];
     if (!targets || targets.length === 0) continue;
@@ -122,7 +123,7 @@ export function computeChannelLevels(
  * `cueLevels` is changed in place.
  */
 /** A channel and the value it should output (0–255). */
-export type ChannelValue = { channel: number; value: number };
+export type ChannelValue = { channel: Channel; value: number };
 
 export function setChannelLevels(patch: FaderPatch[], mix: Mix, cueLevels: number[][], values: ChannelValue[]): boolean {
   const t = mix.cross / 100;

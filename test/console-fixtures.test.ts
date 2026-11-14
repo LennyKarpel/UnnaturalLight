@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findRangeConflict, nextAvailableRange, normalizeChannelSpan, normalizeFixtures } from "../console/fixtures.ts";
+import { asChannel as ch } from "../shared/address.ts";
 
-const at = (id: string, channelStart: number, channelEnd: number) => ({ id, channelStart, channelEnd });
+const at = (id: string, channelStart: number, channelEnd: number) => ({ id, channelStart: ch(channelStart), channelEnd: ch(channelEnd) });
 
 test("console fixtures: a channel block stays inside one universe", () => {
   assert.deepEqual(normalizeChannelSpan(10, 4), { channelStart: 10, channelEnd: 13 });

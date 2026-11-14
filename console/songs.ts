@@ -275,7 +275,7 @@ export function createSong(opts: {
 }
 
 /** A new cue; `steps` are copied (with new ids). */
-export function createCue(opts: { name?: string; levels?: number[]; fadeTime?: number; aims?: CueAim[]; steps?: CueStep[] } = {}): Cue {
+export function createCue(opts: { name?: string | undefined; levels?: number[] | undefined; fadeTime?: number | undefined; aims?: CueAim[] | undefined; steps?: CueStep[] | undefined } = {}): Cue {
   return {
     id: newCueId(),
     name: normalizeCueName(opts.name),

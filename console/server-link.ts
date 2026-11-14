@@ -27,6 +27,7 @@ import { openServerSocket } from "../shared/server-socket.ts";
 import { LIVE_FIELDS, type LiveField } from "../shared/live-fields.ts";
 import type { LevelCell, Live, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
 import type { SerializedShow, ShowData } from "./show.ts";
+import { unhandled } from "../shared/guards.ts";
 
 /** How long a value changed here wins over the server's broadcasts. */
 const PENDING_MS = 600;
@@ -136,7 +137,7 @@ export function createServerLink(api: ServerLinkApi) {
     const changed = Object.keys(live) as LiveField[];
     if (changed.length) {
       for (const f of changed) {
-        agreed.live[f] = live[f];
+        agreed.live[f] = v.show[f];
         touch(f);
       }
       send({ type: "live", live });
@@ -173,25 +174,36 @@ export function createServerLink(api: ServerLinkApi) {
         return;
       }
         if (!agreed) return;
-      if (msg.type === "show") {
-        api.onShow(msg.show, filterLive(msg.live ?? {}));
-        agree();
-      } else if (msg.type === "live") {
-        api.onLive(filterLive(msg.live ?? {}));
-        // Only the live mix moved (many times a second while fading): leave the rest.
-        agreed.live = liveOf(api.view());
-      } else if (msg.type === "levels") {
-        const cells = msg.cells.filter(([id, i]) => !isPending(`${id}:${i}`));
-        api.onLevels(cells);
-        for (const [id, i, value] of cells) {
-          const was = agreed.levels.get(id);
-          if (was) was[i] = value;
+      switch (msg.type) {
+        case "show":
+          api.onShow(msg.show, filterLive(msg.live ?? {}));
+          agree();
+          break;
+        case "live":
+          api.onLive(filterLive(msg.live ?? {}));
+          // Only the live mix moved (many times a second while fading): leave the rest.
+          agreed.live = liveOf(api.view());
+          break;
+        case "levels": {
+          const cells = msg.cells.filter(([id, i]) => !isPending(`${id}:${i}`));
+          api.onLevels(cells);
+          for (const [id, i, value] of cells) {
+            const was = agreed.levels.get(id);
+            if (was) was[i] = value;
+          }
+          break;
         }
-      } else if (msg.type === "dmx") {
-        api.onOutputs(msg.outputs);
-      } else if (msg.type === "reply") {
-        replies.get(msg.id)?.(msg);
-        replies.delete(msg.id);
+        case "dmx":
+          api.onOutputs(msg.outputs);
+          break;
+        case "reply":
+          replies.get(msg.id)?.(msg);
+          replies.delete(msg.id);
+          break;
+        case "stage":
+          break; // the stage's (../stage/show-link.ts)
+        default:
+          unhandled(msg);
       }
     },
     onClose() {

@@ -27,6 +27,7 @@ import { createTracePopover, provideTrace, type FaderInfo, type MixInfo, type Tr
 import { joinLink, type AimPair, type ConsoleEnd, type RegisterRequest, type RegisterResult, type StageEnd, type StageLevels, type GoArea, type GoButton } from "../shared/console-stage.ts";
 import { setChannelLevels, type ChannelValue, type Mix } from "../shared/engine.ts";
 import type { Fixture, FixtureGroup } from "./fixtures.ts";
+import { asChannel } from "../shared/address.ts";
 
 export type StageLinkApi = {
   levels: () => Map<number, number>;
@@ -128,7 +129,7 @@ export function startStageLink(api: StageLinkApi) {
       // Start each new fixture at its stage values (moves the new faders).
       applySet(requests.flatMap((req) => {
         const r = results.find((x) => x.stageId === req.stageId && x.ok);
-        return r?.ok ? req.values.map((value, k) => ({ channel: r.start + k, value })) : [];
+        return r?.ok ? req.values.map((value, k) => ({ channel: asChannel(r.start + k), value })) : [];
       }));
       call((stage) => stage.registered(results));
       send();

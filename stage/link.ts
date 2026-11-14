@@ -31,6 +31,7 @@ import { changed, setBanner } from "./actions.ts";
 import { syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
 import { readStored, store } from "../shared/storage.ts";
+import { asChannel } from "../shared/address.ts";
 
 // ---------------------------------------------------------------------
 // Console link: stage fixtures ↔ console fixtures / DMX channels
@@ -335,7 +336,7 @@ function syncOtherChannels(fixture: Fixture) {
         const n = numberFrom(el.value);
         if (n == null) return;
         const v = clampByte(n);
-        consoleLink.setChannel(Number(el.dataset.oc), v);
+        consoleLink.setChannel(asChannel(Number(el.dataset.oc)), v);
         box.querySelectorAll<HTMLInputElement>(`[data-oc="${el.dataset.oc}"]`).forEach((other) => { if (other !== el) other.value = String(v); });
       });
       if (el.type === "range") el.addEventListener("change", () => el.blur());

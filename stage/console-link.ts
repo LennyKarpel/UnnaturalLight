@@ -16,6 +16,7 @@
 
 import { joinLink, type AimPair, type AimRequest, type Reaim, type RegisterRequest, type RegisterResult, type StageLayout, type StageLevels, type GoArea, type GoButton } from "../shared/console-stage.ts";
 import type { ChannelValue } from "../shared/engine.ts";
+import type { Channel } from "../shared/address.ts";
 
 /** How long a value sent from the stage wins over the console's updates (e.g. an older one from the show server). */
 const PENDING_MS = 600;
@@ -161,7 +162,7 @@ export function createConsoleLink({
       toConsole((c) => c.cross(pct));
     },
     /** Set one channel the stage doesn't model (e.g. a fixture's strobe) to `value`. */
-    setChannel(channel: number, value: number) {
+    setChannel(channel: Channel, value: number) {
       if (levels == null) return;
       synced.set(channel, value);
       pending.set(channel, { value, until: Date.now() + PENDING_MS });

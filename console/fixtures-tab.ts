@@ -540,7 +540,7 @@ function renderFixtureGroupHeader({ title, count, groupId = null, onRemove }: {
     title: string;
     count: number;
     groupId?: string | null;
-    onRemove?: () => void;
+    onRemove?: (() => void) | undefined;
   }) {
   const header = el("div", "fixture-group-header");
 

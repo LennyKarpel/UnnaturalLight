@@ -15,6 +15,7 @@
 
 import { openServerSocket } from "../shared/server-socket.ts";
 import type { SavedStage } from "./stage-model.ts";
+import { unhandled } from "../shared/guards.ts";
 
 export function createShowLink(api: { current: () => SavedStage; onStage: (stage: SavedStage) => void }): { send: (stage: SavedStage) => void } {
   let connected = false;
@@ -23,13 +24,24 @@ export function createShowLink(api: { current: () => SavedStage; onStage: (stage
 
   const socket = openServerSocket({
     onMessage(msg) {
-      if (msg.type === "hello") {
-        connected = true;
-        if (msg.stage && !unsent) api.onStage(msg.stage);
-        else send(api.current());
-        unsent = false;
-      } else if (msg.type === "stage" && msg.stage) {
-        api.onStage(msg.stage);
+      switch (msg.type) {
+        case "hello":
+          connected = true;
+          if (msg.stage && !unsent) api.onStage(msg.stage);
+          else send(api.current());
+          unsent = false;
+          break;
+        case "stage":
+          if (msg.stage) api.onStage(msg.stage);
+          break;
+        case "show":
+        case "live":
+        case "levels":
+        case "dmx":
+        case "reply":
+          break; // the console's (../console/server-link.ts)
+        default:
+          unhandled(msg);
       }
     },
     onClose() {

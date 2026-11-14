@@ -105,11 +105,12 @@ const stageChat = {
   },
 
   /** A new riser centered at (x, z) on the floor; sizes default to an 8 × 4 ft deck, 0.4 m high. */
-  addRiser(cfg: { name?: string; x: number; z: number; width?: number; depth?: number; height?: number; yaw?: number }) {
+  addRiser(cfg: { name?: string | undefined; x: number; z: number; width?: number; depth?: number; height?: number; yaw?: number }) {
     const n = cfg.name?.trim() ?? "";
     if (n && state.risers.some((r) => r.name.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a riser called "${n}"`);
     const riser = addRiserAt(cfg.x, cfg.z, {
-      name: n || undefined,
+      // Only the fields given: addRiserAt merges them over the defaults.
+      ...(n ? { name: n } : {}),
       ...(cfg.width != null ? { w: cfg.width } : {}),
       ...(cfg.depth != null ? { d: cfg.depth } : {}),
       ...(cfg.height != null ? { h: cfg.height } : {}),
@@ -120,12 +121,12 @@ const stageChat = {
   },
 
   /** Rename, move (x / z), resize or turn a riser. */
-  editRiser(id: string, change: { name?: string; x?: number; z?: number; width?: number; depth?: number; height?: number; yaw?: number }) {
+  editRiser(id: string, change: { name?: string | undefined; x?: number | undefined; z?: number | undefined; width?: number | undefined; depth?: number | undefined; height?: number | undefined; yaw?: number | undefined }) {
     const riser = riserById(id);
     if (!riser) throw new Error("No such riser");
     const n = change.name?.trim();
     if (n && state.risers.some((r) => r !== riser && r.name.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a riser called "${n}"`);
-    const fields: Partial<Record<RiserField, string | number>> = { name: n || undefined, x: change.x, z: change.z, yaw: change.yaw };
+    const fields: Partial<Record<RiserField, string | number | undefined>> = { name: n || undefined, x: change.x, z: change.z, yaw: change.yaw };
     for (const [k, f] of Object.entries(RISER_SIZE_KEYS)) fields[f] = change[k as keyof typeof RISER_SIZE_KEYS];
     for (const k of RISER_FIELDS) { const v = fields[k]; if (v != null) setRiserField(riser, k, v); }
     setActiveRiser(riser.id);
@@ -141,7 +142,7 @@ const stageChat = {
   },
 
   /** New free fixtures at these points; `type` = a console type key or "none" (stage only). */
-  addFixtures(points: { x: number; y: number; z: number; name?: string }[], type: string) {
+  addFixtures(points: { x: number; y: number; z: number; name?: string | undefined }[], type: string) {
     const room = MAX_FIXTURES - state.fixtures.length;
     if (points.length > room) throw new Error(`Only room for ${room} more fixtures (max ${MAX_FIXTURES})`);
     const register = consoleTypeFromKey(type);
@@ -158,7 +159,7 @@ const stageChat = {
   },
 
   /** A new rig (circle, square, line) centered at (x, y, z). */
-  addRig(cfg: { type: RigType; x: number; y: number; z: number; size?: number; count?: number; tilt?: number; yaw?: number; consoleType: string; name?: string }) {
+  addRig(cfg: { type: RigType; x: number; y: number; z: number; size?: number | undefined; count?: number | undefined; tilt?: number | undefined; yaw?: number | undefined; consoleType: string; name?: string | undefined }) {
     const d = RIG_TYPES[cfg.type].defaults;
     const count = Math.round(cfg.count ?? d.count);
     const room = MAX_FIXTURES - state.fixtures.length;
@@ -257,7 +258,7 @@ const stageChat = {
   },
 
   /** The box's size in meters (1–100 each). */
-  setBox(size: { w?: number; d?: number; h?: number }) {
+  setBox(size: { w?: number | undefined; d?: number | undefined; h?: number | undefined }) {
     for (const k of ["w", "d", "h"] as const) if (size[k] != null) state.box[k] = clamp(Number(size[k]), 1, 100);
     syncBoxInputs();
     updateBox();

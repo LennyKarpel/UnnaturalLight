@@ -39,6 +39,7 @@ import { CHANNEL_COUNT, fillFrames } from "./dmx.ts";
 import { errorMessage, isRecord } from "../shared/guards.ts";
 import { clamp } from "../shared/numbers.ts";
 import { writeJsonFile } from "./files.ts";
+import type { Channel } from "../shared/address.ts";
 
 const ARTNET_PORT = 6454;
 const SACN_PORT = 5568;
@@ -351,7 +352,7 @@ export function createNetDmx({ dataDir, maxUniverses, onChange }: { dataDir: str
      * @param byChannel continuous channel numbers (513 = universe 2/1)
      * @param universeCount how many universes the show uses
      */
-    write(byChannel: Map<number, number>, universeCount: number) {
+    write(byChannel: ReadonlyMap<Channel, number>, universeCount: number) {
       if (!socket || !outputs.size) return;
       fillFrames(frames, byChannel, universeCount);
       const now = Date.now();

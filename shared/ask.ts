@@ -32,7 +32,7 @@ function create(): HTMLDialogElement {
   return d;
 }
 
-export type AskOptions = { title: string; message?: string; confirmLabel?: string };
+export type AskOptions = { title: string; message?: string | undefined; confirmLabel?: string | undefined };
 
 /**
  * Confirm (no `initial`) or ask for a name (`initial` = the starting text).

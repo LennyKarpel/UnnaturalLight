@@ -1,4 +1,4 @@
-import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress, clampChannel as wholeChannel } from "./patch.ts";
+import { DMX_CHANNEL_MAX, UNIVERSE_SIZE, channelLimit, universeOf, universeStart, formatAddress, clampChannel as wholeChannel, asChannel, type Channel, type Universe } from "./patch.ts";
 import { newId } from "../shared/ids.ts";
 import { isDmxAttr, type DmxAttr } from "../shared/attributes.ts";
 import { isRecord } from "../shared/guards.ts";
@@ -22,8 +22,8 @@ export type Fixture = {
   name: string;
   mount: MountType;
   color: ColorMode;
-  channelStart: number;
-  channelEnd: number;
+  channelStart: Channel;
+  channelEnd: Channel;
   groupId: string | null;
   roles?: (ChannelRole | null)[];
 };
@@ -53,7 +53,7 @@ export function normalizeColorMode(value: unknown): ColorMode {
 }
 
 /** A channel number (rounded), or null when it isn't one. */
-const clampChannel = (value: unknown): number | null => wholeChannel(Math.round(Number(value)));
+const clampChannel = (value: unknown): Channel | null => wholeChannel(Math.round(Number(value)));
 
 /** A block of channels (first and last, inclusive). */
 export type ChannelRange = Pick<Fixture, "channelStart" | "channelEnd">;
@@ -81,7 +81,7 @@ export function normalizeChannelSpan(start: unknown, count: unknown): ChannelRan
   ) {
     return null;
   }
-  const channelEnd = channelStart + n - 1;
+  const channelEnd = asChannel(channelStart + n - 1);
   if (channelEnd > DMX_CHANNEL_MAX) return null;
   // A block stays inside one universe.
   if (universeOf(channelStart) !== universeOf(channelEnd)) return null;
@@ -117,7 +117,7 @@ export function findRangeConflict<F extends ChannelRange & { id: string }>(fixtu
  * First free contiguous block of `width` channels, inside one universe
  * (only `universe` if given; else the first universe with room).
  */
-export function nextAvailableRange(fixtures: ChannelRange[], width = 1, universe: number | null = null): ChannelRange | null {
+export function nextAvailableRange(fixtures: ChannelRange[], width = 1, universe: Universe | null = null): ChannelRange | null {
   const size = clampInt(Number(width) || 1, 1, UNIVERSE_SIZE);
   const occupied = new Array(DMX_CHANNEL_MAX + 1).fill(false);
   for (const fixture of fixtures) {
@@ -125,10 +125,10 @@ export function nextAvailableRange(fixtures: ChannelRange[], width = 1, universe
       if (ch >= 1 && ch <= DMX_CHANNEL_MAX) occupied[ch] = true;
     }
   }
-  const first = universe ? universeStart(universe) : 1;
+  const first: number = universe ? universeStart(universe) : 1;
   const last = universe ? universeStart(universe) + UNIVERSE_SIZE - 1 : channelLimit();
   for (let start = first; start <= last - size + 1; start++) {
-    if (universeOf(start) !== universeOf(start + size - 1)) continue;
+    if (universeOf(asChannel(start)) !== universeOf(asChannel(start + size - 1))) continue;
     let free = true;
     for (let ch = start; ch < start + size; ch++) {
       if (occupied[ch]) {
@@ -137,7 +137,7 @@ export function nextAvailableRange(fixtures: ChannelRange[], width = 1, universe
       }
     }
     if (free) {
-      return { channelStart: start, channelEnd: start + size - 1 };
+      return { channelStart: asChannel(start), channelEnd: asChannel(start + size - 1) };
     }
   }
   return null;
@@ -186,8 +186,8 @@ export function fixturesInGroup<F extends Pick<Fixture, "groupId">>(fixtures: F[
 }
 
 export function normalizeFixture(value: unknown, index = 0): (Omit<Fixture, "channelStart" | "channelEnd" | "groupId"> & {
-  channelStart?: number;
-  channelEnd?: number;
+  channelStart?: Channel;
+  channelEnd?: Channel;
   groupId?: string | null;
 }) | null {
   if (!isRecord(value)) return null;

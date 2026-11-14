@@ -27,7 +27,7 @@ let closeOpen: (() => void) | null = null;
 export const closePopup = () => closeOpen?.();
 
 /** Where a popup opens: under its anchor (lined up with its left edge, or its right), or at a point such as a right-click. */
-export type PopupPlace = { alignRight?: boolean; x?: number; y?: number };
+export type PopupPlace = { alignRight?: boolean; x?: number | undefined; y?: number | undefined };
 
 /**
  * Show `popup` by `anchor` until an item calls `finish(value)`, or it's

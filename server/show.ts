@@ -12,6 +12,7 @@ import { must } from "../shared/query.ts";
 import { errorMessage } from "../shared/guards.ts";
 import type { LevelCell } from "../shared/protocol.ts";
 import { clamp } from "../shared/numbers.ts";
+import type { Channel } from "../shared/address.ts";
 
 /** The parts of the show that change while playing, as sent to every console. */
 /**
@@ -198,7 +199,7 @@ export function createShow(saved: unknown) {
     },
 
     /** DMX channel → level, as it should go out now. */
-    levels(): Map<number, number> {
+    levels(): Map<Channel, number> {
       const s = show;
       if (!s) return new Map();
       const levels = cueLevels();

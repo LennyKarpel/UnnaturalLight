@@ -1,10 +1,12 @@
 import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
 import {
-  UNIVERSE_SIZE, MAX_UNIVERSES, DMX_CHANNEL_MAX, universeOf, addressOf, universeStart,
+  UNIVERSE_SIZE, MAX_UNIVERSES, DMX_CHANNEL_MAX, universeOf, addressOf, universeStart, channelAt, asChannel, asUniverse,
   formatAddress as formatIn, parseAddress as parseIn,
+  type Channel, type Universe, type Address,
 } from "../shared/address.ts";
 
-export { UNIVERSE_SIZE, MAX_UNIVERSES, DMX_CHANNEL_MAX, universeOf, addressOf, universeStart };
+export { UNIVERSE_SIZE, MAX_UNIVERSES, DMX_CHANNEL_MAX, universeOf, addressOf, universeStart, channelAt, asChannel, asUniverse };
+export type { Channel, Universe, Address };
 
 export const FADER_COUNT = 256;
 
@@ -22,7 +24,7 @@ export const parseAddress = (text: unknown): number | null => parseIn(text, univ
 /** Channels shown on the Channels-tab meter row. */
 export const CHANNEL_METER_COUNT = 256;
 
-export type PatchTarget = { channel: number; max: number };
+export type PatchTarget = { channel: Channel; max: number };
 export type FaderPatch = PatchTarget[];
 
 export function defaultPatch(): FaderPatch[] {
@@ -92,8 +94,8 @@ function uniqueByChannel(targets: PatchTarget[]): PatchTarget[] {
 }
 
 /** A whole channel number 1–DMX_CHANNEL_MAX, or null when it isn't one. */
-export function clampChannel(value: unknown): number | null {
+export function clampChannel(value: unknown): Channel | null {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1 || n > DMX_CHANNEL_MAX) return null;
-  return n;
+  return asChannel(n);
 }

@@ -15,7 +15,7 @@
  * model's view until the model searches for it (Claude's tool search);
  * others just send it with the rest.
  */
-export type ChatTool = { name: string; description: string; schema: Record<string, unknown>; deferred?: boolean };
+export type ChatTool = { name: string; description: string; schema: Record<string, unknown>; deferred?: boolean | undefined };
 
 export type ChatToolCall = { id: string; name: string; args: Record<string, unknown> };
 

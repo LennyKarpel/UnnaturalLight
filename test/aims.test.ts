@@ -3,16 +3,16 @@ import assert from "node:assert/strict";
 import { allAims, applyAims, applyReaims } from "../console/aims.ts";
 import { createCue, createSong } from "../console/songs.ts";
 import { parseShow, serializeShow } from "../console/show.ts";
-import { FADER_COUNT, type FaderPatch } from "../console/patch.ts";
+import { FADER_COUNT, asChannel as ch, type FaderPatch } from "../console/patch.ts";
 
 /** Fader 0 → channel 1 (pan), fader 1 → channel 2 (tilt, at half max). */
 function patch(): FaderPatch[] {
   const p: FaderPatch[] = Array.from({ length: FADER_COUNT }, () => []);
-  p[0].push({ channel: 1, max: 255 });
-  p[1].push({ channel: 2, max: 128 });
+  p[0].push({ channel: ch(1), max: 255 });
+  p[1].push({ channel: ch(2), max: 128 });
   return p;
 }
-const at = (pan: number, tilt: number) => [{ channel: 1, value: pan }, { channel: 2, value: tilt }];
+const at = (pan: number, tilt: number) => [{ channel: ch(1), value: pan }, { channel: ch(2), value: tilt }];
 
 test("aims: a cue keeps the aim's values and remembers the position", () => {
   const cue = createCue();

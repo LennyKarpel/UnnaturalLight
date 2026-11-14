@@ -20,6 +20,7 @@ import { consoleLink } from "./link.ts";
 import type { ChannelValue } from "../shared/engine.ts";
 import type { AimRequest, Reaim } from "../shared/console-stage.ts";
 import type { Xyz } from "./stage-model.ts";
+import type { Channel } from "../shared/address.ts";
 
 const aimFor = (fixture: Fixture, at: Xyz) => aimDmx(fixture, at, 0);
 
@@ -27,10 +28,10 @@ const aimFor = (fixture: Fixture, at: Xyz) => aimDmx(fixture, at, 0);
 function consoleChannels(fixture: Fixture) {
   if (!fixture.link.consoleId) return null;
   const chans = linkChannels(fixture).filter((c) => (c.attr === "pan" || c.attr === "tilt") && consoleLink.fadersFor(c.channel).length);
-  return chans.length ? (chans as { channel: number; attr: "pan" | "tilt" }[]) : null;
+  return chans.length ? (chans as { channel: Channel; attr: "pan" | "tilt" }[]) : null;
 }
 
-const valuesFor = (chans: { channel: number; attr: "pan" | "tilt" }[], aim: { pan: number; tilt: number }): ChannelValue[] =>
+const valuesFor = (chans: { channel: Channel; attr: "pan" | "tilt" }[], aim: { pan: number; tilt: number }): ChannelValue[] =>
   chans.map((c) => ({ channel: c.channel, value: aim[c.attr] }));
 
 const sameValues = (a: ChannelValue[], b: ChannelValue[]) => a.length === b.length && a.every((v, k) => v.channel === b[k].channel && v.value === b[k].value);

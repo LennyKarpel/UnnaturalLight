@@ -40,6 +40,7 @@ import {
 } from "./faders.ts";
 import { persistAndRefresh } from "./live.ts";
 import { el, button } from "../shared/html.ts";
+import { asChannel } from "../shared/address.ts";
 
 const CHANNEL_GROUP_SIZE = 32;
 /** Channel-picker groups of 32 across every universe in the show. */
@@ -68,7 +69,7 @@ export function updateConflictBanner() {
 
 function nextFreeChannel(used = new Set(state.patch.flatMap((t) => t.map((x) => x.channel)))) {
   for (let ch = 1; ch <= channelLimit(); ch++) {
-    if (!used.has(ch)) return ch;
+    if (!used.has(asChannel(ch))) return ch;
   }
   return 1;
 }
@@ -256,7 +257,8 @@ function pickChannel({ anchor, current }: { anchor: HTMLElement; current: number
           // "45" matches channel 45 in every universe; "2/4" matches 2/4, 2/40, …
           const typed = /^(?:(\d+)\s*\/\s*)?(\d+)$/.exec(q);
           if (typed) {
-            for (let ch = 1; ch <= channelLimit(); ch++) {
+            for (let n = 1; n <= channelLimit(); n++) {
+              const ch = asChannel(n);
               if (typed[1] && universeOf(ch) !== Number(typed[1])) continue;
               if (!String(addressOf(ch)).startsWith(typed[2])) continue;
               channelMenuList.append(channelItem(ch));
