@@ -4,7 +4,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaContentBlock, BetaContentBlockParam, BetaMessage, BetaMessageParam, BetaTool, BetaToolUnion } from "@anthropic-ai/sdk/resources/beta/messages";
-import type { ChatAssistantMessage, ChatMessage, ChatTool, ChatToolCall } from "../../shared/chat-protocol.ts";
+import type { ChatAssistantMessage, ChatMessage, ChatModelChoice, ChatServerTool, ChatTool, ChatToolCall, ChatUsage } from "../../shared/chat-protocol.ts";
 import { isOneOf, isRecord } from "../../shared/guards.ts";
 import type { ChatModel } from "./model.ts";
 
@@ -12,6 +12,18 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 type Effort = (typeof EFFORTS)[number];
 
 const PROVIDER = "anthropic";
+
+/**
+ * The models the chat panel's menu offers (the default first). `fallback`:
+ * the API may rerun a declined request on another model (server-side
+ * fallback); Haiku has none.
+ */
+export const MODELS: (ChatModelChoice & { fallback: boolean })[] = [
+  { id: "claude-opus-5-5", name: "Claude Opus 5.5", note: "Default · smart and quick", fallback: true },
+  { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", note: "Faster, cheaper", fallback: true },
+  { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", note: "Fastest, cheapest", fallback: false },
+  { id: "claude-fable-5-2", name: "Claude Fable 5.2", note: "Most capable, slower, costs most", fallback: true },
+];
 /** A reply's blocks, as the API sent them (passed back unchanged). */
 const isBlocks = (v: unknown): v is BetaContentBlockParam[] => Array.isArray(v) && v.every(isRecord);
 
@@ -55,6 +67,26 @@ export function toApiTools(tools: ChatTool[]): BetaToolUnion[] | undefined {
   return list;
 }
 
+/** The tools the API ran itself in a reply (tool search: what it looked for, which tools it found). */
+export function serverTools(content: BetaContentBlock[]): ChatServerTool[] {
+  const out: ChatServerTool[] = [];
+  const byId = new Map<string, ChatServerTool>();
+  for (const b of content) {
+    if (b.type === "server_tool_use") {
+      const q = isRecord(b.input) ? (b.input.query ?? b.input.pattern) : undefined;
+      const t: ChatServerTool = { name: b.name, input: typeof q === "string" ? q : JSON.stringify(b.input), result: "" };
+      byId.set(b.id, t);
+      out.push(t);
+    } else if (b.type === "tool_search_tool_result") {
+      const t = byId.get(b.tool_use_id);
+      if (!t) continue;
+      const c = b.content;
+      t.result = c.type === "tool_search_tool_search_result" ? c.tool_references.map((r) => r.tool_name).join(", ") || "nothing found" : `failed (${c.error_code})`;
+    }
+  }
+  return out;
+}
+
 /** Most times a reply paused by the API's own tool loop (tool search) is resumed. */
 const MAX_RESUMES = 3;
 
@@ -69,18 +101,28 @@ function explain(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
+/** `model`: the default (UNNATURALLIGHT_CHAT_MODEL); one not in MODELS is added to the menu, first. */
 export function createAnthropicModel(opts: { model?: string | undefined; effort?: string | undefined }): ChatModel {
-  const model = opts.model || "claude-opus-5-5";
+  const defaultModel = opts.model || MODELS[0].id;
+  const known = MODELS.find((m) => m.id === defaultModel);
+  const models = known
+    ? [known, ...MODELS.filter((m) => m !== known)]
+    : [{ id: defaultModel, name: defaultModel, note: "Default (UNNATURALLIGHT_CHAT_MODEL)", fallback: false }, ...MODELS];
   const effort: Effort = isOneOf(EFFORTS, opts.effort) ? opts.effort : "low";
   let client: Anthropic | null = null;
 
   return {
-    label: `${PROVIDER} · ${model}`,
-    async reply({ system, messages, tools, onText, signal }): Promise<ChatAssistantMessage> {
+    models: models.map(({ id, name, note }) => ({ id, name, note })),
+    defaultModel,
+    label: (model) => `${PROVIDER} · ${model}`,
+    async reply({ model: picked, system, messages, tools, onText, signal }): Promise<ChatAssistantMessage> {
+      const choice = models.find((m) => m.id === picked) ?? models[0];
+      const model = choice.id;
       let msg: BetaMessage;
       // A reply can come in parts: the API pauses its own tool loop (tool
       // search) now and then, and is resumed by sending the reply so far.
       const content: BetaContentBlock[] = [];
+      const usage: ChatUsage = { model, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
       try {
         client ??= new Anthropic();
         const apiMessages = messages.map(toApiMessage);
@@ -100,20 +142,25 @@ export function createAnthropicModel(opts: { model?: string | undefined; effort?
               // oldest messages), so let the API drop blocks that no longer match
               // instead of failing the request. Only the model's past reasoning is
               // lost; what it said and did stays.
+              // Blocks from another model (the person picked a different one
+              // mid-chat) are dropped the same way, by the API.
               thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
               cache_control: { type: "ephemeral" },
-              betas: [
-                "thinking-binding-controls-2026-08-01",
-                // If the model declines, the API retries on a fallback model.
-                "server-side-fallback-2026-07-01",
-              ],
-              fallbacks: "default",
+              // If the model declines, the API retries on a fallback model (where it has one).
+              ...(choice.fallback
+                ? { betas: ["thinking-binding-controls-2026-08-01", "server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+                : { betas: ["thinking-binding-controls-2026-08-01"] }),
             },
             { signal },
           );
           stream.on("text", (text) => onText(text));
           msg = await stream.finalMessage();
           content.push(...msg.content);
+          usage.model = msg.model;
+          usage.input += msg.usage.input_tokens;
+          usage.output += msg.usage.output_tokens;
+          usage.cacheRead += msg.usage.cache_read_input_tokens ?? 0;
+          usage.cacheWrite += msg.usage.cache_creation_input_tokens ?? 0;
           if (msg.stop_reason !== "pause_turn" || resume >= MAX_RESUMES) break;
         }
       } catch (err) {
@@ -130,7 +177,15 @@ export function createAnthropicModel(opts: { model?: string | undefined; effort?
       // Cut off mid-call (max_tokens): drop the calls; their inputs may be incomplete.
       const cut = msg.stop_reason === "max_tokens";
       const data = cut ? content.filter((b) => b.type !== "tool_use") : content;
-      return { role: "assistant", text, toolCalls: cut ? [] : toolCalls, raw: { provider: PROVIDER, data } };
+      const found = serverTools(content);
+      return {
+        role: "assistant",
+        text,
+        toolCalls: cut ? [] : toolCalls,
+        usage,
+        ...(found.length ? { serverTools: found } : {}),
+        raw: { provider: PROVIDER, data },
+      };
     },
   };
 }

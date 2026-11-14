@@ -4,7 +4,7 @@
  * results back, and repeat until it answers without calling any.
  */
 
-import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatRequest, ChatSummary, ChatSummaryRequest, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
+import type { ChatAssistantMessage, ChatEvent, ChatMessage, ChatModels, ChatRequest, ChatSummary, ChatSummaryRequest, ChatToolCall, ChatToolResult } from "../../shared/chat-protocol.ts";
 import { serverUrl } from "../../shared/server-socket.ts";
 import { errorMessage, isRecord, unhandled } from "../../shared/guards.ts";
 import { TOOLS, toolByName, type ToolDef } from "./tools.ts";
@@ -22,8 +22,8 @@ export type TurnView = {
   reply: (message: ChatAssistantMessage, model: string) => void;
   /** A reply's tool results were added to the conversation (a good moment to save it). */
   results?: () => void;
-  /** A tool is about to run: returns how to show it finishing. */
-  tool: (call: ChatToolCall, description: string) => { done: (ok: boolean, note?: string) => void };
+  /** A tool is about to run: returns how to show it finishing (`result`: what the model is told, or why it failed). */
+  tool: (call: ChatToolCall, description: string) => { done: (ok: boolean, result: string) => void };
 };
 
 export const chatUrl = (path = "/chat") => serverUrl(path);
@@ -31,11 +31,11 @@ export const chatUrl = (path = "/chat") => serverUrl(path);
 /** The connection to the show server broke (not a refusal or an API error). */
 const LOST = "Lost the connection to the show server (it may have restarted). Send your message again.";
 
-/** One model reply, streamed. */
-async function ask(history: ChatMessage[], view: TurnView, signal: AbortSignal): Promise<{ message: ChatAssistantMessage; model: string }> {
+/** One model reply, streamed. `model`: the one picked in the panel ("" = the server's default). */
+async function ask(history: ChatMessage[], view: TurnView, signal: AbortSignal, model: string): Promise<{ message: ChatAssistantMessage; model: string }> {
   view.waiting?.();
   try {
-    return await stream(history, view, signal);
+    return await stream(history, view, signal, model);
   } catch (err) {
     // fetch and reading its body throw TypeError when the connection drops.
     if (err instanceof TypeError && !signal.aborted) throw new Error(LOST);
@@ -47,9 +47,9 @@ async function ask(history: ChatMessage[], view: TurnView, signal: AbortSignal):
 const post = (path: string, body: ChatRequest | ChatSummaryRequest, signal?: AbortSignal) =>
   fetch(chatUrl(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: signal ?? null });
 
-async function stream(history: ChatMessage[], view: TurnView, signal: AbortSignal): Promise<{ message: ChatAssistantMessage; model: string }> {
+async function stream(history: ChatMessage[], view: TurnView, signal: AbortSignal, model: string): Promise<{ message: ChatAssistantMessage; model: string }> {
   const tools = TOOLS.map(({ name, description, schema, deferred }) => ({ name, description, schema, deferred }));
-  const res = await post("/chat", { messages: history, tools }, signal);
+  const res = await post("/chat", { messages: history, tools, ...(model ? { model } : {}) }, signal);
   if (!res.ok || !res.body) throw new Error(res.status === 404 ? "This show server has no chat (restart it to update)" : `Chat failed: ${await res.text()}`);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
@@ -93,7 +93,7 @@ function runCall(call: ChatToolCall, view: TurnView, signal: AbortSignal): ChatT
   const shown = view.tool(call, description);
   try {
     const result = resultText(def.run(args));
-    shown.done(true);
+    shown.done(true, result);
     return { id: call.id, result };
   } catch (err) {
     const msg = errorMessage(err, "Failed");
@@ -124,9 +124,9 @@ export function summaryCut(history: ChatMessage[], max: number, chunk: number): 
   return Math.max(0, promptIndex(history, chunk));
 }
 
-/** Ask the show server to sum up `messages` (POST /chat/summary). */
-export async function summarize(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
-  const res = await post("/chat/summary", { messages }, signal);
+/** Ask the show server to sum up `messages` (POST /chat/summary), with `model` ("" = the server's default). */
+export async function summarize(messages: ChatMessage[], signal?: AbortSignal, model = ""): Promise<string> {
+  const res = await post("/chat/summary", { messages, ...(model ? { model } : {}) }, signal);
   if (!res.ok) throw new Error(`Summary failed: ${await res.text()}`);
   const { summary } = (await res.json()) as ChatSummary;
   if (typeof summary !== "string" || !summary.trim()) throw new Error("Summary failed: empty");
@@ -169,17 +169,27 @@ export function repairHistory(history: ChatMessage[]) {
   }
 }
 
+/** The models the panel's menu offers (GET /chat/models). Throws if the show server has none. */
+export async function fetchModels(): Promise<ChatModels> {
+  const res = await fetch(chatUrl("/chat/models"), { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status === 404 ? "This show server can't pick models (restart it to update)" : await res.text());
+  const body = (await res.json()) as ChatModels;
+  if (!Array.isArray(body.models) || typeof body.default !== "string") throw new Error("Bad model list");
+  return body;
+}
+
 /**
  * Run a turn on `history` (which ends with the person's message). Adds the
  * replies and tool results to it as they come, so it's always valid to send
- * again, even after Stop or an error.
+ * again, even after Stop or an error. `model`: the one picked ("" = the
+ * server's default); a new pick applies from the next turn.
  */
-export async function runTurn(history: ChatMessage[], view: TurnView, signal: AbortSignal) {
+export async function runTurn(history: ChatMessage[], view: TurnView, signal: AbortSignal, model = "") {
   repairHistory(history);
   for (let step = 0; step < MAX_STEPS; step++) {
-    const { message, model } = await ask(history, view, signal);
+    const { message, model: label } = await ask(history, view, signal, model);
     history.push(message);
-    view.reply(message, model);
+    view.reply(message, label);
     if (!message.toolCalls.length) return;
     const results: ChatToolResult[] = [];
     // In order, as the model listed them.

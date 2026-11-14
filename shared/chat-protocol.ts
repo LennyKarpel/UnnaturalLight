@@ -21,10 +21,22 @@ export type ChatToolCall = { id: string; name: string; args: Record<string, unkn
 
 export type ChatToolResult = { id: string; result: string; error?: boolean };
 
+/**
+ * What one reply took, as the provider counted it. `model`: the model that
+ * answered (a fallback may differ from the one asked). Tokens read: `input`
+ * (full price) + `cacheRead` (from the prompt cache, cheap) + `cacheWrite`.
+ */
+export type ChatUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
+
+/** A tool the provider ran itself (e.g. Claude's tool search): shown in the panel, never run by the page. */
+export type ChatServerTool = { name: string; input: string; result: string };
+
 export type ChatAssistantMessage = {
   role: "assistant";
   text: string;
   toolCalls: ChatToolCall[];
+  usage?: ChatUsage | undefined;
+  serverTools?: ChatServerTool[] | undefined;
   /**
    * The reply exactly as the provider sent it. Passed back unchanged, so the
    * same provider gets its own blocks back (e.g. Claude's thinking blocks);
@@ -41,11 +53,19 @@ export type ChatMessage =
   /** The results of every tool call in the assistant message before it. */
   | { role: "tool"; results: ChatToolResult[] };
 
-/** Page → server (POST /chat, JSON). */
-export type ChatRequest = { messages: ChatMessage[]; tools: ChatTool[] };
+/**
+ * A model the chat panel's model menu offers: `id` is the provider's model id
+ * (sent back as ChatRequest.model), `name` and `note` are what the menu shows.
+ */
+export type ChatModelChoice = { id: string; name: string; note: string };
+/** GET /chat/models: the models to pick from, and the one used when none is picked. */
+export type ChatModels = { models: ChatModelChoice[]; default: string };
+
+/** Page → server (POST /chat, JSON). `model`: one of GET /chat/models' ids (none: the server's default). */
+export type ChatRequest = { messages: ChatMessage[]; tools: ChatTool[]; model?: string | undefined };
 
 /** Page → server (POST /chat/summary, JSON): the messages to sum up. Answer: ChatSummary. */
-export type ChatSummaryRequest = { messages: ChatMessage[] };
+export type ChatSummaryRequest = { messages: ChatMessage[]; model?: string | undefined };
 export type ChatSummary = { summary: string };
 
 /**

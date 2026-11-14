@@ -297,3 +297,12 @@ test("another site can't POST to the chat; the app's own JSON gets through to it
   // The app's own request reaches the chat (which streams back 200; the test provider then reports its error inside the stream).
   assert.equal(await request({ method: "POST", path: "/chat", headers: { Host: self, Origin: appUrl(self), "Content-Type": "application/json" }, body }), 200);
 });
+
+test("the chat's model list: only for the app, read-only", async () => {
+  const self = `localhost:${port}`;
+  assert.equal(await request({ path: "/chat/models", headers: { Host: `rebind.evil.example:${port}` } }), 403);
+  assert.equal(await request({ path: "/chat/models", headers: { Host: self, Origin: "https://evil.example" } }), 403);
+  assert.equal(await request({ method: "POST", path: "/chat/models", headers: { Host: self, Origin: appUrl(self), "Content-Type": "application/json" }, body: "{}" }), 405);
+  // The tests' provider doesn't exist: no models (the panel says so in its menu).
+  assert.equal(await request({ path: "/chat/models", headers: { Host: self, Origin: appUrl(self) } }), 503);
+});

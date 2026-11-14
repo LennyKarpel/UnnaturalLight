@@ -63,16 +63,22 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
   padding: 8px 10px;
   border-bottom: 1px solid var(--track);
 }
+/* The model that answers: opens the chat settings (as ⚙ does). */
 .chat-model {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  justify-content: flex-start;
   color: var(--faint);
   font-size: var(--text-xs);
+  white-space: nowrap;
 }
-.chat-head button { padding: 2px 8px; }
+.chat-model-name { overflow: hidden; text-overflow: ellipsis; }
+/* Plain text until pointed at (the header has enough boxes). */
+.chat-head > .chat-model { border-color: transparent; background: none; padding: 2px 4px; }
+.chat-head > .chat-model:hover { color: var(--ink); border-color: var(--line); }
+.chat-settings-btn { font-size: var(--text-lg); line-height: 1; }
+.chat-head > button { padding: 2px 8px; }
 /* The open chat's name: opens the list of chats. */
 .chat-pick { max-width: 55%; display: flex; gap: 4px; font-weight: 600; }
 .chat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -124,26 +130,91 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
 .chat-msg.is-pending { color: var(--muted); font-size: var(--text-sm); padding: 0; animation: chat-pulse 1.2s ease-in-out infinite; }
 @keyframes chat-pulse { 50% { opacity: 0.4; } }
 
-/* A tool call: what it does, then ✓ / ✗ / waiting / – stopped. */
+/* A tool call: what it does, then ✓ / ✗ / waiting / – stopped. With Show
+   details on, click it for the tool, what it was sent and what it answered. */
 .chat-tool {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
   font-size: var(--text-sm);
   color: var(--muted);
   padding: 4px 8px;
   border-left: 2px solid var(--line-strong);
 }
-.chat-tool::before { font-family: var(--mono), monospace; width: 1em; }
-.chat-tool[data-state="wait"]::before { content: "…"; }
-.chat-tool[data-state="ok"]::before { content: "✓"; color: var(--ok); }
-.chat-tool[data-state="fail"]::before { content: "✗"; color: var(--warn); }
-.chat-tool[data-state="stopped"]::before { content: "–"; }
+.chat-tool > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  list-style: none;
+  cursor: pointer;
+}
+.chat-tool > summary::-webkit-details-marker { display: none; }
+.chat-tool > summary:hover .chat-tool-text { color: var(--ink); }
+.chat-tool > summary::before { font-family: var(--mono), monospace; width: 1em; }
+.chat-tool[data-state="wait"] > summary::before { content: "…"; }
+.chat-tool[data-state="ok"] > summary::before { content: "✓"; color: var(--ok); }
+.chat-tool[data-state="fail"] > summary::before { content: "✗"; color: var(--warn); }
+.chat-tool[data-state="stopped"] > summary::before { content: "–"; }
 .chat-tool[data-state="ok"] { border-left-color: var(--ok); }
 .chat-tool[data-state="fail"] { border-left-color: var(--warn); }
 .chat-tool-note { flex-basis: 100%; padding-left: calc(1em + 8px); color: var(--faint); }
 .chat-tool-note:empty { display: none; }
+/* A tool search (the model finding the tools it needs): quieter, a ⌕ instead of ✓. */
+.chat-tool.is-server { border-left-style: dashed; border-left-color: var(--line-strong); color: var(--faint); }
+.chat-tool.is-server > summary::before { content: "⌕"; color: var(--faint); }
+.chat-tool-detail { padding: 6px 0 2px calc(1em + 8px); display: grid; gap: 6px; }
+.chat-tool-label { color: var(--faint); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.chat-tool-json {
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--field);
+  border-radius: 4px;
+  color: var(--ink);
+  font: var(--text-xs) var(--mono), monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Under a request: its model, tool calls, time and tokens. */
+.chat-turn-info { align-self: flex-start; color: var(--faint); font-size: var(--text-xs); padding-left: 2px; }
+
+/* Show details off (chat settings): just what each tool did, no searches or footers. */
+.chat.hide-details .chat-tool-detail,
+.chat.hide-details .chat-tool.is-server,
+.chat.hide-details .chat-turn-info { display: none; }
+.chat.hide-details .chat-tool > summary { cursor: default; pointer-events: none; }
+
+/* Chat settings (settings.ts): the confirm dialog's look (dialog.ask) with choices. */
+dialog.chat-settings { width: min(28rem, calc(100vw - 2rem)); }
+dialog.chat-settings fieldset { border: 0; margin: 0.9rem 0 0; padding: 0; }
+dialog.chat-settings legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+dialog.chat-settings label.chat-settings-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  font-size: var(--text-md);
+  font-weight: 400;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+dialog.chat-settings label.chat-settings-choice:hover { background: var(--panel-2); }
+dialog.chat-settings label.chat-settings-choice input { width: auto; margin: 0.2rem 0 0; padding: 0; accent-color: var(--accent); }
+.chat-settings-text { display: grid; gap: 1px; }
+.chat-settings-name { font-weight: 600; }
+.chat-settings-note { color: var(--muted); font-size: var(--text-sm); }
+dialog.chat-settings p.chat-settings-note { margin: 0.35rem 0.5rem 0; color: var(--faint); }
 
 .chat-form {
   display: flex;

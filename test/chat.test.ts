@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseChatRequest } from "../server/chat/chat.ts";
-import { toApiMessage, toApiTools } from "../server/chat/anthropic.ts";
+import { parseChatRequest as parseWith, parseModel } from "../server/chat/chat.ts";
+import { createAnthropicModel, MODELS, serverTools, toApiMessage, toApiTools } from "../server/chat/anthropic.ts";
 import { findSong, TOOLS, toolByName } from "../page/chat/tools.ts";
+
+const parseChatRequest = (body: unknown) => parseWith(body, MODELS);
 
 const songs = [
   { id: "a", name: "Intro", cues: 3 },
@@ -27,6 +29,29 @@ test("parseChatRequest: takes a conversation and tools, refuses anything else", 
   assert.throws(() => parseChatRequest({ messages: [{ role: "system", text: "x" }], tools }), /Bad chat messages/);
   assert.throws(() => parseChatRequest({ messages: [{ role: "user", text: "x" }], tools: [{ name: "x" }] }), /Bad chat tools/);
   assert.throws(() => parseChatRequest(null), /Bad chat request/);
+});
+
+test("chat model: the page may pick one of the provider's models, nothing else", () => {
+  const tools = TOOLS.map(({ name, description, schema }) => ({ name, description, schema }));
+  const messages = [{ role: "user", text: "GO" }];
+  assert.equal(parseChatRequest({ messages, tools }).model, undefined);
+  assert.equal(parseChatRequest({ messages, tools, model: "" }).model, undefined);
+  assert.equal(parseChatRequest({ messages, tools, model: "claude-haiku-5-5" }).model, "claude-haiku-5-5");
+  assert.throws(() => parseChatRequest({ messages, tools, model: "gpt-x" }), /Unknown chat model/);
+  assert.throws(() => parseModel(42, MODELS), /Unknown chat model/);
+});
+
+test("Anthropic models: the default first; one from the environment joins the menu", () => {
+  const plain = createAnthropicModel({});
+  assert.equal(plain.defaultModel, "claude-opus-5-5");
+  assert.deepEqual(plain.models.map((m) => m.id), MODELS.map((m) => m.id));
+  assert.equal(plain.label("claude-sonnet-5-5"), "anthropic · claude-sonnet-5-5");
+  const sonnet = createAnthropicModel({ model: "claude-sonnet-5-5" });
+  assert.equal(sonnet.models[0].id, "claude-sonnet-5-5");
+  assert.equal(sonnet.models.length, MODELS.length);
+  const other = createAnthropicModel({ model: "claude-opus-5" });
+  assert.equal(other.models[0].id, "claude-opus-5");
+  assert.equal(other.models.length, MODELS.length + 1);
 });
 
 test("every tool has a unique name and an object schema", () => {
@@ -203,4 +228,18 @@ test("stage tools: risers by name; sizes and center passed through in meters", (
   } finally {
     delete (globalThis as { window?: unknown }).window;
   }
+});
+
+test("Anthropic adapter: tool searches are read out of a reply (what was looked for, what was found)", () => {
+  const content = [
+    { type: "server_tool_use", id: "s1", name: "tool_search_tool_bm25", input: { query: "risers" } },
+    { type: "tool_search_tool_result", tool_use_id: "s1", content: { type: "tool_search_tool_search_result", tool_references: [{ type: "tool_reference", tool_name: "add_riser" }, { type: "tool_reference", tool_name: "list_risers" }] } },
+    { type: "server_tool_use", id: "s2", name: "tool_search_tool_bm25", input: { query: "zzz" } },
+    { type: "tool_search_tool_result", tool_use_id: "s2", content: { type: "tool_search_tool_search_result", tool_references: [] } },
+    { type: "text", text: "Done", citations: null },
+  ] as unknown as Parameters<typeof serverTools>[0];
+  assert.deepEqual(serverTools(content), [
+    { name: "tool_search_tool_bm25", input: "risers", result: "add_riser, list_risers" },
+    { name: "tool_search_tool_bm25", input: "zzz", result: "nothing found" },
+  ]);
 });

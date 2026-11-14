@@ -5,9 +5,11 @@
 //
 // POST /chat/summary: the panel's older messages, summed up in a few lines,
 // so a long chat stays short to send (the summary replaces them).
+//
+// GET /chat/models: the models the panel's model menu offers.
 
 import type http from "node:http";
-import type { ChatEvent, ChatMessage, ChatRequest, ChatSummary, ChatTool } from "../../shared/chat-protocol.ts";
+import type { ChatEvent, ChatMessage, ChatModels, ChatRequest, ChatSummary, ChatTool } from "../../shared/chat-protocol.ts";
 import { errorMessage, isRecord } from "../../shared/guards.ts";
 import { pickModel, type ChatModel } from "./model.ts";
 
@@ -60,15 +62,40 @@ export const isMessage = (m: unknown): m is ChatMessage =>
     (m.role === "assistant" && typeof m.text === "string" && Array.isArray(m.toolCalls)) ||
     (m.role === "tool" && Array.isArray(m.results)));
 
-/** Check what the page sent (it's parsed JSON from a browser). */
-export function parseChatRequest(body: unknown): ChatRequest {
+/** The page's pick of model: none, or one of `models` (an id the provider doesn't offer is refused). */
+export function parseModel(v: unknown, models: readonly { id: string }[]): string | undefined {
+  if (v == null || v === "") return undefined;
+  if (typeof v !== "string" || !models.some((m) => m.id === v)) throw new Error("Unknown chat model");
+  return v;
+}
+
+/** Check what the page sent (it's parsed JSON from a browser). `models`: the ones it may pick. */
+export function parseChatRequest(body: unknown, models: readonly { id: string }[]): ChatRequest {
   if (!isRecord(body) || !Array.isArray(body.messages) || !Array.isArray(body.tools)) throw new Error("Bad chat request");
   if (!body.messages.length || !body.messages.every(isMessage)) throw new Error("Bad chat messages");
   if (!body.tools.every(isTool)) throw new Error("Bad chat tools");
-  return { messages: body.messages, tools: body.tools };
+  return { messages: body.messages, tools: body.tools, model: parseModel(body.model, models) };
 }
 
-let model: ChatModel | null = null;
+let cached: ChatModel | null = null;
+/** The provider, picked once (throws if the environment names an unknown one). */
+const provider = () => (cached ??= pickModel());
+
+export function handleChatModels(req: http.IncomingMessage, res: http.ServerResponse) {
+  if (req.method !== "GET") {
+    res.writeHead(405, { Allow: "GET" }).end("GET only");
+    return;
+  }
+  let out: ChatModels;
+  try {
+    const p = provider();
+    out = { models: p.models, default: p.defaultModel };
+  } catch (err) {
+    res.writeHead(503).end(errorMessage(err, "No chat model"));
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(out));
+}
 
 export const SUMMARY_PROMPT = `You summarize the start of a conversation between a lighting operator and the assistant in UnnaturalLight (a lighting console with songs, cues, sets, GO, LIVE and UP NEXT). The summary replaces those messages, so the assistant can carry on without them.
 
@@ -110,8 +137,9 @@ export async function handleChatSummary(req: http.IncomingMessage, res: http.Ser
   const abort = new AbortController();
   res.on("close", () => abort.abort());
   try {
-    model ??= pickModel();
+    const model = provider();
     const reply = await model.reply({
+      model: parseModel(body.model, model.models),
       system: SUMMARY_PROMPT,
       messages: [{ role: "user", text: `Summarize this:\n\n${transcript(messages)}` }],
       tools: [],
@@ -131,9 +159,17 @@ export async function handleChat(req: http.IncomingMessage, res: http.ServerResp
     res.writeHead(405, { Allow: "POST" }).end("POST only");
     return;
   }
+  // No provider (the environment names an unknown one): said in the reply, below.
+  let model: ChatModel | null = null;
+  let noModel: unknown = null;
+  try {
+    model = provider();
+  } catch (err) {
+    noModel = err;
+  }
   let chat: ChatRequest;
   try {
-    chat = parseChatRequest(JSON.parse(await readBody(req)));
+    chat = parseChatRequest(JSON.parse(await readBody(req)), model?.models ?? []);
   } catch (err) {
     res.writeHead(400).end(errorMessage(err, "Bad chat request"));
     return;
@@ -143,16 +179,21 @@ export async function handleChat(req: http.IncomingMessage, res: http.ServerResp
   // The page gave up (closed, or Stop): stop the model too.
   const abort = new AbortController();
   res.on("close", () => abort.abort());
+  if (!model) {
+    send({ type: "error", error: errorMessage(noModel, "No chat model") });
+    res.end();
+    return;
+  }
   try {
-    model ??= pickModel();
     const message = await model.reply({
+      model: chat.model,
       system: SYSTEM_PROMPT,
       messages: chat.messages,
       tools: chat.tools,
       onText: (text) => send({ type: "text", text }),
       signal: abort.signal,
     });
-    send({ type: "done", message, model: model.label });
+    send({ type: "done", message, model: model.label(chat.model ?? model.defaultModel) });
   } catch (err) {
     if (!abort.signal.aborted) send({ type: "error", error: errorMessage(err, "Chat failed") });
   }

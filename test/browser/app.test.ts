@@ -322,3 +322,90 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.equal(await b.evaluate(`sessionStorage.getItem("unnaturallight.token")`), "probe-token");
   });
 });
+
+describe("the chat's settings in a browser", { skip: chromePath() ? false : "no Chrome (set CHROME_PATH)" }, () => {
+  let app: App;
+  let p: Page;
+  const shown = (sel: string) => p.evaluate<boolean>(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && getComputedStyle(e).display !== "none"; })()`);
+
+  before(async () => {
+    // The real provider, for its model list; no message ever reaches it (/chat is answered in the page below).
+    app = await startApp({ chatModels: true });
+    p = await app.page();
+    await p.evaluate(`document.getElementById("chatBtn").click()`);
+  });
+  after(async () => { await app?.close(); });
+
+  test("⚙ opens the settings: the models, the default picked; a pick shows in the header and is kept", async () => {
+    await p.waitFor(`document.querySelector(".chat-model-name").textContent === "Opus 5.5"`, "the default model in the header");
+    await p.click(".chat-settings-btn");
+    await p.waitFor(`document.querySelectorAll("dialog.chat-settings input[type=radio]").length === 4`, "the four models");
+    assert.equal(await p.evaluate(`document.querySelector("dialog.chat-settings input:checked").value`), "claude-opus-5-5");
+    await p.evaluate(`document.querySelector("dialog.chat-settings input[value=claude-haiku-5-5]").click()`);
+    assert.equal(await p.evaluate(`document.querySelector(".chat-model-name").textContent`), "Haiku 5.5");
+    assert.equal(await p.evaluate(`JSON.parse(localStorage.getItem("unnaturallight.chat")).model`), "claude-haiku-5-5");
+    await p.evaluate(`document.querySelector("dialog.chat-settings form").requestSubmit()`);
+    await p.waitFor(`!document.querySelector("dialog.chat-settings")`, "the settings to close");
+  });
+
+  test("a request sends the picked model; its tool search, tool details and footer show, and Show details hides them", async () => {
+    // The show server's /chat, answered here: one reply with a tool search, a tool call (GO), then a plain reply.
+    await p.evaluate(`(() => {
+      const real = window.fetch;
+      window.sentModels = [];
+      let n = 0;
+      const usage = { model: "claude-haiku-5-5", input: 900, output: 40, cacheRead: 5000, cacheWrite: 0 };
+      window.fetch = (url, init) => {
+        if (!String(url).endsWith("/chat")) return real(url, init);
+        window.sentModels.push(JSON.parse(init.body).model);
+        const message = n++ === 0
+          ? { role: "assistant", text: "", toolCalls: [{ id: "c1", name: "go", args: {} }], usage, serverTools: [{ name: "tool_search_tool_bm25", input: "go", result: "go" }] }
+          : { role: "assistant", text: "Done.", toolCalls: [], usage };
+        return Promise.resolve(new Response(JSON.stringify({ type: "done", message, model: "anthropic · claude-haiku-5-5" }) + "\\n"));
+      };
+    })()`);
+    await p.click(".chat-input textarea");
+    await p.type("GO");
+    await p.key("Enter");
+    await p.waitFor(`document.querySelector(".chat-turn-info")?.textContent ?? ""`, "the request's footer");
+    assert.deepEqual(await p.evaluate("window.sentModels"), ["claude-haiku-5-5", "claude-haiku-5-5"]);
+    assert.match(await p.evaluate<string>(`document.querySelector(".chat-turn-info").textContent`), /^Claude Haiku 5\.5 · 1 tool call · [\d.]+ s · 12k tokens in \(10k cached\) · 80 out$/);
+    assert.match(await p.evaluate<string>(`document.querySelector(".chat-tool.is-server").textContent`), /Looked up tools: “go”/);
+    await p.evaluate(`document.querySelector(".chat-tool:not(.is-server)").open = true`);
+    assert.match(await p.evaluate<string>(`document.querySelector(".chat-tool:not(.is-server) .chat-tool-detail").textContent`), /ToolgoSent\{}Answered/);
+    assert.equal(await shown(".chat-tool-detail"), true);
+
+    await p.click(".chat-settings-btn");
+    await p.waitFor(`!!document.querySelector("dialog.chat-settings input[type=checkbox]")`, "the settings");
+    await p.evaluate(`document.querySelector("dialog.chat-settings input[type=checkbox]").click(); document.querySelector("dialog.chat-settings form").requestSubmit()`);
+    assert.equal(await shown(".chat-turn-info"), false);
+    assert.equal(await shown(".chat-tool.is-server"), false);
+    assert.equal(await shown(".chat-tool-detail"), false);
+    assert.equal(await shown(".chat-tool:not(.is-server)"), true);
+    assert.equal(await p.evaluate(`JSON.parse(localStorage.getItem("unnaturallight.chat")).details`), false);
+    assert.deepEqual(p.errors, []);
+  });
+
+  test("/clear empties the open chat, on the server too; another /word is no command and isn't sent", async () => {
+    const sent = await p.evaluate<number>("window.sentModels.length");
+    await p.click(".chat-input textarea");
+    await p.type("/nope");
+    await p.key("Enter");
+    assert.match(await p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`), /No command \/nope\. Commands: \/clear/);
+    assert.equal(await p.evaluate("window.sentModels.length"), sent);
+    await p.type("/clear");
+    await p.key("Enter");
+    assert.equal(await p.evaluate(`document.querySelectorAll(".chat-msg.is-user, .chat-tool").length`), 0);
+    assert.match(await p.evaluate<string>(`document.querySelector(".chat-msg.is-hint").textContent`), /^Cleared\./);
+    assert.equal(await p.evaluate(`document.querySelector(".chat-name").textContent`), "New chat");
+    const id = await p.evaluate<string>(`JSON.parse(localStorage.getItem("unnaturallight.chat")).current`);
+    await waitFor(async () => {
+      const res = await fetch(`${new URL(app.url).origin}/chat/chats`);
+      const { chats } = (await res.json()) as { chats: { id: string; name: string; history: unknown[] }[] };
+      const c = chats.find((x) => x.id === id);
+      return c && !c.history.length && c.name === "";
+    }, "the cleared chat saved on the server");
+    assert.equal(await p.evaluate("window.sentModels.length"), sent);
+    assert.deepEqual(p.errors, []);
+  });
+});

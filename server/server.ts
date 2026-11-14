@@ -7,7 +7,7 @@
 //     and to Art-Net / sACN nodes (server/net-dmx.ts),
 //     so closing or backgrounding a browser tab never affects the lights
 //   - saves the show to server/data/session.show.json
-//   - answers the chat panel at POST /chat and /chat/summary (server/chat/:
+//   - answers the chat panel at POST /chat and /chat/summary, GET /chat/models (server/chat/:
 //     asks the model; the tools run in the page), and keeps its chats at
 //     /chat/chats (server/data/session.chats.json, the show's chats in their own file)
 //
@@ -38,7 +38,7 @@ import { readJsonFile, writeJsonFile } from "./files.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
 import { createShow } from "./show.ts";
-import { handleChat, handleChatSummary } from "./chat/chat.ts";
+import { handleChat, handleChatModels, handleChatSummary } from "./chat/chat.ts";
 import { createChats } from "./chat/chats.ts";
 import type { ClientMessage, OutputStatus, Reply, Request, SavedStage, ServerMessage } from "../shared/protocol.ts";
 import { errorMessage, isRecord, unhandled } from "../shared/guards.ts";
@@ -310,6 +310,11 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     // JSON only: a browser asks first before sending JSON to another site (and this never says yes).
     else if (!/^application\/json\b/i.test(req.headers["content-type"] ?? "")) res.writeHead(415).end("JSON only");
     else (url.pathname === "/chat" ? handleChat : handleChatSummary)(req, res).catch((err) => console.error(err));
+    return;
+  }
+  if (url.pathname === "/chat/models") {
+    if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
+    else handleChatModels(req, res);
     return;
   }
   if (url.pathname === "/about") {

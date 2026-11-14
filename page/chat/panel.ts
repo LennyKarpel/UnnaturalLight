@@ -6,21 +6,33 @@
  * they're kept on the show server (./store.ts: server/data/session.chats.json,
  * next to the show's session.show.json; a saved show file holds both), so
  * every window and computer shares them. New show / Load show replace them all. This browser keeps the panel's own settings (open,
- * width, which chat is open, ↑ / ↓ prompts). A long chat is kept short: past
+ * width, which chat is open, the chat settings (⚙: model, Show details), ↑ / ↓ prompts). A long chat is kept short: past
  * MAX_PROMPTS prompts, the oldest are summed up by the model and the summary
  * takes their place.
  */
 
-import { CHAT_NAME_MAX, MAX_CHATS, type ChatChange, type ChatAssistantMessage, type ChatMessage, type ChatToolCall, type SavedChat } from "../../shared/chat-protocol.ts";
+import {
+  CHAT_NAME_MAX,
+  MAX_CHATS,
+  type ChatChange,
+  type ChatAssistantMessage,
+  type ChatMessage,
+  type ChatModels,
+  type ChatServerTool,
+  type ChatToolCall,
+  type ChatUsage,
+  type SavedChat,
+} from "../../shared/chat-protocol.ts";
 import { button, el } from "../../shared/html.ts";
 import { ask } from "../../shared/ask.ts";
 import { newId } from "../../shared/ids.ts";
 import { elById } from "../../shared/query.ts";
 import { errorMessage, isRecord, unhandled } from "../../shared/guards.ts";
 import { readStoredJson, storeJson } from "../../shared/storage.ts";
-import { promptCount, repairHistory, runTurn, summarize, summaryCut, type TurnView } from "./loop.ts";
+import { fetchModels, promptCount, repairHistory, runTurn, summarize, summaryCut, type TurnView } from "./loop.ts";
 import { toolByName } from "./tools.ts";
 import { cancelSaves, deleteChat, fetchChats, flushChats, listenChats, saveChat } from "./store.ts";
+import { openChatSettings, updateChatSettings, type ChatSettings } from "./settings.ts";
 
 const KEY = "unnaturallight.chat";
 /** Past this many prompts, the oldest SUMMED are summed up (between turns). */
@@ -39,8 +51,12 @@ const MIN_PANES = 360;
 const MAX_SENT = 50;
 /** A conversation (as the server keeps it). */
 type Chat = SavedChat;
-/** This browser's: `sent`: the prompts typed here, for ↑ / ↓ (all chats, kept across New). `current`: the open chat's id. */
-type Prefs = { open: boolean; width: number; model: string; current: string; sent: string[] };
+/**
+ * This browser's: `sent`: the prompts typed here, for ↑ / ↓ (all chats, kept across New). `current`: the open chat's id.
+ * `model`: the model picked in the chat settings, for every chat ("" = the show server's default).
+ * `details`: show what each tool was sent and answered, the model's tool searches, and each request's tokens (the settings' Show details).
+ */
+type Prefs = { open: boolean; width: number; model: string; details: boolean; current: string; sent: string[] };
 
 /** A chat's name from its first prompt. */
 const nameFrom = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, CHAT_NAME_MAX);
@@ -68,11 +84,13 @@ let fromBrowser: Chat[] = [];
 
 function loadPrefs(): Prefs {
   const saved = readStoredJson(KEY);
-  const prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", current: "", sent: [] };
+  const prefs: Prefs = { open: false, width: DEFAULT_WIDTH, model: "", details: true, current: "", sent: [] };
   if (isRecord(saved)) {
     prefs.open = saved.open === true;
     if (typeof saved.width === "number" && Number.isFinite(saved.width)) prefs.width = saved.width;
-    if (typeof saved.model === "string") prefs.model = saved.model;
+    // Before the model menu, `model` was the last reply's label ("anthropic · …"): not a pick.
+    if (typeof saved.model === "string" && !saved.model.includes(" ")) prefs.model = saved.model;
+    if (typeof saved.details === "boolean") prefs.details = saved.details;
     if (Array.isArray(saved.sent)) prefs.sent = saved.sent.filter((t): t is string => typeof t === "string").slice(-MAX_SENT);
     if (Array.isArray(saved.chats)) fromBrowser = readChats(saved.chats);
     // Before named chats: one conversation, `history`.
@@ -123,7 +141,7 @@ async function sumUpOld() {
   summing = true;
   const part = h.slice(0, cut);
   try {
-    const text = await summarize(part);
+    const text = await summarize(part, undefined, prefs.model);
     if (!chats.includes(c) || c.history !== h || !part.every((m, i) => h[i] === m)) return;
     h.splice(0, cut, { role: "summary", text });
     keep(c);
@@ -144,8 +162,9 @@ panel.innerHTML = `
     title="Drag to resize · double-click for the default width"><span class="grip"></span></div>
   <header class="chat-head">
     <button type="button" class="chat-pick quiet" aria-expanded="false" aria-controls="chatList" title="Your chats: switch, rename or delete"><span class="chat-name"></span> ▾</button>
-    <span class="chat-model"></span>
+    <button type="button" class="chat-model quiet" aria-haspopup="dialog" title="The model that answers: click to pick another (chat settings)"><span class="chat-model-name">Model</span></button>
     <button type="button" class="chat-new quiet" title="Start a new chat (the others are kept: ▾)">New</button>
+    <button type="button" class="chat-settings-btn quiet" aria-haspopup="dialog" title="Chat settings: model, details" aria-label="Chat settings">⚙</button>
     <button type="button" class="chat-close quiet" title="Close the chat" aria-label="Close the chat">×</button>
   </header>
   <div class="chat-list thin-scroll" id="chatList" hidden></div>
@@ -157,7 +176,8 @@ panel.innerHTML = `
     </div>
   </form>`;
 const q = <T extends HTMLElement>(sel: string) => panel.querySelector(sel) as T;
-const modelEl = q<HTMLElement>(".chat-model");
+const modelBtn = q<HTMLButtonElement>(".chat-model");
+const modelName = q<HTMLElement>(".chat-model-name");
 const pickBtn = q<HTMLButtonElement>(".chat-pick");
 const nameEl = q<HTMLElement>(".chat-name");
 const list = q<HTMLElement>(".chat-list");
@@ -230,21 +250,86 @@ function bubble(kind: "user" | "assistant" | "error" | "hint" | "pending", text:
   return b;
 }
 
-/** A tool call's line in the log, and its state. */
-function chip(text: string) {
-  const c = el("div", "chat-tool");
-  const label = el("span", "chat-tool-text", text);
+/** Most of a tool's answer shown in its details. */
+const MAX_SHOWN = 4000;
+
+/** A tool's input or answer, for reading: JSON indented, a long one cut short. */
+function pretty(value: unknown): string {
+  let text = typeof value === "string" ? value : JSON.stringify(value);
+  try {
+    text = JSON.stringify(typeof value === "string" ? JSON.parse(value) : value, null, 2);
+  } catch {
+    // Plain text: as it is.
+  }
+  return text.length > MAX_SHOWN ? `${text.slice(0, MAX_SHOWN)}\n… (${text.length - MAX_SHOWN} more characters)` : text;
+}
+
+/** One labeled part of a tool line's details. */
+function detailPart(label: string, text: string) {
+  const part = el("div", "chat-tool-part");
+  part.append(el("div", "chat-tool-label", label), el("pre", "chat-tool-json", text));
+  return part;
+}
+
+/**
+ * A tool call's line in the log, and its state. Click it (with Show details
+ * on) to see the tool, what it was sent and what it answered.
+ */
+function chip(text: string, call?: ChatToolCall) {
+  const c = el("details", "chat-tool");
+  const head = el("summary", "");
   const note = el("span", "chat-tool-note");
-  c.append(label, note);
+  head.append(el("span", "chat-tool-text", text), note);
+  const detail = el("div", "chat-tool-detail");
+  if (call) detail.append(detailPart("Tool", call.name), detailPart("Sent", pretty(call.args)));
+  const answer = el("div", "");
+  detail.append(answer);
+  c.append(head, detail);
   log.append(c);
   scrollDown();
   return {
     el: c,
-    set(state: "wait" | "ok" | "fail" | "stopped", text = "") {
+    /** `result`: what the tool answered (or why it failed), for the details, under `label`. */
+    set(state: "wait" | "ok" | "fail" | "stopped", text = "", result?: string, label = state === "ok" ? "Answered" : "Error") {
       c.dataset.state = state;
       note.textContent = text;
+      if (result !== undefined) answer.replaceChildren(detailPart(label, pretty(result)));
     },
   };
+}
+
+/** A tool the provider ran itself: Claude's tool search finding the tools it needs. */
+function serverChip(t: ChatServerTool) {
+  const search = t.name.startsWith("tool_search");
+  const c = chip(search ? `Looked up tools: “${t.input}”` : `${t.name}: ${t.input}`);
+  c.el.classList.add("is-server");
+  c.set(t.result.startsWith("failed") ? "fail" : "ok", "", t.result || "—", "Found");
+}
+
+/** A model's name for the footers (its name once the models are in, else its id). */
+const modelLabel = (id: string) => models?.models.find((m) => m.id === id)?.name ?? id;
+
+const tokens = (n: number) => (n < 1000 ? String(n) : `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`);
+
+/**
+ * Under a request's last reply (with Show details on): which model answered,
+ * how many tools it used, how long it took (`ms`, while it's fresh) and the
+ * tokens it read and wrote over all its replies.
+ */
+function turnInfo(usages: ChatUsage[], toolCount: number, ms?: number) {
+  if (!usages.length) return;
+  const sum = (k: "input" | "output" | "cacheRead" | "cacheWrite") => usages.reduce((n, u) => n + u[k], 0);
+  const read = sum("input") + sum("cacheRead") + sum("cacheWrite");
+  const parts = [
+    [...new Set(usages.map((u) => modelLabel(u.model)))].join(" → "),
+    toolCount ? `${toolCount} tool call${toolCount === 1 ? "" : "s"}` : "",
+    ms != null ? `${(ms / 1000).toFixed(1)} s` : "",
+    `${tokens(read)} tokens in${sum("cacheRead") ? ` (${tokens(sum("cacheRead"))} cached)` : ""}`,
+    `${tokens(sum("output"))} out`,
+  ];
+  const info = el("div", "chat-turn-info", parts.filter(Boolean).join(" · "));
+  info.title = `${usages.length} model call${usages.length === 1 ? "" : "s"}: ${sum("input")} tokens read at full price, ${sum("cacheRead")} from the prompt cache, ${sum("cacheWrite")} written to it; ${sum("output")} written (thinking included)`;
+  log.append(info);
 }
 
 function describe(call: ChatToolCall) {
@@ -261,9 +346,18 @@ function renderHistory() {
   nameEl.textContent = chatName(chat());
   const h = chat().history;
   if (!h.length) {
-    bubble("hint", "Ask in words: “play song 2”, “what’s up next?”, “master to 60%”, “GO”.");
+    bubble("hint", "Ask in words: “play song 2”, “what’s up next?”, “master to 60%”, “GO”. /clear empties the chat.");
   }
+  // Each request's footer: its replies' usage, put after its last line.
+  let usages: ChatUsage[] = [];
+  let toolCount = 0;
+  const endTurn = () => {
+    turnInfo(usages, toolCount);
+    usages = [];
+    toolCount = 0;
+  };
   h.forEach((m, i) => {
+    if (m.role === "summary" || m.role === "user") endTurn();
     if (m.role === "summary") {
       const d = el("details", "chat-summary");
       d.append(el("summary", "", "Earlier messages, summed up"), el("div", "chat-summary-text", m.text));
@@ -271,16 +365,19 @@ function renderHistory() {
     } else if (m.role === "user") bubble("user", m.text);
     else if (m.role === "assistant") {
       if (m.text) bubble("assistant", m.text);
+      if (m.usage) usages.push(m.usage);
+      toolCount += m.toolCalls.length;
+      for (const t of m.serverTools ?? []) serverChip(t);
       const next = h[i + 1];
       const results = next?.role === "tool" ? next.results : [];
       for (const call of m.toolCalls) {
         const r = results.find((x) => x.id === call.id);
-        const c = chip(describe(call));
-        c.set(!r ? "fail" : r.error ? (r.result.startsWith("Stopped") ? "stopped" : "fail") : "ok", r?.error ? r.result : "");
+        const c = chip(describe(call), call);
+        c.set(!r ? "fail" : r.error ? (r.result.startsWith("Stopped") ? "stopped" : "fail") : "ok", r?.error ? r.result : "", r?.result ?? "Not run");
       }
     }
   });
-  modelEl.textContent = prefs.model;
+  endTurn();
 }
 
 // --- a turn -------------------------------------------------------------------
@@ -375,6 +472,9 @@ async function send(text: string) {
     pending = null;
   };
   const chips = new Map<string, ReturnType<typeof chip>>();
+  const usages: ChatUsage[] = [];
+  let toolCount = 0;
+  const started = Date.now();
   const view: TurnView = {
     waiting: () => {
       if (!current()) return;
@@ -388,33 +488,33 @@ async function send(text: string) {
       streaming.textContent += t;
       scrollDown();
     },
-    reply: (m: ChatAssistantMessage, model) => {
+    reply: (m: ChatAssistantMessage) => {
       if (!current()) return;
       settle();
       if (!streaming && m.text) bubble("assistant", m.text);
       streaming = null;
+      if (m.usage) usages.push(m.usage);
+      toolCount += m.toolCalls.length;
+      for (const t of m.serverTools ?? []) serverChip(t);
       for (const call of m.toolCalls) {
-        const c = chip(describe(call));
+        const c = chip(describe(call), call);
         c.set("wait");
         chips.set(call.id, c);
       }
-      prefs.model = model;
-      modelEl.textContent = model;
-      save();
       keep(c);
     },
     results: () => {
       if (current()) keep(c);
     },
     tool: (call) => {
-      const c = chips.get(call.id) ?? chip(describe(call));
-      return { done: (ok, note) => c.set(ok ? "ok" : "fail", note) };
+      const c = chips.get(call.id) ?? chip(describe(call), call);
+      return { done: (ok, result) => c.set(ok ? "ok" : "fail", ok ? "" : result, result) };
     },
   };
 
   const history = c.history;
   try {
-    await runTurn(history, view, abort.signal);
+    await runTurn(history, view, abort.signal, prefs.model);
   } catch (err) {
     if (!abort.signal.aborted) bubble("error", errorMessage(err, "Chat failed"));
   }
@@ -434,7 +534,8 @@ async function send(text: string) {
     promptEl.title = "Not sent: it failed or was stopped before anything was done";
   }
   if (abort.signal.aborted) bubble("hint", "Stopped.");
-  for (const c of chips.values()) if (c.el.dataset.state === "wait") c.set("stopped", "Not run");
+  for (const c of chips.values()) if (c.el.dataset.state === "wait") c.set("stopped", "Not run", "Not run");
+  turnInfo(usages, toolCount, Date.now() - started);
   const after = editSnapshot();
   if (before && after && after.key !== before.key) offerUndo(before, after);
   running = null;
@@ -442,6 +543,48 @@ async function send(text: string) {
   keep(c);
   input.focus();
   void sumUpOld();
+}
+
+// --- commands typed in the box (/clear): done here, never sent to the model --------
+
+/** What each command does, for the "no such command" note. */
+const COMMANDS: Record<string, { help: string; run: () => void }> = {
+  clear: { help: "empty this chat", run: clearChat },
+};
+
+/** A command (`/clear`), or null when the text is a prompt. */
+const commandIn = (text: string) => /^\/([a-z]+)$/i.exec(text)?.[1]?.toLowerCase() ?? null;
+
+function runCommand(name: string) {
+  const cmd = COMMANDS[name];
+  if (cmd) {
+    cmd.run();
+    return;
+  }
+  log.querySelector(".is-hint")?.remove();
+  bubble("hint", `No command /${name}. Commands: ${Object.entries(COMMANDS).map(([n, c]) => `/${n} (${c.help})`).join(", ")}.`);
+}
+
+/**
+ * /clear: empty the open chat, for good (its messages and name: the next
+ * prompt names it again), in every window. A request running in it stops.
+ * The show isn't changed; the other chats stay (New keeps this one instead).
+ */
+function clearChat() {
+  running?.abort();
+  running = null;
+  turn++;
+  setBusy(false);
+  const c = chat();
+  // A new list: a stopped turn may still hold the old one.
+  c.history = [];
+  c.name = "";
+  c.used = Date.now();
+  saveChat(c);
+  renderHistory();
+  const hint = log.querySelector(".is-hint");
+  if (hint) hint.textContent = `Cleared. ${hint.textContent}`;
+  input.focus();
 }
 
 form.addEventListener("submit", (e) => {
@@ -455,7 +598,9 @@ form.addEventListener("submit", (e) => {
   if (!text || !loaded) return;
   input.value = "";
   remember(text);
-  void send(text);
+  const command = commandIn(text);
+  if (command) runCommand(command);
+  else void send(text);
 });
 
 // ↑ / ↓ in the box: step back and forth through the prompts sent before, as
@@ -686,6 +831,74 @@ q<HTMLButtonElement>(".chat-new").addEventListener("click", () => {
   openChat(chat());
 });
 q<HTMLButtonElement>(".chat-close").addEventListener("click", () => setOpen(false));
+
+// --- chat settings (⚙): which model answers, and Show details (this browser's, for every chat) ---
+
+/** The show server's models (GET /chat/models), once they're in. */
+let models: ChatModels | null = null;
+/** Why they couldn't be had (shown in the settings). */
+let modelsError = "";
+
+/** The settings as the dialog takes them, with what to do on a change. */
+const settings = (): ChatSettings => ({
+  models,
+  modelsError,
+  model: prefs.model,
+  details: prefs.details,
+  onModel: (id) => {
+    prefs.model = id;
+    save();
+    showModel();
+  },
+  onDetails: setDetails,
+});
+
+/** The picked model's name in the header (the server's default when none is picked). */
+function showModel() {
+  const id = prefs.model || models?.default || "";
+  const m = models?.models.find((x) => x.id === id);
+  // Short: the header is crowded ("Opus 5.5"; the full name is in the tooltip and the settings).
+  modelName.textContent = m?.name.replace(/^Claude /, "") ?? (id || "Model");
+  modelBtn.title = `${m ? `${m.name} answers` : "The model that answers"}: click to pick another (chat settings)`;
+}
+
+async function loadModels() {
+  try {
+    models = await fetchModels();
+    modelsError = "";
+    // A pick this server doesn't offer (it changed): back to its default.
+    if (prefs.model && !models.models.some((m) => m.id === prefs.model)) {
+      prefs.model = "";
+      save();
+    }
+    // The footers name the models now.
+    if (!running) renderHistory();
+  } catch (err) {
+    modelsError = errorMessage(err, "No models");
+  }
+  showModel();
+  updateChatSettings(settings());
+}
+
+/** Show or hide the tool details, tool searches and footers (only a class: nothing is redrawn). */
+function setDetails(on: boolean) {
+  prefs.details = on;
+  panel.classList.toggle("hide-details", !on);
+  save();
+}
+
+function openSettings() {
+  showList(false);
+  openChatSettings(settings());
+  // The server may have restarted with other models since.
+  void loadModels();
+}
+
+modelBtn.addEventListener("click", openSettings);
+q<HTMLButtonElement>(".chat-settings-btn").addEventListener("click", openSettings);
+setDetails(prefs.details);
+showModel();
+void loadModels();
 chatBtn.addEventListener("click", () => setOpen(panel.hidden !== false));
 
 renderHistory();

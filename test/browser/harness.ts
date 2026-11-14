@@ -182,7 +182,11 @@ async function openPage(debugPort: number, url: string) {
  * The server and Chrome; `page()` opens another app window. Call `close()`
  * when done. `data`: a folder whose files the server starts with (copied).
  */
-export async function startApp({ data }: { data?: string } = {}) {
+/**
+ * `chatModels`: give the chat the real provider (Anthropic), so it can list
+ * its models; without an API key, and a test must never send a message then.
+ */
+export async function startApp({ data, chatModels = false }: { data?: string; chatModels?: boolean } = {}) {
   const chrome = chromePath();
   if (!chrome) throw new Error("No Chrome found (set CHROME_PATH)");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "unnaturallight-browser-"));
@@ -194,7 +198,7 @@ export async function startApp({ data }: { data?: string } = {}) {
   const procs: ChildProcess[] = [];
 
   // The chat gets a provider that doesn't exist, so it never calls a real model.
-  const env: NodeJS.ProcessEnv = { ...process.env, UNNATURALLIGHT_DATA_DIR: dataDir, UNNATURALLIGHT_CHAT_PROVIDER: "none-in-tests" };
+  const env: NodeJS.ProcessEnv = { ...process.env, UNNATURALLIGHT_DATA_DIR: dataDir, UNNATURALLIGHT_CHAT_PROVIDER: chatModels ? "anthropic" : "none-in-tests" };
   delete env.ANTHROPIC_API_KEY;
   const server = spawn(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", "server/server.ts", String(port), "--no-open"], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
   procs.push(server);
