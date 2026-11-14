@@ -64,9 +64,9 @@ export const consoleLink = createConsoleLink({
 const sortedConsoleFixtures = () => [...consoleLink.fixtures()].sort((a, b) => a.channelStart - b.channelStart);
 export const consoleFixtureById = (id: string | null): ConsoleFixture | null => consoleLink.fixtures().find((c) => c.id === id) ?? null;
 /** Channel as shown: "45", or "2/45" (universe/channel) when the console has several universes. */
-const addr = (ch: number) => formatAddress(ch, consoleLink.universes);
+export const addr = (ch: number) => formatAddress(ch, consoleLink.universes);
 /** "2/45" or "45" → channel number in any universe (null if invalid). */
-const parseAddr = (text: string) => parseAddress(text, MAX_UNIVERSES);
+export const parseAddr = (text: string) => parseAddress(text, MAX_UNIVERSES);
 const chRange = (c: ConsoleFixture) => `Ch ${addr(c.channelStart)}${c.channelEnd > c.channelStart ? `–${addr(c.channelEnd)}` : ""}`;
 
 /**
@@ -198,14 +198,72 @@ function linkRigFrom(rig: Rig, id: string) {
   const members = rigMembers(rig);
   if (id === "__unlink") {
     members.forEach((m) => { m.link = { consoleId: null, start: null, layout: [] }; });
+    afterLinkChange();
   } else {
-    const list = sortedConsoleFixtures();
-    const first = list.findIndex((c) => c.id === id);
-    if (first < 0) return;
-    members.forEach((m, k) => linkToConsoleFixture(m, list[first + k]));
-    const linked = Math.min(members.length, list.length - first);
+    const linked = linkInOrder(members, id);
     if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console fixtures`, 4000);
   }
+}
+
+// --- link changes (the inspector's controls and the chat's tools use these) ---
+
+/**
+ * Link fixtures in order to console fixtures (by channel), the first to
+ * `consoleId`, the next to the console fixture after it, … Each keeps its
+ * library profile. Returns how many were linked (fewer: ran out).
+ */
+export function linkInOrder(fixtures: Fixture[], consoleId: string): number {
+  const list = sortedConsoleFixtures();
+  const first = list.findIndex((c) => c.id === consoleId);
+  if (first < 0) return 0;
+  let linked = 0;
+  fixtures.forEach((f, k) => {
+    const ci = list[first + k];
+    if (!ci) return;
+    releaseOwned(f, ci.id);
+    const profile = f.link.fixture;
+    linkToConsoleFixture(f, ci);
+    f.link.fixture = profile ?? null;
+    linked++;
+  });
+  afterLinkChange();
+  return linked;
+}
+
+/** A console fixture the stage registered for `fixture`, left for another link: remove it in the console. */
+function releaseOwned(fixture: Fixture, keep: string | null) {
+  if (fixture.link.owned && fixture.link.consoleId && keep !== fixture.link.consoleId) consoleLink.unregister([fixture.link.consoleId]);
+}
+
+/** Stage only: no console link (one the stage registered is removed in the console). */
+export function unlinkFixtures(fixtures: Fixture[]) {
+  for (const f of fixtures) {
+    releaseOwned(f, null);
+    f.link = { consoleId: null, start: null, layout: [], fixture: f.link.fixture ?? null };
+  }
+  afterLinkChange();
+}
+
+/** Drive `fixture` from DMX channels at `start` directly (no console fixture), `layout` = what each channel does (default: its library mode's, or the moving-light preset). */
+export function linkManual(fixture: Fixture, start: number, layout?: (DmxAttr | null)[]) {
+  releaseOwned(fixture, null);
+  const own = fixture.link.fixture?.channels.map((c) => c.attr);
+  fixture.link = {
+    consoleId: null,
+    start,
+    layout: layout?.length ? layout.slice(0, 16) : own?.length ? own : fixture.link.layout.length ? fixture.link.layout : [...LAYOUT_PRESETS["movable/multi"]],
+    fixture: fixture.link.fixture ?? null,
+  };
+  afterLinkChange();
+}
+
+/** Make a console fixture for each (a console type key; universe null = the first with room), as the inspector's Register does. */
+export function registerFixtures(fixtures: Fixture[], typeKey: string, universe: number | null) {
+  for (const f of fixtures) {
+    releaseOwned(f, null);
+    f.link = { consoleId: null, start: null, layout: [], fixture: f.link.fixture ?? null, register: consoleTypeFromKey(typeKey), universe };
+  }
+  requestRegistrations();
   afterLinkChange();
 }
 
@@ -221,9 +279,8 @@ export function bindLinkControls() {
     if (v === "") fixture.link = { consoleId: null, start: null, layout: [] };
     else if (v === "manual") fixture.link = { consoleId: null, start: fixture.link.start ?? 1, layout: fixture.link.layout.length ? fixture.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
     else {
-      const profile = fixture.link.fixture;
-      linkToConsoleFixture(fixture, consoleFixtureById(v));
-      fixture.link.fixture = profile ?? null;
+      linkInOrder([fixture], v);
+      return;
     }
     afterLinkChange();
   });

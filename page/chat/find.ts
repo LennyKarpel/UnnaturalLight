@@ -55,3 +55,13 @@ export function findFixtures<T extends { name: string; group?: string | null }>(
   }
   return [...found];
 }
+
+/** A set by its number (1 = first) or name (exact, else the one whose name contains it). */
+export function findSet<T extends { name: string }>(sets: T[], query: unknown): T {
+  const q = String(query ?? "").trim();
+  if (/^\d+$/.test(q)) {
+    const n = Number(q);
+    if (n >= 1 && n <= sets.length) return sets[n - 1];
+  }
+  return findByName(sets, q, "set", "There are no sets");
+}

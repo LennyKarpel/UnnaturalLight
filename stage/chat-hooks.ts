@@ -8,7 +8,10 @@ import { setRiserField, RISER_FIELDS, type Riser, type RiserField } from "./rise
 import { renderInspector } from "./sidebar.ts";
 import { updateBox } from "./view3d.ts";
 import { syncBoxInputs } from "./dialogs.ts";
-import { requestRegistrations } from "./link.ts";
+import { requestRegistrations, linkInOrder, unlinkFixtures, linkManual, registerFixtures, consoleFixtureById, addr, parseAddr } from "./link.ts";
+import { listManufacturers, listFixtures, loadFixture, modesOf, profileFor, type FixtureProfile } from "./fixture-library.ts";
+import { applyFixture } from "./stage-model.ts";
+import type { DmxAttr } from "../shared/attributes.ts";
 import { aimAndFollow, followingOf, stopFollowing } from "./follow.ts";
 import { unitName } from "./units.ts";
 import { takeStage } from "./stage.ts";
@@ -47,6 +50,61 @@ const riserInfo = (r: Riser) => ({ name: r.name, x: r.x, z: r.z, width: r.w, dep
 const RISER_SIZE_KEYS = { width: "w", depth: "d", height: "h" } as const;
 
 const stageChat = {
+  // --- the fixture library (Open Fixture Library; needs internet) -------------
+
+  /** Manufacturers whose name or key contains `query` (all if empty). */
+  async manufacturers(query: string) {
+    const q = query.trim().toLowerCase();
+    return (await listManufacturers()).filter((m) => !q || m.name.toLowerCase().includes(q) || m.key.includes(q));
+  },
+  /** A manufacturer's fixtures whose name or key contains `query`. */
+  async libraryFixtures(manufacturer: string, query: string) {
+    const q = query.trim().toLowerCase();
+    return (await listFixtures(manufacturer)).filter((f) => !q || f.name.toLowerCase().includes(q) || f.key.includes(q));
+  },
+  /** A library fixture's modes (channel count, and whether it can be used here). */
+  async libraryModes(manufacturer: string, fixture: string) {
+    return modesOf(await loadFixture(manufacturer, fixture));
+  },
+  /** The profile for one mode, to place with addFixtures / addRig. */
+  async libraryProfile(manufacturer: { key: string; name: string }, fixture: string, modeIndex: number): Promise<FixtureProfile> {
+    return profileFor(await loadFixture(manufacturer.key, fixture), manufacturer.name, manufacturer.key, fixture, modeIndex);
+  },
+
+  // --- console links ----------------------------------------------------------
+
+  /** A DMX address the person typed (45, or 2/45), or null. */
+  parseAddress: (text: string) => parseAddr(text),
+
+  /** Link fixtures in order to console fixtures, the first to `consoleId` (by channel order after it). Returns how many were linked. */
+  linkToConsole(ids: string[], consoleId: string) {
+    if (!consoleFixtureById(consoleId)) throw new Error("The stage doesn't know that console fixture yet");
+    const n = linkInOrder(ids.map(fixtureOrThrow), consoleId);
+    showChanged(ids);
+    return n;
+  },
+  /** Stage only: no console link. */
+  unlink(ids: string[]) {
+    unlinkFixtures(ids.map(fixtureOrThrow));
+    showChanged(ids);
+  },
+  /** Drive fixtures from DMX channels directly, each from its own start (consecutive blocks from `start`). */
+  linkManual(ids: string[], start: number, layout?: (DmxAttr | null)[]) {
+    let at = start;
+    for (const f of ids.map(fixtureOrThrow)) {
+      linkManual(f, at, layout);
+      at += f.link.layout.length;
+    }
+    showChanged(ids);
+  },
+  /** Give each a new console fixture (a console type key; ignored for library fixtures, which bring their own channels). */
+  register(ids: string[], typeKey: string, universe: number | null) {
+    registerFixtures(ids.map(fixtureOrThrow), typeKey, universe);
+    showChanged(ids);
+  },
+
+  /** The console fixtures that stage fixtures made (their console ids): the stage owns those. */
+  consoleIds: () => state.fixtures.flatMap((f) => (f.link.consoleId ? [f.link.consoleId] : [])),
   /** The box, rigs and fixtures, for the model to read. */
   stage() {
     return {
@@ -61,6 +119,8 @@ const stageChat = {
         rig: rigOf(f)?.name ?? null,
         pan: round(f.pan, 1), tilt: round(f.tilt, 1),
         inConsole: !!(f.link.consoleId || f.link.register),
+        console: f.link.consoleId ? consoleFixtureById(f.link.consoleId)?.name ?? "(missing console fixture)" : f.link.start ? `manual ${addr(f.link.start)}` : f.link.register ? "registering" : null,
+        ...(f.link.fixture ? { model: `${f.link.fixture.manufacturer} ${f.link.fixture.model} (${f.link.fixture.mode})` } : {}),
         selected: state.selected.includes(f.id),
         following: followingOf(f)?.name ?? null,
       })),
@@ -141,13 +201,21 @@ const stageChat = {
     return riser.name;
   },
 
-  /** New free fixtures at these points; `type` = a console type key or "none" (stage only). */
-  addFixtures(points: { x: number; y: number; z: number; name?: string | undefined }[], type: string) {
+  /**
+   * New free fixtures at these points; `type` = a console type key or "none"
+   * (stage only). With a library `profile` they're that real fixture (named
+   * after its model unless named), and their console fixtures get its channels.
+   */
+  addFixtures(points: { x: number; y: number; z: number; name?: string | undefined }[], type: string, profile?: FixtureProfile | null) {
     const room = MAX_FIXTURES - state.fixtures.length;
     if (points.length > room) throw new Error(`Only room for ${room} more fixtures (max ${MAX_FIXTURES})`);
-    const register = consoleTypeFromKey(type);
+    const register = type === "none" ? null : profile ? { mount: profile.mount, color: profile.color } : consoleTypeFromKey(type);
     const added = points.map((p) => {
       const f = createFixture(p.x, p.y, p.z, state.fixtures.length, state.box);
+      if (profile) {
+        applyFixture(f, profile);
+        f.name = `${profile.model} ${state.fixtures.filter((i) => i.link.fixture?.model === profile.model).length + 1}`;
+      }
       if (p.name?.trim()) f.name = p.name.trim();
       f.link.register = register;
       state.fixtures.push(f);
@@ -159,7 +227,7 @@ const stageChat = {
   },
 
   /** A new rig (circle, square, line) centered at (x, y, z). */
-  addRig(cfg: { type: RigType; x: number; y: number; z: number; size?: number | undefined; count?: number | undefined; tilt?: number | undefined; yaw?: number | undefined; consoleType: string; name?: string | undefined }) {
+  addRig(cfg: { type: RigType; x: number; y: number; z: number; size?: number | undefined; count?: number | undefined; tilt?: number | undefined; yaw?: number | undefined; consoleType: string; name?: string | undefined; profile?: FixtureProfile | null }) {
     const d = RIG_TYPES[cfg.type].defaults;
     const count = Math.round(cfg.count ?? d.count);
     const room = MAX_FIXTURES - state.fixtures.length;
@@ -172,8 +240,8 @@ const stageChat = {
       count,
       tilt: clamp(cfg.tilt ?? d.tilt, -90, 90),
       yaw: cfg.yaw ?? d.yaw,
-      consoleType: consoleTypeFromKey(cfg.consoleType),
-      fixture: null,
+      consoleType: cfg.consoleType === "none" ? null : cfg.profile ? { mount: cfg.profile.mount, color: cfg.profile.color } : consoleTypeFromKey(cfg.consoleType),
+      fixture: cfg.profile ?? null,
       universe: null,
     }, cfg.x, cfg.y, cfg.z);
     const rig = state.rigs.find((r) => !before.has(r.id));

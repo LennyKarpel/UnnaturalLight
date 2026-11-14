@@ -9,6 +9,7 @@ import {
   MAX_SETS,
   moveEntry,
   normalizeSetName,
+  type SetEntry,
   type ShowSet,
 } from "./sets.ts";
 import {
@@ -49,9 +50,10 @@ function editSet() {
   return set;
 }
 
-/** The set changed: save, and if it's the one running, update UP NEXT. (The Show tab redraws when it's opened.) */
-function setChanged() {
-  if (editSet().id === state.activeSetId) refreshUpNext();
+/** `set` changed: show it here, save, and if it's the one running, update UP NEXT. (The Show tab redraws when it's opened.) */
+function setChanged(set: ShowSet) {
+  editSetId = set.id;
+  if (set.id === state.activeSetId) refreshUpNext();
   else persistSession();
   renderSetTab();
 }
@@ -213,7 +215,7 @@ setEntryScroll.addEventListener("drop", (event) => {
   } else if (slot != null) {
     const after = slot === rows.length;
     const targetId = rows[after ? rows.length - 1 : slot].dataset.entryId;
-    if (targetId && moveEntry(editSet(), what.entryId, targetId, after)) setChanged();
+    if (targetId) reorderSet(editSet(), what.entryId, targetId, after);
   }
 });
 
@@ -237,71 +239,117 @@ setSourceScroll.addEventListener("drop", (event) => {
   removeEntry(entryId);
 });
 
-function addSongToSet(songId: string, index: number) {
-  const set = editSet();
-  if (set.entries.length >= MAX_SET_ENTRIES) return;
-  set.entries.splice(clamp(index, 0, set.entries.length), 0, createEntry(songId));
-  setChanged();
+// --- set edits (the tab's controls and the chat's tools both use these) ------
+// Each takes the set it edits and shows that set here.
+
+/** Put `songId` in `set` at `index` (clamped). Returns the new entry. */
+export function addToSet(set: ShowSet, songId: string, index = set.entries.length): SetEntry {
+  if (set.entries.length >= MAX_SET_ENTRIES) throw new Error(`A set holds at most ${MAX_SET_ENTRIES} songs`);
+  const entry = createEntry(songId);
+  set.entries.splice(clamp(index, 0, set.entries.length), 0, entry);
+  setChanged(set);
+  return entry;
 }
 
-function removeEntry(entryId: string) {
-  const set = editSet();
+export function removeFromSet(set: ShowSet, entryId: string) {
   set.entries = set.entries.filter((entry) => entry.id !== entryId);
-  setChanged();
+  setChanged(set);
 }
 
-/** Run the set shown here from `entryId` (its song, first cue). */
-function playEntry(entryId: string) {
-  const set = editSet();
+/** Move entry `fromId` before (or `after`) entry `toId`. */
+export function reorderSet(set: ShowSet, fromId: string, toId: string, after: boolean) {
+  if (moveEntry(set, fromId, toId, after)) setChanged(set);
+}
+
+/** Run `set` from `entryId` (its song, first cue). */
+export function playSetEntry(set: ShowSet, entryId: string) {
   const entry = set.entries.find((item) => item.id === entryId);
   if (!entry) return;
+  editSetId = set.id;
   state.activeSetId = set.id;
   setActiveSong(entry.songId, entry.id);
   renderSetTab();
 }
 
-/** Make the set shown here the one the Run tab runs, from its first song. */
-function runSet() {
-  const set = editSet();
+/** Make `set` the one the Run tab runs, from its first song. */
+export function runSet(set: ShowSet) {
   if (set.entries.length) {
-    playEntry(set.entries[0].id);
+    playSetEntry(set, set.entries[0].id);
   } else {
+    editSetId = set.id;
     state.activeSetId = set.id;
     refreshUpNext();
     renderSetTab();
   }
 }
 
+/** A new set after `after` (default: at the end), with `songIds` in order. */
+export function addSet(name: string, songIds: string[] = [], after?: ShowSet): ShowSet {
+  if (state.sets.length >= MAX_SETS) throw new Error(`The show has its maximum of ${MAX_SETS} sets`);
+  const set = createSet({ name: normalizeSetName(name, state.sets.length), songIds });
+  state.sets.splice(after ? state.sets.indexOf(after) + 1 : state.sets.length, 0, set);
+  editSetId = set.id;
+  persistSession();
+  renderSetTab();
+  return set;
+}
+
+export function renameSetTo(set: ShowSet, name: string) {
+  set.name = normalizeSetName(name, state.sets.indexOf(set));
+  setChanged(set);
+  return set.name;
+}
+
+/** A copy of `set` right after it, named "… copy" unless `name` is given. */
+export function copySet(set: ShowSet, name?: string) {
+  return addSet(name ?? `${set.name} copy`.slice(0, 40), set.entries.map((entry) => entry.songId), set);
+}
+
+/** Delete `set` (its songs stay in the show; the show keeps at least one set). Deleting the running set runs the first one left. */
+export function removeSet(set: ShowSet) {
+  if (state.sets.length <= 1) throw new Error("The show keeps at least one set");
+  const running = set.id === state.activeSetId;
+  state.sets.splice(state.sets.indexOf(set), 1);
+  if (editSetId === set.id) editSetId = state.sets[0].id;
+  if (running) {
+    state.activeSetId = state.sets[0].id;
+    refreshUpNext();
+  } else {
+    persistSession();
+  }
+  renderSetTab();
+}
+
+// --- the tab's controls -------------------------------------------------------
+
+function addSongToSet(songId: string, index: number) {
+  const set = editSet();
+  if (set.entries.length < MAX_SET_ENTRIES) addToSet(set, songId, index);
+}
+
+function removeEntry(entryId: string) {
+  removeFromSet(editSet(), entryId);
+}
+
+function playEntry(entryId: string) {
+  playSetEntry(editSet(), entryId);
+}
+
 async function newSet() {
   if (state.sets.length >= MAX_SETS) return;
   const name = await promptName({ title: "New set", confirmLabel: "Create", initial: defaultSetName(state.sets.length) });
   if (!name || state.sets.length >= MAX_SETS) return;
-  const set = createSet({ name: normalizeSetName(name, state.sets.length) });
-  state.sets.push(set);
-  editSetId = set.id;
-  persistSession();
-  renderSetTab();
+  addSet(name);
 }
 
 async function renameSet() {
   const set = editSet();
   const name = await promptName({ title: "Rename set", confirmLabel: "Rename", initial: set.name });
-  if (!name) return;
-  set.name = normalizeSetName(name);
-  setChanged();
+  if (name) renameSetTo(set, name);
 }
 
 function duplicateSet() {
-  if (state.sets.length >= MAX_SETS) return;
-  const set = editSet();
-  const copy = createSet({
-    name: `${set.name} copy`.slice(0, 40),
-    songIds: set.entries.map((entry) => entry.songId),
-  });
-  state.sets.splice(state.sets.indexOf(set) + 1, 0, copy);
-  editSetId = copy.id;
-  persistSession();
-  renderSetTab();
+  if (state.sets.length < MAX_SETS) copySet(editSet());
 }
 
 async function deleteSet() {
@@ -313,16 +361,7 @@ async function deleteSet() {
     message: `Delete “${set.name}”? Its songs stay in the show.${running ? " The Run tab will run the first remaining set." : ""}`,
     confirmLabel: "Delete",
   });
-  if (!ok) return;
-  state.sets.splice(state.sets.indexOf(set), 1);
-  editSetId = state.sets[0].id;
-  if (running) {
-    state.activeSetId = state.sets[0].id;
-    refreshUpNext();
-  } else {
-    persistSession();
-  }
-  renderSetTab();
+  if (ok && state.sets.includes(set)) removeSet(set);
 }
 
 setSelect.addEventListener("change", () => {
@@ -332,7 +371,7 @@ setSelect.addEventListener("change", () => {
 
 setSongSearch.addEventListener("input", () => renderSourceList(editSet()));
 
-runSetBtn.addEventListener("click", runSet);
+runSetBtn.addEventListener("click", () => runSet(editSet()));
 
 setMenuBtn.addEventListener("click", async (event) => {
   event.stopPropagation();

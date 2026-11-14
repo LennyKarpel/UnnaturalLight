@@ -72,7 +72,7 @@ async function either<T>(primary: () => Promise<T>, fallback: () => Promise<T>):
 /** "colorsource-par" → "Colorsource Par" (fallback names, when the API isn't reachable). */
 const titleFromKey = (key: string) => key.replace(/[-_]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-async function listManufacturers(): Promise<Manufacturer[]> {
+export async function listManufacturers(): Promise<Manufacturer[]> {
   const list = await either<Manufacturer[]>(
     async () => Object.entries(await getJson<Record<string, { name: string; fixtureCount: number }>>(`${API}/manufacturers`)).map(([key, m]) => ({ key, name: m.name, count: m.fixtureCount })),
     async () => Object.entries(await getJson<Record<string, { name: string }>>(`${RAW}/manufacturers.json`))
@@ -84,7 +84,7 @@ async function listManufacturers(): Promise<Manufacturer[]> {
 
 const FIXTURE_LIST_CACHE = "unnaturallight.stage.oflFixtures.";
 
-async function listFixtures(manufacturer: string): Promise<FixtureEntry[]> {
+export async function listFixtures(manufacturer: string): Promise<FixtureEntry[]> {
   const list = await either<FixtureEntry[]>(
     async () => (await getJson<{ fixtures: FixtureEntry[] }>(`${API}/manufacturers/${encodeURIComponent(manufacturer)}`)).fixtures.map(({ key, name }) => ({ key, name })),
     async () => {
@@ -101,7 +101,7 @@ async function listFixtures(manufacturer: string): Promise<FixtureEntry[]> {
   return list.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-const loadFixture = (manufacturer: string, fixture: string): Promise<OflFixture> =>
+export const loadFixture = (manufacturer: string, fixture: string): Promise<OflFixture> =>
   getJson<OflFixture>(`${RAW}/${encodeURIComponent(manufacturer)}/${encodeURIComponent(fixture)}.json`);
 
 // ---------------------------------------------------------------------

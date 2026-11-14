@@ -95,6 +95,7 @@ test("summaries: accepted in requests, sent to Claude as context, written out pl
 import { findFixtures, fixtureLevels, fixtureRoles, roleFromName, type FixtureInfo } from "../page/chat/tools.ts";
 
 const fx = (name: string, group: string | null, roles: (string | null)[], firstFader: number): FixtureInfo => ({
+  id: name,
   name,
   group,
   channels: roles.map((role, k) => ({ channel: 100 + k, role: role as FixtureInfo["channels"][number]["role"], faders: [firstFader + k] })),
@@ -225,6 +226,202 @@ test("stage tools: risers by name; sizes and center passed through in meters", (
     assert.throws(() => run("edit_riser", { riser: "Drum riser" }), /Nothing to change/);
     assert.throws(() => run("delete_riser", { riser: "lectern" }), /No riser "lectern" \(risers: Drum riser, Keys riser\)/);
     assert.throws(() => run("add_riser", { center: { x: 0 } }), /center z must be a number/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});
+
+test("set tools: sets by number or name (default: the running one); songs by number or name; places 1-based", () => {
+  const calls: unknown[][] = [];
+  const songs = [{ id: "a", name: "Intro", cues: 2 }, { id: "b", name: "Ballad", cues: 2 }, { id: "c", name: "Encore", cues: 2 }];
+  const sets = [
+    { id: "s1", name: "Friday", running: false, songs: [{ id: "a", name: "Intro" }, { id: "b", name: "Ballad" }, { id: "a", name: "Intro" }] },
+    { id: "s2", name: "Saturday", running: true, songs: [{ id: "c", name: "Encore" }] },
+  ];
+  const fake = {
+    songs: () => songs,
+    sets: () => sets,
+    show: () => ({ playing: {} }),
+    addToSet: (...a: unknown[]) => calls.push(["add", ...a]),
+    removeFromSet: (...a: unknown[]) => calls.push(["remove", ...a]),
+    moveInSet: (...a: unknown[]) => calls.push(["move", ...a]),
+    runSet: (...a: unknown[]) => calls.push(["run", ...a]),
+    newSet: (...a: unknown[]) => { calls.push(["new", ...a]); return "s1"; },
+    moveSong: (...a: unknown[]) => calls.push(["moveSong", ...a]),
+  };
+  (globalThis as { window?: unknown }).window = { consoleChat: fake };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    run("add_to_set", { songs: ["3", "ballad"] });
+    run("add_to_set", { songs: ["Intro"], set: "fri", position: 2 });
+    run("remove_from_set", { set: "1", song: "Ballad" });
+    run("move_in_set", { set: "Friday", from: 3, to: 1 });
+    run("run_set", { set: "2", from: 1 });
+    run("new_set", { name: "Sunday", songs: ["1", "Encore"] });
+    run("move_song", { song: "Encore", to: 1 });
+    assert.deepEqual(calls, [
+      ["add", "s2", ["c", "b"], undefined],
+      ["add", "s1", ["a"], 1],
+      ["remove", "s1", 1],
+      ["move", "s1", 2, 0],
+      ["run", "s2", 0],
+      ["new", "Sunday", ["a", "c"]],
+      ["moveSong", "c", 0],
+    ]);
+    assert.throws(() => run("remove_from_set", { set: "Friday", song: "Intro" }), /in "Friday" 2 times \(at 1, 3\): give the position/);
+    assert.throws(() => run("remove_from_set", { song: "Intro" }), /"Intro" isn't in "Saturday"/);
+    assert.throws(() => run("remove_from_set", {}), /either position or song/);
+    assert.throws(() => run("move_in_set", { from: 1, to: 2 }), /to must be 1–1/);
+    assert.throws(() => run("add_to_set", { songs: ["Intro"], set: "Sunday" }), /No set "Sunday" \(sets: Friday, Saturday\)/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});
+
+test("step, cue, patch, fixture and output tools: what they pass to the console", async () => {
+  const calls: unknown[][] = [];
+  const blank = () => Array(256).fill(0);
+  const own = blank();
+  own[0] = 200;
+  own[5] = 50;
+  const step1 = blank();
+  step1[1] = 99;
+  const cues = [
+    { name: "", fadeSeconds: 4, levels: own, aims: [], steps: [{ fadeSeconds: 2, holdSeconds: 0, levels: step1, aims: [] }] },
+    { name: "", fadeSeconds: 4, levels: blank(), aims: [], steps: [] },
+  ];
+  const fixtures = [
+    { id: "p1", name: "Par 1", group: "Pars", channels: [{ channel: 1, role: "dimmer", faders: [1] }] },
+    { id: "p2", name: "Par 2", group: "Pars", channels: [{ channel: 2, role: "dimmer", faders: [6] }] },
+  ];
+  const fake = {
+    songs: () => [{ id: "s", name: "Song", cues: 2 }],
+    show: () => ({ playing: { song: { number: 1 }, live: { cue: 2 } }, songs: [{ cues: [{ number: 1, name: "" }, { number: 2, name: "" }] }] }),
+    cue: (_: unknown, i: number) => cues[i],
+    fixtures: () => fixtures,
+    setCueLevels: (...a: unknown[]) => calls.push(["levels", a[1], (a[2] as [number, number][]).filter(([, v]) => v), a[3]]),
+    addStep: (...a: unknown[]) => { calls.push(["addStep", ...a.slice(1)]); return 0; },
+    editStep: (...a: unknown[]) => { calls.push(["editStep", ...a.slice(1)]); return {}; },
+    moveCue: (...a: unknown[]) => calls.push(["moveCue", ...a.slice(1)]),
+    patchFader: (...a: unknown[]) => calls.push(["patch", ...a]),
+    addFixtures: (o: unknown) => { calls.push(["addFixtures", o]); return [{ name: "Mover" }]; },
+    deleteFixtures: (ids: unknown) => calls.push(["deleteFixtures", ids]),
+    outputs: () => ({ universes: 2, maxUniverses: 4, outputs: [{ universe: 1 }, { universe: 2 }] }),
+    usbPro: async (...a: unknown[]) => { calls.push(["usb", ...a]); },
+    network: async (...a: unknown[]) => { calls.push(["net", ...a]); },
+  };
+  (globalThis as { window?: unknown }).window = { consoleChat: fake, stageChat: { consoleIds: () => ["p2"] } };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    // Into the LIVE cue (2) from cue 1: all of it, then only Par 2's fader, then from its step 1 into a step.
+    run("copy_levels", { from_cue: 1 });
+    run("copy_levels", { from_cue: 1, fixtures: ["Par 2"] });
+    run("copy_levels", { from_cue: 1, from_step: 1, cue: 1, step: 1 });
+    run("add_step", { cue: 1, after: 0, copy_of: 1, hold_seconds: 3 });
+    run("edit_step", { cue: 1, step: 1, fade_seconds: 6 });
+    run("move_cue", { cue: 2, to: 1 });
+    run("patch_fader", { fader: 3, channels: ["2/45"], name: "Haze" });
+    run("add_fixtures", { name: "Mover", channels: 3, quantity: 2, roles: ["pan", "tilt", "other"] });
+    run("delete_console_fixtures", { fixtures: ["Par 1"] });
+    await run("set_output", { universe: 2, usb_pro: true, network: "artnet", host: "10.0.0.5" });
+    await run("set_output", { network: "off" });
+    assert.deepEqual(calls, [
+      ["levels", 1, [[0, 200], [5, 50]], undefined],
+      ["levels", 1, [[5, 50]], undefined],
+      ["levels", 0, [[1, 99]], 0],
+      ["addStep", 0, { at: 0, copyOf: 0, fadeSeconds: undefined, holdSeconds: 3 }],
+      ["editStep", 0, 0, { fadeSeconds: 6, holdSeconds: undefined }],
+      ["moveCue", 1, 0],
+      ["patch", 2, { channels: [{ address: "2/45", max: undefined }], name: "Haze" }],
+      ["addFixtures", { name: "Mover", channels: 3, qty: 2, roles: ["pan", "tilt", null], group: null, universe: null, mount: "movable", color: "single" }],
+      ["deleteFixtures", ["p1"]],
+      ["usb", 2, true],
+      ["net", 2, { protocol: "artnet", host: "10.0.0.5" }],
+      ["net", 1, null],
+    ]);
+    assert.throws(() => run("get_cue", { cue: 2, step: 1 }), /Cue 2 has no steps/);
+    assert.throws(() => run("edit_step", { cue: 1, step: 2, hold_seconds: 1 }), /step must be 1–1/);
+    assert.throws(() => run("delete_console_fixtures", { fixtures: ["Pars"] }), /On the stage \(delete them there with delete_fixtures\): Par 2/);
+    assert.throws(() => run("add_fixtures", { name: "X", channels: 1, roles: ["dimmer", "red"] }), /2 roles for 1 channels/);
+    assert.throws(() => run("add_fixtures", { name: "X", channels: 1, roles: ["laser"] }), /"laser" isn't a channel role/);
+    await assert.rejects(async () => run("set_output", { universe: 3, network: "sacn" }), /universe must be 1–2/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});
+
+test("library, link, step, submaster, fixture, group and show tools: what they pass on", async () => {
+  const calls: unknown[][] = [];
+  const profile = { model: "Spot 7" };
+  const stageFake = {
+    stage: () => ({ fixtures: [
+      { id: "a", name: "Spot 7 1", rig: null, selected: false, console: null },
+      { id: "b", name: "Spot 7 2", rig: null, selected: false, console: null },
+    ] }),
+    manufacturers: async (q: string) => [{ key: "acme", name: "Acme" }, { key: "acme-pro", name: "Acme Pro" }].filter((m) => m.name.toLowerCase().includes(q.toLowerCase())),
+    libraryFixtures: async () => [{ key: "spot-7", name: "Spot 7" }, { key: "spot-70", name: "Spot 70" }],
+    libraryModes: async () => [
+      { index: 0, name: "Basic", channels: 8, ok: true, reason: "" },
+      { index: 1, name: "Extended", channels: 16, ok: true, reason: "" },
+      { index: 2, name: "Pixel", channels: 40, ok: false, reason: "pixel / matrix mode (not supported)" },
+    ],
+    libraryProfile: async (m: { key: string }, f: string, i: number) => { calls.push(["profile", m.key, f, i]); return profile; },
+    addFixtures: (points: unknown[], type: string, p: unknown) => { calls.push(["place", points.length, type, p]); return []; },
+    linkToConsole: (ids: string[], id: string) => { calls.push(["link", ids, id]); return ids.length; },
+    linkManual: (ids: string[], start: number, layout: unknown) => calls.push(["manual", ids, start, layout]),
+    register: (...a: unknown[]) => calls.push(["register", ...a]),
+    unlink: (ids: string[]) => calls.push(["unlink", ids]),
+    parseAddress: (t: string) => (t === "2/1" ? 513 : null),
+  };
+  const consoleFake = {
+    fixtures: () => [{ id: "c1", name: "Wash 1", group: "Washes", channels: [] }, { id: "c2", name: "Wash 2", group: "Washes", channels: [] }],
+    show: () => ({ serverConnected: true, playing: {}, master: 100, crossfader: 0, submasters: { live: 50, upNext: 100 }, showName: "Tour" }),
+    step: (back: boolean) => { calls.push(["step", back]); return true; },
+    setSubmasters: (...a: unknown[]) => calls.push(["subs", ...a]),
+    editFixture: (...a: unknown[]) => { calls.push(["editFixture", ...a]); return {}; },
+    renameGroup: (...a: unknown[]) => { calls.push(["renameGroup", ...a]); return a[1]; },
+    renameShow: (n: string) => { calls.push(["renameShow", n]); return n; },
+    saveShow: async () => { calls.push(["save"]); return true; },
+  };
+  (globalThis as { window?: unknown }).window = { stageChat: stageFake, consoleChat: consoleFake };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    await run("place_fixtures", { fixtures: [{ x: 0, y: 5, z: 0 }], library: { manufacturer: "acme", model: "Spot 7", mode: "16" } });
+    await run("place_fixtures", { fixtures: [{ x: 0, y: 5, z: 0 }], library: { manufacturer: "Acme", model: "spot-7", mode: "basic" } });
+    await assert.rejects(async () => run("place_fixtures", { fixtures: [{ x: 0, y: 5, z: 0 }], library: { manufacturer: "Acme", model: "Spot 7" } }), /Which mode of Spot 7\? Basic \(8 ch\), Extended \(16 ch\), Pixel \(40 ch: pixel/);
+    await assert.rejects(async () => run("place_fixtures", { fixtures: [{ x: 0, y: 5, z: 0 }], library: { manufacturer: "Acme", model: "Spot", mode: "8" } }), /"Spot" matches 2 Acme fixtures \(Spot 7, Spot 70\)/);
+    await assert.rejects(async () => run("place_fixtures", { fixtures: [{ x: 0, y: 5, z: 0 }], library: { manufacturer: "Acme", model: "Spot 7", mode: "pixel" } }), /can't be used: pixel/);
+    assert.deepEqual(await run("find_library_fixtures", { manufacturer: "acm" }), { manufacturers: ["Acme", "Acme Pro"] });
+    assert.deepEqual(((await run("find_library_fixtures", { manufacturer: "Acme", model: "spot 7" })) as { modes: unknown[] }).modes.length, 3);
+    run("link_fixtures", { fixtures: ["Spot 7 1", "Spot 7 2"], console_fixture: "Wash 1" });
+    run("link_fixtures", { fixtures: ["Spot 7 1"], address: "2/1", layout: ["dimmer", "other"] });
+    run("link_fixtures", { fixtures: ["Spot 7 2"], register: "fixed/single", universe: 2 });
+    run("link_fixtures", { fixtures: ["Spot 7 2"], unlink: true });
+    run("go", { step: "back" });
+    run("set_levels", { live_submaster: 50 });
+    run("edit_fixture", { fixture: "Wash 2", start: "100", mount: "movable" });
+    run("edit_group", { group: "Washes", name: "Floor" });
+    await run("save_show", { name: "Friday" });
+    assert.deepEqual(calls, [
+      ["profile", "acme", "spot-7", 1],
+      ["place", 1, "movable/multi", profile],
+      ["profile", "acme", "spot-7", 0],
+      ["place", 1, "movable/multi", profile],
+      ["link", ["a", "b"], "c1"],
+      ["manual", ["a"], 513, ["dimmer", null]],
+      ["register", ["b"], "fixed/single", 2],
+      ["unlink", ["b"]],
+      ["step", true],
+      ["subs", 50, undefined],
+      ["editFixture", "c2", { name: undefined, group: undefined, start: "100", channels: undefined, mount: "movable", color: undefined }],
+      ["renameGroup", "Washes", "Floor"],
+      ["renameShow", "Friday"],
+      ["save"],
+    ]);
+    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], unlink: true, address: "1" }), /exactly one of/);
+    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], address: "9/1" }), /"9\/1" isn't a DMX address/);
+    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], console_fixture: "Washes" }), /is a group/);
+    assert.throws(() => run("edit_group", { group: "Washes" }), /either a new name or delete/);
   } finally {
     delete (globalThis as { window?: unknown }).window;
   }

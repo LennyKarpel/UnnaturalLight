@@ -78,7 +78,7 @@ function resultText(value: unknown): string {
 }
 
 /** Run one call; always returns a result for the model. */
-function runCall(call: ChatToolCall, view: TurnView, signal: AbortSignal): ChatToolResult {
+async function runCall(call: ChatToolCall, view: TurnView, signal: AbortSignal): Promise<ChatToolResult> {
   const def: ToolDef | undefined = toolByName.get(call.name);
   const fail = (msg: string): ChatToolResult => ({ id: call.id, result: msg, error: true });
   if (!def) return fail(`No tool called ${call.name}`);
@@ -92,7 +92,7 @@ function runCall(call: ChatToolCall, view: TurnView, signal: AbortSignal): ChatT
   if (signal.aborted) return fail("Stopped by the person before it ran");
   const shown = view.tool(call, description);
   try {
-    const result = resultText(def.run(args));
+    const result = resultText(await def.run(args));
     shown.done(true, result);
     return { id: call.id, result };
   } catch (err) {
@@ -193,7 +193,7 @@ export async function runTurn(history: ChatMessage[], view: TurnView, signal: Ab
     if (!message.toolCalls.length) return;
     const results: ChatToolResult[] = [];
     // In order, as the model listed them.
-    for (const call of message.toolCalls) results.push(runCall(call, view, signal));
+    for (const call of message.toolCalls) results.push(await runCall(call, view, signal));
     history.push({ role: "tool", results });
     view.results?.();
     if (signal.aborted) return;

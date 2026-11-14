@@ -8,6 +8,8 @@
 import type { StageChat } from "../../stage/chat-hooks.ts";
 import type { Args, ToolDef } from "./tools.ts";
 import { findByName, findFixtures } from "./find.ts";
+import { DMX_ATTRS, isDmxAttr, type DmxAttr } from "../../shared/attributes.ts";
+import type { FixtureProfile } from "../../stage/fixture-library.ts";
 
 function stage(): StageChat {
   const s = window.stageChat;
@@ -49,6 +51,57 @@ const CONSOLE_TYPE = {
   description:
     "Its console fixture (channels and faders it gets): movable/multi = pan, tilt, RGB, zoom (7 ch, the default); movable/single (4 ch); fixed/multi (dimmer + RGB, 4 ch); fixed/single (dimmer, 1 ch); none = on the stage only",
 };
+
+// --- the fixture library ------------------------------------------------------------
+
+const LIBRARY = {
+  type: "object",
+  description:
+    "A real fixture from the Open Fixture Library (find it with find_library_fixtures): its console fixture gets that mode's channels, named, and the stage draws its pan / tilt / zoom ranges. Overrides console_type (except \"none\").",
+  properties: {
+    manufacturer: { type: "string", description: "Manufacturer name or key" },
+    model: { type: "string", description: "Fixture name or key" },
+    mode: { type: "string", description: "Mode name, or its channel count (\"16\"); may be left out when it has one usable mode" },
+  },
+  required: ["manufacturer", "model"],
+  additionalProperties: false,
+};
+
+/** The one item whose name or key is `query` (ignoring case), else the one containing it. */
+function pickOne<T extends { name: string; key: string }>(items: T[], query: string, kind: string): T {
+  const q = query.trim().toLowerCase();
+  const exact = items.filter((i) => i.name.toLowerCase() === q || i.key === q);
+  if (exact.length === 1) return exact[0];
+  const partial = items.filter((i) => i.name.toLowerCase().includes(q) || i.key.includes(q));
+  if (partial.length === 1) return partial[0];
+  if (!partial.length) throw new Error(`No ${kind} "${query}" in the fixture library`);
+  const names = partial.slice(0, 15).map((i) => i.name);
+  throw new Error(`"${query}" matches ${partial.length} ${kind}s (${names.join(", ")}${partial.length > 15 ? ", …" : ""}): which one?`);
+}
+
+/** A library fixture's profile from what the model calls it. */
+export async function libraryProfile(v: unknown): Promise<FixtureProfile> {
+  const lib = (v ?? {}) as Args;
+  const s = stage();
+  const man = pickOne(await s.manufacturers(""), String(lib.manufacturer ?? ""), "manufacturer");
+  const fix = pickOne(await s.libraryFixtures(man.key, ""), String(lib.model ?? ""), `${man.name} fixture`);
+  const modes = await s.libraryModes(man.key, fix.key);
+  const usable = modes.filter((m) => m.ok);
+  const list = modes.map((m) => `${m.name} (${m.channels} ch${m.ok ? "" : `: ${m.reason}`})`).join(", ");
+  let mode;
+  const q = String(lib.mode ?? "").trim().toLowerCase();
+  if (!q) {
+    if (usable.length !== 1) throw new Error(`Which mode of ${fix.name}? ${list}`);
+    mode = usable[0];
+  } else {
+    const hits = /^\d+$/.test(q) ? modes.filter((m) => m.channels === Number(q)) : modes.filter((m) => m.name.toLowerCase() === q);
+    const found = hits.length ? hits : modes.filter((m) => m.name.toLowerCase().includes(q));
+    if (found.length !== 1) throw new Error(`${found.length ? `"${lib.mode}" matches several modes` : `No mode "${lib.mode}"`} of ${fix.name}: ${list}`);
+    mode = found[0];
+  }
+  if (!mode.ok) throw new Error(`${fix.name}'s ${mode.name} mode can't be used: ${mode.reason}`);
+  return s.libraryProfile(man, fix.key, mode.index);
+}
 
 const FIXTURES = { type: "array", minItems: 1, items: { type: "string" }, description: "Fixture names, rig names (all its fixtures), \"all\" or \"selected\"" };
 
@@ -125,18 +178,21 @@ export const STAGE_TOOLS: ToolDef[] = [
           items: { ...XYZ, properties: { ...XYZ.properties, name: { type: "string", maxLength: 40 } }, required: ["x", "y", "z"] },
         },
         console_type: CONSOLE_TYPE,
+        library: LIBRARY,
       },
       required: ["fixtures"],
       additionalProperties: false,
     },
     describe: (a) => {
       const n = Array.isArray(a.fixtures) ? a.fixtures.length : 0;
-      return `Place ${n} fixture${n === 1 ? "" : "s"}${a.console_type === "none" ? " (stage only)" : ""}`;
+      const lib = (a.library ?? null) as Args | null;
+      return `Place ${n} ${lib ? `${lib.manufacturer} ${lib.model}` : `fixture${n === 1 ? "" : "s"}`}${a.console_type === "none" ? " (stage only)" : ""}`;
     },
-    run: (a) => {
+    run: async (a) => {
       if (!Array.isArray(a.fixtures) || !a.fixtures.length) throw new Error("Which points?");
       const points = a.fixtures.map((p: Args, k: number) => ({ ...spot(p, `fixture ${k + 1}`), name: p.name == null ? undefined : String(p.name) }));
-      return { placed: stage().addFixtures(points, String(a.console_type ?? "movable/multi")) };
+      const profile = a.library == null ? null : await libraryProfile(a.library);
+      return { placed: stage().addFixtures(points, String(a.console_type ?? "movable/multi"), profile) };
     },
   },
   {
@@ -153,21 +209,24 @@ export const STAGE_TOOLS: ToolDef[] = [
         yaw: { type: "number", minimum: -180, maximum: 180 },
         name: { type: "string", maxLength: 40, description: "Default: Ring 1, Square 1, Line 1, …" },
         console_type: CONSOLE_TYPE,
+        library: LIBRARY,
       },
       required: ["type", "center"],
       additionalProperties: false,
     },
     describe: (a) => `Place a ${a.type} rig${a.name ? ` "${a.name}"` : ""} at ${xyzText(a.center)}`,
-    run: (a) => {
+    run: async (a) => {
       const type = a.type === "circle" || a.type === "square" || a.type === "line" ? a.type : null;
       if (!type) throw new Error("type must be circle, square or line");
       const c = spot(a.center, "center");
       const opt = (k: string) => (a[k] == null ? undefined : num(a[k], k));
+      const profile = a.library == null ? null : await libraryProfile(a.library);
       return stage().addRig({
         type, ...c,
         size: opt("size"), count: opt("count"), tilt: opt("tilt"), yaw: opt("yaw"),
         consoleType: String(a.console_type ?? "movable/multi"),
         name: a.name == null ? undefined : String(a.name),
+        profile,
       });
     },
   },
@@ -337,7 +396,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "delete_riser",
-    description: "Delete a riser from the stage.",
+    description: "Delete a riser (it leaves the stage).",
     schema: { type: "object", properties: { riser: { type: "string" } }, required: ["riser"], additionalProperties: false },
     describe: (a) => `Delete riser ${a.riser}`,
     run: (a) => ({ deleted: stage().deleteRiser(findRiser(a.riser).id) }),
@@ -355,7 +414,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "delete_fixtures",
-    description: "Delete fixtures from the stage, and the console fixtures the stage made for them. A fixture in a rig deletes its whole rig.",
+    description: "Delete stage fixtures, and the console fixtures the stage made for them. A fixture in a rig deletes its whole rig.",
     schema: { type: "object", properties: { fixtures: FIXTURES }, required: ["fixtures"], additionalProperties: false },
     describe: (a) => `Delete ${who(a)}`,
     run: (a) => ({ deleted: stage().deleteFixtures(stageFixtures(a.fixtures).map((f) => f.id)) }),
@@ -378,6 +437,87 @@ export const STAGE_TOOLS: ToolDef[] = [
       if (size.w == null && size.d == null && size.h == null) throw new Error("Give width, depth or height");
       const box = stage().setBox(size);
       return { width: box.w, depth: box.d, height: box.h };
+    },
+  },
+  {
+    name: "find_library_fixtures",
+    description:
+      "Search the Open Fixture Library (real fixtures; needs internet): manufacturers matching a name, or one manufacturer's fixtures matching a model name. When one fixture matches, its modes too (name, channel count, whether it can be used). Then place it with place_fixtures / place_rig's library.",
+    schema: {
+      type: "object",
+      properties: {
+        manufacturer: { type: "string", description: "Manufacturer name (or part of it)" },
+        model: { type: "string", description: "Model name (or part of it)" },
+      },
+      required: ["manufacturer"],
+      additionalProperties: false,
+    },
+    describe: (a) => `Looked up ${[a.manufacturer, a.model].filter(Boolean).join(" ")} in the fixture library`,
+    run: async (a) => {
+      const s = stage();
+      const q = String(a.manufacturer ?? "").trim();
+      const mans = await s.manufacturers(q);
+      const exact = mans.filter((m) => m.name.toLowerCase() === q.toLowerCase() || m.key === q.toLowerCase());
+      const man = exact.length === 1 ? exact[0] : mans.length === 1 ? mans[0] : null;
+      if (!man) {
+        if (!mans.length) throw new Error(`No manufacturer "${q}" in the fixture library`);
+        return { manufacturers: mans.slice(0, 40).map((m) => m.name), ...(mans.length > 40 ? { more: mans.length - 40 } : {}) };
+      }
+      const model = String(a.model ?? "");
+      const fixtures = await s.libraryFixtures(man.key, model);
+      const one = fixtures.length === 1 ? fixtures[0] : fixtures.find((f) => f.name.toLowerCase() === model.trim().toLowerCase());
+      if (one) {
+        const modes = await s.libraryModes(man.key, one.key);
+        return { manufacturer: man.name, model: one.name, modes: modes.map((m) => ({ mode: m.name, channels: m.channels, ...(m.ok ? {} : { cantUse: m.reason }) })) };
+      }
+      if (!fixtures.length) throw new Error(`No ${man.name} fixture "${model}"`);
+      return { manufacturer: man.name, fixtures: fixtures.slice(0, 60).map((f) => f.name), ...(fixtures.length > 60 ? { more: fixtures.length - 60 } : {}) };
+    },
+  },
+  {
+    name: "link_fixtures",
+    description:
+      "How stage fixtures get their DMX (what get_stage shows as console). Give exactly one of: console_fixture (link to that console fixture; several stage fixtures link in order to it and the console fixtures after it, by channel), address (drive them straight from DMX channels from there, each fixture's block after the last), register (give each a new console fixture of that type, with faders; library fixtures bring their own channels), or unlink (stage only). Moving off a console fixture the stage made deletes it in the console.",
+    schema: {
+      type: "object",
+      properties: {
+        fixtures: FIXTURES,
+        console_fixture: { type: "string", description: "A console fixture's name (list_fixtures)" },
+        address: { type: "string", description: "DMX start address: 45, or 2/45 for universe 2" },
+        layout: { type: "array", items: { type: "string", enum: [...DMX_ATTRS, "other"] }, description: "With address: what each channel does (default: its library mode's, else pan, tilt, dimmer, R, G, B, zoom)" },
+        register: { ...CONSOLE_TYPE, description: "Console fixture type to make (movable/multi, movable/single, fixed/multi, fixed/single)" },
+        universe: { type: "integer", minimum: 1, description: "With register: only in this universe" },
+        unlink: { type: "boolean" },
+      },
+      required: ["fixtures"],
+      additionalProperties: false,
+    },
+    describe: (a) => {
+      const how = a.console_fixture != null ? `link to ${a.console_fixture}` : a.address != null ? `address ${a.address}` : a.register != null ? `register (${a.register})` : a.unlink ? "unlink" : "?";
+      return `${who(a)}: ${how}`;
+    },
+    run: (a) => {
+      const ways = [a.console_fixture != null, a.address != null, a.register != null, a.unlink === true].filter(Boolean).length;
+      if (ways !== 1) throw new Error("Give exactly one of console_fixture, address, register or unlink");
+      const ids = stageFixtures(a.fixtures).map((f) => f.id);
+      const s = stage();
+      if (a.console_fixture != null) {
+        const consoleFixtures = window.consoleChat?.fixtures() ?? [];
+        const [target, ...more] = findFixtures(consoleFixtures, [a.console_fixture]);
+        if (more.length) throw new Error(`"${a.console_fixture}" is a group: name one console fixture`);
+        const n = s.linkToConsole(ids, target.id);
+        if (n < ids.length) return { linked: n, of: ids.length, note: "Ran out of console fixtures after it" };
+      } else if (a.address != null) {
+        const start = s.parseAddress(String(a.address));
+        if (start == null) throw new Error(`"${a.address}" isn't a DMX address (45, or 2/45)`);
+        const layout = Array.isArray(a.layout) ? a.layout.map((r): DmxAttr | null => (isDmxAttr(r) ? r : null)) : undefined;
+        s.linkManual(ids, start, layout);
+      } else if (a.register != null) {
+        if (a.register === "none") throw new Error("To leave them stage only, use unlink");
+        s.register(ids, String(a.register), a.universe == null ? null : Number(a.universe));
+      } else s.unlink(ids);
+      const all = s.stage().fixtures;
+      return ids.map((id) => all.find((f) => f.id === id)).filter(Boolean).map((f) => ({ fixture: f?.name, console: f?.console }));
     },
   },
 ];

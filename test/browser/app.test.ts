@@ -66,6 +66,125 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.deepEqual((await stage(a)).positions.map((p) => p.name), ["DSC"]);
   });
 
+  test("the chat's set and song hooks edit sets, run one, and the other window follows", async () => {
+    type Sets = { id: string; name: string; running: boolean; songs: { name: string }[] }[];
+    const sets = (p: Page) => p.evaluate<Sets>("window.consoleChat.sets()");
+    const names = (list: Sets, name: string) => list.find((s) => s.name === name)?.songs.map((s) => s.name);
+    const undo = await a.evaluate<string>("window.consoleChat.editSnapshot()");
+    const was = await a.evaluate<{ song: string; set: string }>(`({ song: window.consoleChat.songs()[window.consoleChat.show().playing.song.number - 1].id, set: window.consoleChat.sets().find((s) => s.running).id })`);
+    const [x, y] = await a.evaluate<string[]>(`[window.consoleChat.addSong("Opener"), window.consoleChat.addSong("Closer")]`);
+    const id = await a.evaluate<string>(`window.consoleChat.newSet("Tour", ["${y}"])`);
+    await a.evaluate(`window.consoleChat.addToSet("${id}", ["${x}", "${y}"], 0)`); // Opener, Closer, Closer
+    await a.evaluate(`window.consoleChat.moveInSet("${id}", 0, 2)`); // Closer, Closer, Opener
+    await a.evaluate(`window.consoleChat.removeFromSet("${id}", 1)`); // Closer, Opener
+    assert.deepEqual(names(await sets(a), "Tour"), ["Closer", "Opener"]);
+    await a.evaluate(`window.consoleChat.runSet("${id}", 1)`);
+    assert.equal((await sets(a)).find((s) => s.running)?.name, "Tour");
+    assert.equal(await a.evaluate("window.consoleChat.show().playing.song.name"), "Opener");
+    await b.waitFor(`window.consoleChat.sets().find((s) => s.name === "Tour")?.songs.length === 2`, "the set in the other window");
+    // Deleting a song takes it out of every set; deleting the running set runs the first one left.
+    await a.evaluate(`window.consoleChat.deleteSong("${y}")`);
+    assert.deepEqual(names(await sets(a), "Tour"), ["Opener"]);
+    await a.evaluate(`window.consoleChat.deleteSet("${id}")`);
+    assert.equal((await sets(a)).some((s) => s.name === "Tour"), false);
+    assert.equal((await sets(a))[0].running, true);
+    await a.evaluate(`window.consoleChat.restoreEdits(${JSON.stringify(undo)})`);
+    assert.equal(await a.evaluate(`window.consoleChat.songs().some((s) => s.name === "Opener")`), false);
+    // Back to what the later tests expect: the same set, the same song, cue 1.
+    await a.evaluate(`window.consoleChat.runSet("${was.set}"); window.consoleChat.playSong("${was.song}", 0)`);
+    assert.deepEqual(a.errors, []);
+  });
+
+  test("the chat's step, cue, patch and fixture hooks change the real console, and Undo's snapshot puts them back", async () => {
+    const c = "window.consoleChat";
+    const undo = await a.evaluate<string>(`${c}.editSnapshot()`);
+    const song = await a.evaluate<string>(`${c}.addSong("Steps test")`);
+    // Steps: a copy of cue 1's own look, then one before it; a fade / hold; one deleted.
+    await a.evaluate(`${c}.setCueLevels("${song}", 0, [[0, 200]])`);
+    assert.equal(await a.evaluate(`${c}.addStep("${song}", 0, {})`), 0);
+    assert.equal(await a.evaluate(`${c}.addStep("${song}", 0, { at: 0, holdSeconds: 3 })`), 0);
+    await a.evaluate(`${c}.setCueLevels("${song}", 0, [[1, 77]], 0)`);
+    assert.deepEqual(await a.evaluate(`${c}.editStep("${song}", 0, 1, { fadeSeconds: 6 })`), { fadeSeconds: 6, holdSeconds: 0 });
+    type Cue = { levels: number[]; steps: { fadeSeconds: number; holdSeconds: number; levels: number[] }[] };
+    let cue = await a.evaluate<Cue>(`${c}.cue("${song}", 0)`);
+    assert.deepEqual(cue.steps.map((s) => [s.levels[0], s.levels[1], s.fadeSeconds, s.holdSeconds]), [[200, 77, 4, 3], [200, 0, 6, 0]]);
+    await a.evaluate(`${c}.deleteStep("${song}", 0, 0)`);
+    cue = await a.evaluate<Cue>(`${c}.cue("${song}", 0)`);
+    assert.deepEqual(cue.steps.map((s) => s.fadeSeconds), [6]);
+    // Cue order.
+    await a.evaluate(`${c}.moveCue("${song}", 0, 1)`);
+    assert.equal((await a.evaluate<Cue>(`${c}.cue("${song}", 1)`)).levels[0], 200);
+    // Patch, fixtures and universes.
+    await a.evaluate(`${c}.setUniverses(2)`);
+    assert.deepEqual(await a.evaluate(`${c}.patchFader(255, { channels: [{ address: "2/10" }, { address: "2/11", max: 128 }], name: "Haze" })`), { fader: 256, name: "Haze", channels: ["2/10", "2/11 (max 128)"] });
+    const added = await a.evaluate<{ name: string; faders: number[] }[]>(`${c}.addFixtures({ name: "Mover", channels: 2, qty: 2, roles: ["dimmer", "pan"], group: "Movers", universe: 2, mount: "movable", color: "single" })`);
+    assert.deepEqual(added.map((f) => f.name), ["Mover 1", "Mover 2"]);
+    type Fx = { id: string; name: string; group: string | null; channels: { role: string | null; faders: number[] }[] };
+    const fixtures = () => a.evaluate<Fx[]>(`${c}.fixtures()`);
+    const mover = (await fixtures()).find((f) => f.name === "Mover 1")!;
+    assert.equal(mover.group, "Movers");
+    assert.deepEqual(mover.channels.map((ch) => ch.role), ["dimmer", "pan"]);
+    const faders = await a.evaluate<{ fader: number; name: string }[]>(`${c}.faders()`);
+    assert.equal(faders[mover.channels[0].faders[0] - 1].name, "Mover 1 Dim");
+    await a.evaluate(`${c}.editFixture("${mover.id}", { name: "Spot", group: "" })`);
+    assert.equal((await a.evaluate<{ name: string }[]>(`${c}.faders()`))[mover.channels[1].faders[0] - 1].name, "Spot Pan");
+    assert.equal((await fixtures()).find((f) => f.id === mover.id)?.group, null);
+    await a.evaluate(`${c}.deleteFixtures(["${mover.id}"])`);
+    assert.equal((await fixtures()).some((f) => f.id === mover.id), false);
+    await assert.rejects(a.evaluate(`${c}.setUniverses(1)`), /Universe 2\+ is in use/);
+    await b.waitFor(`window.consoleChat.fixtures().some((f) => f.name === "Mover 2")`, "the fixture in the other window");
+    await a.evaluate(`${c}.restoreEdits(${JSON.stringify(undo)})`);
+    assert.equal((await fixtures()).some((f) => f.name.startsWith("Mover")), false);
+    assert.equal(await a.evaluate(`${c}.outputs().universes`), 1);
+    assert.deepEqual(a.errors, []);
+  });
+
+  test("the chat's submaster, fixture, group, show and stage-link hooks work on the real console and stage", async () => {
+    const c = "window.consoleChat";
+    const sc = "window.stageChat";
+    const undoShow = await a.evaluate<string>(`${c}.editSnapshot()`);
+    const undoStage = await a.evaluate<unknown>(`${sc}.editSnapshot().data`);
+    await a.evaluate(`${c}.setSubmasters(40, 60)`);
+    assert.deepEqual(await a.evaluate(`${c}.show().submasters`), { live: 40, upNext: 60 });
+    await a.evaluate(`${c}.setSubmasters(100, 100)`);
+    // A fixture moved to another address takes its faders' patch along; groups renamed and deleted.
+    await a.evaluate(`${c}.addFixtures({ name: "Par", channels: 2, qty: 1, roles: ["dimmer", "red"], group: "Floor", universe: null, mount: "fixed", color: "single" })`);
+    type Fx = { id: string; name: string; group: string | null; channels: { channel: number; faders: number[] }[] };
+    const par = async () => (await a.evaluate<Fx[]>(`${c}.fixtures()`)).find((f) => f.name === "Par")!;
+    const id = (await par()).id;
+    assert.deepEqual(await a.evaluate(`${c}.editFixture("${id}", { start: "200", mount: "movable" })`), { name: "Par", group: "Floor", channels: "Ch200×2", mount: "movable", color: "single" });
+    assert.deepEqual((await par()).channels.map((ch) => [ch.channel, ch.faders.length]), [[200, 1], [201, 1]]);
+    await a.evaluate(`${c}.renameGroup("floor", "Truss")`);
+    assert.deepEqual(await a.evaluate(`${c}.groups()`), [{ name: "Truss", fixtures: ["Par"] }]);
+    await a.evaluate(`${c}.deleteGroup("Truss")`);
+    assert.equal((await par()).group, null);
+    assert.equal(await a.evaluate(`${c}.renameShow("Friday tour")`), "Friday tour");
+    // Stage links: a library-style fixture placed stage only, then driven by address, linked to Par, and registered.
+    const profile = { manufacturer: "Acme", model: "Mini", mode: "3ch", key: "acme/mini", channels: [{ name: "Dimmer", attr: "dimmer" }, { name: "Strobe", attr: null }, { name: "Zoom", attr: "zoom" }], mount: "fixed", color: "single", panLimit: null, tiltLimit: null, zoomMin: null, zoomMax: null };
+    await a.evaluate(`${sc}.addFixtures([{ x: 0, y: 4, z: 0 }], "none", ${JSON.stringify(profile)})`);
+    type Sf = { id: string; name: string; console: string | null; model?: string };
+    const mini = async () => (await a.evaluate<{ fixtures: Sf[] }>(`${sc}.stage()`)).fixtures.find((f) => f.name === "Mini 1")!;
+    assert.deepEqual([(await mini()).console, (await mini()).model], [null, "Acme Mini (3ch)"]);
+    const sid = (await mini()).id;
+    await a.evaluate(`${sc}.linkManual(["${sid}"], 300)`);
+    assert.equal((await mini()).console, "manual 300");
+    await a.waitFor(`window.stageChat.stage().fixtures.length && true`, "the stage");
+    assert.equal(await a.evaluate(`${sc}.linkToConsole(["${sid}"], "${id}")`), 1);
+    assert.equal((await mini()).console, "Par");
+    await a.evaluate(`${sc}.register(["${sid}"], "fixed/single", null)`);
+    await a.waitFor(`window.stageChat.stage().fixtures.find((f) => f.name === "Mini 1")?.console === "Mini 1"`, "the registered console fixture");
+    const roles = (await a.evaluate<{ name: string; channels: { role: string | null }[] }[]>(`${c}.fixtures()`)).find((f) => f.name === "Mini 1")?.channels.map((ch) => ch.role);
+    assert.deepEqual(roles, ["dimmer", null, "zoom"]);
+    await a.evaluate(`${sc}.unlink(["${sid}"])`);
+    await a.waitFor(`!window.consoleChat.fixtures().some((f) => f.name === "Mini 1")`, "unlinking to remove the console fixture the stage made");
+    // Undo, as the chat panel does it: the show, then the stage.
+    await a.evaluate(`${c}.restoreEdits(${JSON.stringify(undoShow)}); ${sc}.restoreEdits(${JSON.stringify(undoStage)})`);
+    assert.equal((await a.evaluate<Fx[]>(`${c}.fixtures()`)).some((f) => f.name === "Par"), false);
+    assert.equal((await a.evaluate<{ fixtures: Sf[] }>(`${sc}.stage()`)).fixtures.some((f) => f.name === "Mini 1"), false);
+    assert.notEqual(await a.evaluate(`${c}.show().showName`), "Friday tour");
+    assert.deepEqual(a.errors, []);
+  });
+
   test("the stage is saved on the server (a new window gets it)", async () => {
     const c = await app.page();
     await c.waitFor(`(({ risers, positions }) => risers.map((r) => r.name).join() === "Drum riser" && positions.map((p) => p.name).join() === "DSC")(window.stageChat.stage())`, "the stage in a new window");

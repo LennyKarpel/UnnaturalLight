@@ -9,6 +9,7 @@ import { pushToDmx, refreshCueSelects, renderSelectedGroup, syncCrossUi, stopTim
 import { renderCues, openActionMenu } from "./cues.ts";
 import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
+import { renderSetTab } from "./set-tab.ts";
 
 /** Names of the sets `songId` is in. */
 function setsWithSong(songId: string) {
@@ -226,21 +227,43 @@ async function openSongMenu(anchor: HTMLElement, id: string) {
 
 /**
  * Put a copy of a song (its cues: levels, names, In times) right after it,
- * named "… copy". The song that's playing stays playing.
+ * named "… copy" unless `name` is given. The song that's playing stays playing.
  */
-function duplicateSong(id: string) {
-  if (state.songs.length >= MAX_SONGS) return;
+export function copySong(id: string, name?: string) {
+  if (state.songs.length >= MAX_SONGS) throw new Error(`The show has its maximum of ${MAX_SONGS} songs`);
   const index = state.songs.findIndex((item) => item.id === id);
-  if (index < 0) return;
+  if (index < 0) throw new Error("No such song");
   const song = state.songs[index];
   const copy = createSong({
-    name: `${song.name} copy`.slice(0, 40),
+    name: normalizeSongName(name ?? `${song.name} copy`.slice(0, 40), index + 1),
     cues: song.cues.map(copyCue),
   });
   state.songs.splice(index + 1, 0, copy);
   persistSession();
   renderShowTab();
   syncSongUi();
+  return copy;
+}
+
+function duplicateSong(id: string) {
+  if (state.songs.length < MAX_SONGS) copySong(id);
+}
+
+/** Delete a song and take it out of every set (the show keeps at least one song). Deleting the playing song plays the next. */
+export function removeSong(id: string) {
+  if (state.songs.length <= 1) throw new Error("The show keeps at least one song");
+  const index = state.songs.findIndex((item) => item.id === id);
+  if (index < 0) throw new Error("No such song");
+  const wasActive = id === state.activeSongId;
+  state.songs.splice(index, 1);
+  for (const set of state.sets) set.entries = set.entries.filter((entry) => entry.songId !== id);
+  if (wasActive) {
+    setActiveSong(state.songs[Math.min(index, state.songs.length - 1)].id);
+  } else {
+    refreshUpNext();
+  }
+  renderShowTab();
+  renderSetTab();
 }
 
 async function deleteSong(id: string) {
@@ -253,19 +276,19 @@ async function deleteSong(id: string) {
     message: `Delete “${song.name}” and all of its cues?${sets.length ? ` It will also be taken out of ${sets.join(", ")}.` : ""}`,
     confirmLabel: "Delete",
   });
-  if (!ok) return;
-  const index = state.songs.findIndex((item) => item.id === id);
-  if (index < 0) return;
-  const wasActive = song.id === state.activeSongId;
-  state.songs.splice(index, 1);
-  for (const set of state.sets) set.entries = set.entries.filter((entry) => entry.songId !== id);
-  if (wasActive) {
-    const next = state.songs[Math.min(index, state.songs.length - 1)];
-    setActiveSong(next.id);
-  } else {
-    renderShowTab();
-    refreshUpNext();
-  }
+  if (ok && state.songs.includes(song)) removeSong(id);
+}
+
+/** Move a song to `index` (0-based) in the show. */
+export function moveSongTo(id: string, index: number) {
+  const from = state.songs.findIndex((item) => item.id === id);
+  if (from < 0) throw new Error("No such song");
+  const to = Math.min(Math.max(0, index), state.songs.length - 1);
+  if (to === from) return;
+  moveSong(state.songs, id, state.songs[to].id, to > from);
+  persistSession();
+  renderShowTab();
+  syncSongUi();
 }
 
 /**
