@@ -72,6 +72,9 @@ export function wireNavReorder() {
   let didReorder = false;
 
   for (const link of getNavLinks()) {
+    // Each tab links to its route (#show, #run, …: routeFromHash). Set here, not in
+    // index.html, where they'd read as links to elements that aren't there.
+    link.setAttribute("href", `#${link.dataset.tab}`);
     link.addEventListener("dragstart", (event) => {
       dragTab = link.dataset.tab ?? null;
       didReorder = false;

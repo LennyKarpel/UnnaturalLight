@@ -16,6 +16,7 @@
 
 import { clampByte, clamp } from "./numbers.ts";
 import { hexFromRgb, rgbFromHex, type Rgb } from "./color.ts";
+import { escapeHtml } from "./html.ts";
 import { $, must } from "./query.ts";
 
 /** Common lighting colors: [name, hex]. */
@@ -71,7 +72,7 @@ function createPicker() {
   dlg.innerHTML = `
     <div class="color-pop-body">
       <div class="color-wheel">
-        <canvas width="${WHEEL * 2}" height="${WHEEL * 2}" style="width:${WHEEL}px;height:${WHEEL}px"></canvas>
+        <canvas width="${WHEEL * 2}" height="${WHEEL * 2}"></canvas>
         <span class="color-wheel-dot"></span>
       </div>
       <div class="color-swatches">${SWATCHES.map(([name, hex]) => `<button type="button" data-hex="${hex}" title="${name}" style="background:${hex}"></button>`).join("")}</div>
@@ -87,6 +88,8 @@ function createPicker() {
   document.body.append(dlg);
 
   const canvas = $<HTMLCanvasElement>(dlg, "canvas");
+  // Drawn at twice its size, for sharp edges on any screen.
+  canvas.style.width = canvas.style.height = `${WHEEL}px`;
   const dot = $(dlg, ".color-wheel-dot");
   const usedRow = $(dlg, "[data-used]");
   const usedHead = $(dlg, ".color-used-head");
@@ -130,7 +133,7 @@ function createPicker() {
     const colors = [...new Set(api.usedColors().map((c) => c.toLowerCase()))]
       .filter((c) => /^#[0-9a-f]{6}$/.test(c) && !preset.has(c))
       .slice(0, MAX_USED_COLORS);
-    usedRow.innerHTML = colors.map((hex) => `<button type="button" data-hex="${hex}" title="${hex}" style="background:${hex}"></button>`).join("");
+    usedRow.innerHTML = colors.map((hex) => `<button type="button" data-hex="${escapeHtml(hex)}" title="${escapeHtml(hex)}" style="background:${escapeHtml(hex)}"></button>`).join("");
     usedRow.hidden = usedHead.hidden = !colors.length;
   }
 

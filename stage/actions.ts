@@ -18,6 +18,7 @@ import {
   type Fixture,
   type SavedStage,
 } from "./stage-model.ts";
+import { escapeHtml } from "../shared/html.ts";
 import { newId } from "../shared/ids.ts";
 import { MAX_RISERS, RISER_DEFAULTS, normalizeRiser, type Riser } from "./risers.ts";
 import {
@@ -435,7 +436,7 @@ export function openContextMenu(id: string, x: number, y: number) {
   const positions = state.positions.length
     ? `<div class="submenu-wrap">
         <button type="button" class="menu-item" data-submenu aria-haspopup="menu"><span>Aim at position</span><kbd>▸</kbd></button>
-        <div class="menu submenu thin-scroll" role="menu">${state.positions.map((p) => `<button type="button" data-position="${p.id}" class="menu-item"><span></span></button>`).join("")}</div>
+        <div class="menu submenu thin-scroll" role="menu">${state.positions.map((p) => `<button type="button" data-position="${escapeHtml(p.id)}" class="menu-item"><span></span></button>`).join("")}</div>
       </div>`
     : "";
   const following = selectedFixtures().some((f) => followingOf(f));
@@ -468,7 +469,7 @@ export function openPositionMenu(id: string, x: number, y: number) {
   const position = positionById(id);
   if (!position) return;
   ctxMenu.innerHTML = `<div class="menu-title"></div>
-    <button type="button" data-delete-position="${position.id}" class="menu-item danger"><span>Delete position</span></button>`;
+    <button type="button" data-delete-position="${escapeHtml(position.id)}" class="menu-item danger"><span>Delete position</span></button>`;
   const titleEl = ctxMenu.querySelector(".menu-title");
   if (titleEl) titleEl.textContent = position.name;
   menuPosition = id;
@@ -482,8 +483,8 @@ export function openRiserMenu(id: string, x: number, y: number) {
   if (!riser) return;
   menuPosition = null;
   ctxMenu.innerHTML = `<div class="menu-title"></div>
-    <button type="button" data-dup-riser="${riser.id}" class="menu-item"><span>Duplicate riser</span></button>
-    <button type="button" data-delete-riser="${riser.id}" class="menu-item danger"><span>Delete riser</span></button>`;
+    <button type="button" data-dup-riser="${escapeHtml(riser.id)}" class="menu-item"><span>Duplicate riser</span></button>
+    <button type="button" data-delete-riser="${escapeHtml(riser.id)}" class="menu-item danger"><span>Delete riser</span></button>`;
   const titleEl = ctxMenu.querySelector(".menu-title");
   if (titleEl) titleEl.textContent = riser.name;
   if (ui.activeRiser !== id) setActiveRiser(id);

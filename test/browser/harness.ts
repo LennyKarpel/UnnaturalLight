@@ -65,12 +65,14 @@ async function openPage(debugPort: number, url: string) {
   await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
   let next = 0;
   const pending = new Map<number, (msg: { result?: Record<string, unknown>; error?: { message: string } }) => void>();
-  /** Uncaught errors and console.error / console.warn on the page. */
+  /** Uncaught errors, console.error / console.warn and Content-Security-Policy blocks on the page. */
   const errors: string[] = [];
   ws.on("message", (data) => {
     const msg = JSON.parse(String(data));
     if (msg.id != null) { pending.get(msg.id)?.(msg); pending.delete(msg.id); return; }
     if (msg.method === "Runtime.exceptionThrown") errors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
+    // The browser's own messages: a Content-Security-Policy block counts as an error (the policy must never stop the app).
+    if (msg.method === "Log.entryAdded" && /Content Security Policy/i.test(msg.params.entry.text)) errors.push(msg.params.entry.text);
     if (msg.method === "Runtime.consoleAPICalled" && (msg.params.type === "error" || msg.params.type === "warning")) {
       errors.push(msg.params.args.map((a: { value?: unknown; description?: string }) => a.value ?? a.description).join(" "));
     }
@@ -81,6 +83,7 @@ async function openPage(debugPort: number, url: string) {
     ws.send(JSON.stringify({ id, method, params }));
   });
   await send("Runtime.enable");
+  await send("Log.enable"); // also reports what was logged before (the page is already loading)
   await send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 1200, deviceScaleFactor: 1, mobile: false });
 
   /** Run `expr` in the page (awaited) and return its value (JSON). Throws the page's error. */

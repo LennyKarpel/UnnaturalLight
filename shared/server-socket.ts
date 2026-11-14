@@ -11,7 +11,7 @@
  * handed to the late side, so it knows it's connected and has what's current.
  *
  * Other machines open the page with ?token=… (printed by the server);
- * ../index.html keeps it for the tab, and this reads it.
+ * ../page/keep-token.ts keeps it for the tab, and this reads it.
  */
 
 import type { ClientMessage, ServerMessage } from "./protocol.ts";

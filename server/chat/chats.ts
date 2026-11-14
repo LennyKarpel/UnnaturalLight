@@ -83,9 +83,10 @@ export function createChats(file: string) {
 
   /** GET / PUT / DELETE under /chat/chats. */
   async function handle(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
-    const id = decodeURIComponent(url.pathname.slice("/chat/chats".length).replace(/^\//, ""));
     const from = url.searchParams.get("window") ?? "";
     try {
+      // Inside the try: a stray % gets a 400 rather than no answer.
+      const id = decodeURIComponent(url.pathname.slice("/chat/chats".length).replace(/^\//, ""));
       if (req.method === "GET" && id === "events") {
         listen(req, res, from);
       } else if (req.method === "GET" && !id) {
@@ -93,9 +94,12 @@ export function createChats(file: string) {
         res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(out));
       } else if (req.method === "PUT" && ID.test(id)) {
         const chat = parseChat(JSON.parse(await readBody(req)));
-        if (!chat || chat.id !== id) throw new Error("Bad chat");
-        put(chat, from);
-        res.writeHead(204).end();
+        if (chat?.id === id) {
+          put(chat, from);
+          res.writeHead(204).end();
+        } else {
+          res.writeHead(400).end("Bad chat");
+        }
       } else if (req.method === "DELETE" && ID.test(id)) {
         remove(id, from);
         res.writeHead(204).end();

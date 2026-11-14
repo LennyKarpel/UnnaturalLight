@@ -30,6 +30,22 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     }
   });
 
+  test("HTML that gets into the page can't run script (Content-Security-Policy)", async () => {
+    // As if a name from a show file had been put into the page unescaped.
+    await a.evaluate(`(() => {
+      const img = Object.assign(document.createElement("img"), { id: "xss-probe", alt: "", src: "data:," });
+      img.setAttribute("onerror", "window.xssRan = true");
+      const link = Object.assign(document.createElement("a"), { id: "xss-link", textContent: "x" });
+      link.setAttribute("href", "javascript:window.xssRan = true");
+      document.body.append(img, link);
+    })()`);
+    await a.evaluate(`document.getElementById("xss-link").click()`);
+    await waitFor(() => a.errors.some((e) => /Content Security Policy/i.test(e)), "the policy to block the injected script");
+    assert.equal(await a.evaluate("window.xssRan === true"), false);
+    await a.evaluate(`document.getElementById("xss-probe").remove(); document.getElementById("xss-link").remove()`);
+    a.errors.length = 0; // the blocks this test caused on purpose
+  });
+
   test("Delete removes the picked-out riser, ⌘Z brings it back, and the other window follows", async () => {
     await a.evaluate(`window.stageChat.addRiser({ name: "Drum riser", x: 1, z: -2 })`);
     await b.waitFor(`window.stageChat.stage().risers.some((r) => r.name === "Drum riser")`, "the riser in the other window");
@@ -186,5 +202,13 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
   test("no window logged an error", () => {
     // The failed chat request logs nothing; anything here is a real problem.
     assert.deepEqual([...a.errors, ...b.errors], []);
+  });
+
+  test("a ?token= is kept for the tab and taken off the address bar", async () => {
+    // Last: it reloads window b.
+    await b.evaluate(`location.replace(location.pathname + "?token=probe-token")`);
+    await b.waitFor(`document.readyState === "complete" && !!window.stageChat`, "the reloaded window");
+    assert.equal(await b.evaluate("location.search"), "");
+    assert.equal(await b.evaluate(`sessionStorage.getItem("unnaturallight.token")`), "probe-token");
   });
 });

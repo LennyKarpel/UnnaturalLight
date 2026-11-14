@@ -32,6 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_UNIVERSES } from "../console/patch.ts";
+import { accessProblem, BASE_HEADERS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "./access.ts";
 import { readJsonFile, writeJsonFile } from "./files.ts";
 import { createDmx } from "./dmx.ts";
 import { createNetDmx } from "./net-dmx.ts";
@@ -52,8 +53,6 @@ const CHATS_FILE = path.join(DATA_DIR, "session.chats.json");
 /** DMX refresh / fade step (40 frames a second, as the browser used to send). */
 const FRAME_MS = 25;
 const SAVE_DELAY_MS = 500;
-/** Only these are served (never node_modules, server/ or its data). */
-const PUBLIC = ["index.html", "page/", "console/", "stage/", "shared/"];
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -251,12 +250,46 @@ function stripped(file: string, data: Buffer): string {
 }
 
 /** This machine, or another that has the token printed at start. */
-const allowed = (req: http.IncomingMessage, url: URL) => isLoopback(req) || url.searchParams.get("token") === TOKEN;
+const allowed = (req: http.IncomingMessage, url: URL) => isLoopback(req) || isToken(url.searchParams.get("token"), TOKEN);
 
+/** The names this server answers to: this machine's, and with --lan its addresses and host name (looked up each time: they can change). */
+function hostNames(): Set<string> {
+  const names = new Set(LOOPBACK_NAMES);
+  if (LAN) {
+    for (const ip of lanAddresses()) names.add(ip);
+    const host = os.hostname().toLowerCase();
+    names.add(host);
+    names.add(host.endsWith(".local") ? host.slice(0, -".local".length) : `${host}.local`);
+  }
+  return names;
+}
+
+/** Why a request comes from somewhere it shouldn't (another site, or a name that isn't this machine's), or null. See ./access.ts. */
+const foreign = (req: http.IncomingMessage) => accessProblem({ host: req.headers.host, origin: req.headers.origin }, hostNames(), PORT);
+
+// One bad request must never stop the server (and the lights) mid-show: whatever it throws is logged and answered with a 500.
 const server = http.createServer((req, res) => {
+  try {
+    handleRequest(req, res);
+  } catch (err) {
+    console.error(`${req.method} ${req.url}: ${errorMessage(err)}`);
+    if (!res.headersSent) res.writeHead(500).end("Server error");
+    else res.end();
+  }
+});
+
+function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
+  const problem = foreign(req);
+  if (problem) {
+    console.warn(`refused ${req.method} ${url.pathname}: ${problem}`);
+    res.writeHead(403).end("Forbidden");
+    return;
+  }
   if (url.pathname === "/chat" || url.pathname === "/chat/summary") {
     if (!allowed(req, url)) res.writeHead(403).end("Forbidden");
+    // JSON only: a browser asks first before sending JSON to another site (and this never says yes).
+    else if (!/^application\/json\b/i.test(req.headers["content-type"] ?? "")) res.writeHead(415).end("JSON only");
     else (url.pathname === "/chat" ? handleChat : handleChatSummary)(req, res).catch((err) => console.error(err));
     return;
   }
@@ -265,11 +298,17 @@ const server = http.createServer((req, res) => {
     else chats.handle(req, res, url).catch((err) => console.error(err));
     return;
   }
-  let rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+  let rel: string;
+  try {
+    rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+  } catch {
+    res.writeHead(400).end("Bad address"); // e.g. a stray % (any page could link to one)
+    return;
+  }
   if (rel === "") rel = "index.html";
-  const file = path.resolve(ROOT, rel);
-  const inside = file.startsWith(`${ROOT}${path.sep}`);
-  if (!inside || !PUBLIC.some((p) => rel === p || (p.endsWith("/") && rel.startsWith(p)))) {
+  // Only the app's files and the vendor folders (see ./access.ts), wherever the path resolves to.
+  const file = publicFile(ROOT, rel);
+  if (!file) {
     res.writeHead(404).end("Not found");
     return;
   }
@@ -289,6 +328,9 @@ const server = http.createServer((req, res) => {
       }
     }
     res.writeHead(200, {
+      ...BASE_HEADERS,
+      // Pages get their script policy (from what they hold; req.headers.host was checked above).
+      ...(file.endsWith(".html") ? { "Content-Security-Policy": contentSecurityPolicy(String(body), req.headers.host ?? "") } : {}),
       "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream",
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       Pragma: "no-cache",
@@ -296,13 +338,24 @@ const server = http.createServer((req, res) => {
     });
     res.end(body);
   });
-});
+}
 
-const wss = new WebSocketServer({ noServer: true });
+/** The biggest message a window may send: far above any show, stage or show file's chats (a show is tens of KB), far below what would tie up the server. */
+const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 server.on("upgrade", (req, socket, head) => {
-  const url = new URL(req.url ?? "/", "http://x");
-  // Other machines must present the token printed at start.
-  if (url.pathname !== "/ws" || !allowed(req, url)) {
+  socket.on("error", () => socket.destroy()); // a dropped connection mid-handshake, not the server's problem
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", "http://x");
+  } catch {
+    socket.destroy();
+    return;
+  }
+  // Other machines must present the token printed at start; other sites are refused (browsers let any page open a WebSocket).
+  const problem = foreign(req);
+  if (problem) console.warn(`refused WebSocket: ${problem}`);
+  if (url.pathname !== "/ws" || problem || !allowed(req, url)) {
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
     return;
@@ -313,6 +366,8 @@ server.on("upgrade", (req, socket, head) => {
 wss.on("connection", (ws) => {
   const client = { id: crypto.randomUUID() };
   clients.set(ws, client);
+  // A bad frame from a client closes its connection; unheard, the error would stop the server.
+  ws.on("error", (err) => console.warn(`WebSocket error: ${errorMessage(err)}`));
   ws.send(JSON.stringify({ type: "hello", clientId: client.id, show: show.serialized(), live: show.live(), outputs: outputStatus(), stage }));
   ws.on("message", (data) => {
     let msg: ClientMessage;
