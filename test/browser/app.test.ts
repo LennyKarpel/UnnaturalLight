@@ -176,6 +176,33 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.deepEqual(a.errors, []);
   });
 
+  test("double-clicking a rig's fixture selects the rig; with ⇧ or ⌘ it adds the rig to the selection", async () => {
+    const undo = await a.hooks(({ s }) => s.editSnapshot().data);
+    await a.hooks(({ s }) => s.addFixtures([{ x: -3, y: 4, z: 0, name: "Lone spot" }], "none"));
+    await a.hooks(({ s }) => s.addRig({ type: "line", x: 2, y: 4, z: 0, count: 3, consoleType: "none", name: "Test line" }));
+    const fixtures = () => a.hooks(({ s }) => s.stage().fixtures);
+    const row = async (name: string) => `#list .item:nth-child(${(await fixtures()).findIndex((f) => f.name === name) + 1})`;
+    const selected = async () => (await fixtures()).filter((f) => f.selected).map((f) => f.name);
+    const line = (await fixtures()).filter((f) => f.rig === "Test line").map((f) => f.name);
+    assert.equal(line.length, 3);
+    await a.click(`[data-list-tab="fixtures"]`);
+    await a.waitFor(`document.querySelectorAll("#list .item").length === ${(await fixtures()).length}`, "the fixture list");
+    await a.click(await row("Lone spot"));
+    assert.deepEqual(await selected(), ["Lone spot"]);
+    await a.click(await row(line[1]), { count: 2 });
+    assert.deepEqual(await selected(), line, "a plain double-click: just the rig");
+    // ⇧ / ⌘ with two fixtures already selected (so the inspector, and with it the list, stays put between the two clicks).
+    for (const mod of [{ shift: true }, { meta: true }]) {
+      await a.click(await row("Lone spot"));
+      await a.click(await row(line[0]), mod);
+      assert.deepEqual(await selected(), ["Lone spot", line[0]]);
+      await a.click(await row(line[2]), { count: 2, ...mod });
+      assert.deepEqual(await selected(), ["Lone spot", ...line], `${mod.shift ? "⇧" : "⌘"}: the rig added`);
+    }
+    await a.hooks(({ s }, undo) => s.restoreEdits(undo), undo);
+    assert.deepEqual(a.errors, []);
+  });
+
   test("the stage is saved on the server (a new window gets it)", async () => {
     const c = await app.page();
     await c.waitFor(`(({ risers, positions }) => risers.map((r) => r.name).join() === "Drum riser" && positions.map((p) => p.name).join() === "DSC")(window.stageChat.stage())`, "the stage in a new window");

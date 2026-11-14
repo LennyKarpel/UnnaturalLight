@@ -618,11 +618,11 @@ plan.addEventListener("pointerdown", (e) => {
   plan.setPointerCapture(e.pointerId);
 });
 
-// Double-click a rig's fixture: select the whole rig.
+// Double-click a rig's fixture: select the whole rig (⇧ / ⌘: add it to the selection).
 plan.addEventListener("dblclick", (e) => {
   if (ui.placing || ui.aiming) return;
   const fixture = planFixtureAt(...planPosition(e));
-  if (fixture) selectRigOf(fixture.id);
+  if (fixture) selectRigOf(fixture.id, e.shiftKey || e.metaKey);
 });
 
 plan.addEventListener("pointermove", (e) => {

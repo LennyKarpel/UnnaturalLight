@@ -164,8 +164,8 @@ export function renderList() {
     row.children[1].textContent = fixture.name + (follows ? `  → ${follows.name}` : "") + (isInside(fixture, state.box) ? "" : "  ·  outside");
     row.addEventListener("click", (e) => {
       if (e.altKey) showTrace({ kind: "stageFixture", id: fixture.id }, e);
-      // A double-click on a rig's fixture selects the whole rig. (Not "dblclick": the first click rebuilds the rows.)
-      else if (!(e.detail === 2 && selectRigOf(fixture.id))) select(fixture.id, e.shiftKey || e.metaKey);
+      // A double-click on a rig's fixture selects the whole rig (⇧ / ⌘: adds it). (Not "dblclick": the first click rebuilds the rows.)
+      else if (!(e.detail === 2 && selectRigOf(fixture.id, e.shiftKey || e.metaKey))) select(fixture.id, e.shiftKey || e.metaKey);
     });
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);

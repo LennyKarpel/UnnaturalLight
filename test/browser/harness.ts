@@ -135,7 +135,8 @@ async function openPage(debugPort: number, url: string) {
       await send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
     },
     /** A real click in the middle of the first element matching `selector`. */
-    async click(selector: string) {
+    /** `count` 2: a double-click; `shift` / `meta`: with ⇧ / ⌘ held. */
+    async click(selector: string, { count = 1, shift = false, meta = false }: { count?: 1 | 2; shift?: boolean; meta?: boolean } = {}) {
       await front();
       // Scrolled into view where nothing covers it (a sticky scroll bar strip
       // can), once it stops moving (a smooth scroll may be under way).
@@ -165,8 +166,12 @@ async function openPage(debugPort: number, url: string) {
       })()`);
       if (!at) throw new Error(`Nothing matches ${selector}`);
       if (at.covered) throw new Error(`${selector} is under ${at.covered}`);
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
-        await send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: type === "mouseMoved" ? "none" : "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
+      const modifiers = (meta ? 4 : 0) | (shift ? 8 : 0);
+      await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y, button: "none", buttons: 0, modifiers });
+      for (let n = 1; n <= count; n++) {
+        for (const type of ["mousePressed", "mouseReleased"]) {
+          await send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: n, modifiers });
+        }
       }
     },
     /** Type text into whatever has focus. */

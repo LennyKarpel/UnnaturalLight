@@ -349,7 +349,7 @@ A **rig** is a group of fixtures in a fixed arrangement that you place and move 
 Working with a rig:
 
 - All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
-- Click one fixture to adjust just it; double-click any of its fixtures (in 3D, the plan or the fixture list), or use **Select whole rig** (inspector or right-click), to select them all again.
+- Click one fixture to adjust just it; double-click any of its fixtures (in 3D, the plan or the fixture list), or use **Select whole rig** (inspector or right-click), to select them all again. **⇧- or ⌘-double-click** adds the whole rig to what's already selected (e.g. two rigs, or a rig and a few single fixtures).
 - Dragging any of its fixtures moves the whole rig.
 - The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live. A new number of fixtures applies when you press `Enter`, leave the field or click its arrows, so typing e.g. 12 doesn't first rebuild the rig with 1.
 - In the console, a rig's fixtures are grouped under the rig's name.

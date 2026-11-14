@@ -129,11 +129,12 @@ export function select(id: string | null, additive = false) {
   changed({ inspector: false });
 }
 
-/** Select every fixture in `id`'s rig (double-click); false if it isn't in one. */
-export function selectRigOf(id: string): boolean {
+/** Select every fixture in `id`'s rig (double-click; `additive`, ⇧ / ⌘: added to the selection); false if it isn't in one. */
+export function selectRigOf(id: string, additive = false): boolean {
   const rig = rigOf(byId(id));
   if (!rig) return false;
-  state.selected = rigMembers(rig).map((m) => m.id);
+  const members = rigMembers(rig).map((m) => m.id);
+  state.selected = additive ? [...state.selected.filter((s) => !members.includes(s)), ...members] : members;
   renderInspector();
   changed({ inspector: false });
   return true;

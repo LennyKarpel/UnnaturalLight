@@ -1130,11 +1130,11 @@ view.addEventListener("pointermove", (e) => {
   changed({ list: false });
 }, true);
 
-// Double-click a rig's fixture: select the whole rig.
+// Double-click a rig's fixture: select the whole rig (⇧ / ⌘: add it to the selection).
 view.addEventListener("dblclick", (e) => {
   if (e.target !== renderer.domElement || ui.placing || ui.aiming) return;
   const id = pickFixture(e);
-  if (id) selectRigOf(id);
+  if (id) selectRigOf(id, e.shiftKey || e.metaKey);
 }, true);
 
 renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); if (!dragPosition) setHoverPosition(null); setHoverItem(null, null); });
