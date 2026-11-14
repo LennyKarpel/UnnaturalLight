@@ -6,13 +6,16 @@ import {
   layoutFor,
   linkChannels,
   followerChannels,
-  LAYOUT_PRESETS,
   CONSOLE_TYPES,
   consoleTypeFromKey,
+  consoleTypeOfMode,
+  DEFAULT_CONSOLE_TYPE,
   registerLayout,
   registerLabels,
+  fitTrusses,
+  type ConsoleType,
   type Fixture,
-  type Rig,
+  type Truss,
 } from "./stage-model.ts";
 import { createConsoleLink, type ConsoleFixture } from "./console-link.ts";
 import type { RegisterRequest, RegisterResult } from "../shared/console-stage.ts";
@@ -21,8 +24,8 @@ import { createFixturePicker, type FixtureProfile } from "./fixture-library.ts";
 import { escapeHtml } from "../shared/html.ts";
 import { clampByte, numberFrom } from "../shared/numbers.ts";
 import { isColorRole } from "../shared/color.ts";
-import { formatAddress, parseAddress, MAX_UNIVERSES } from "../shared/address.ts";
-import { state, save, byId, selectedFixtures, rigOf, rigMembers, commonRig } from "./state.ts";
+import { formatAddress } from "../shared/address.ts";
+import { state, save, byId, selectedFixtures, trussOf, trussMembers, commonTruss, dropFixtures, ownedConsoleIds, fixturesLabel } from "./state.ts";
 import { syncScene } from "./view3d.ts";
 import { onFrameStart } from "./frame.ts";
 import { drawPlan } from "./plan.ts";
@@ -59,15 +62,23 @@ export const consoleLink = createConsoleLink({
   onLevels: applyConsoleLevelsSoon,
   onStageHello: () => publishStage(),
   onRegistered: (results) => onRegistered(results),
+  onRemoved: (consoleIds) => removeLinkedTo(consoleIds),
 });
 
 const sortedConsoleFixtures = () => [...consoleLink.fixtures()].sort((a, b) => a.channelStart - b.channelStart);
-export const consoleFixtureById = (id: string | null): ConsoleFixture | null => consoleLink.fixtures().find((c) => c.id === id) ?? null;
+/** The console's fixtures by id, rebuilt when the console sends a new list (looked up for every fixture on every frame of levels). */
+let consoleById = { list: [] as ConsoleFixture[], map: new Map<string, ConsoleFixture>() };
+export function consoleFixtureById(id: string | null): ConsoleFixture | null {
+  const list = consoleLink.fixtures();
+  if (consoleById.list !== list) consoleById = { list, map: new Map(list.map((c) => [c.id, c])) };
+  return (id && consoleById.map.get(id)) || null;
+}
 /** Channel as shown: "45", or "2/45" (universe/channel) when the console has several universes. */
 export const addr = (ch: number) => formatAddress(ch, consoleLink.universes);
-/** "2/45" or "45" → channel number in any universe (null if invalid). */
-export const parseAddr = (text: string) => parseAddress(text, MAX_UNIVERSES);
 const chRange = (c: ConsoleFixture) => `Ch ${addr(c.channelStart)}${c.channelEnd > c.channelStart ? `–${addr(c.channelEnd)}` : ""}`;
+/** The console's fixtures as <option>s, by channel ("Wash 1 · Ch 1–4"), `selected` picked. */
+const consoleFixtureOptions = (selected: string | null = null) =>
+  sortedConsoleFixtures().map((c) => `<option value="${escapeHtml(c.id)}"${c.id === selected ? " selected" : ""}>${escapeHtml(`${c.name} · ${chRange(c)}`)}</option>`).join("");
 
 /**
  * Each follower channel's color as last sent or heard ("fixtureId:attr" →
@@ -144,65 +155,48 @@ function afterLinkChange() {
 
 export function linkSectionHtml(fixture: Fixture) {
   const L = fixture.link;
-  const mode = L.consoleId ?? (L.start ? "manual" : "");
-  const opt = (v: string, text: string) => `<option value="${escapeHtml(v)}"${v === mode ? " selected" : ""}>${escapeHtml(text)}</option>`;
   const missing = L.consoleId && !consoleFixtureById(L.consoleId) ? L.consoleId : null;
   const attrOpts = (cur: string | null) => [`<option value="">—</option>`, ...DMX_ATTRS.map((a) => `<option value="${a}"${a === cur ? " selected" : ""}>${DMX_LABELS[a]}</option>`)].join("");
   return `
     <div class="fields link-fields">
       <div class="subhead">Console link</div>
       ${L.fixture ? `<label>Fixture</label><div class="hint" style="margin:0">${escapeHtml(`${L.fixture.manufacturer} ${L.fixture.model}`)} · ${escapeHtml(L.fixture.mode)} · ${L.fixture.channels.length} ch</div>` : ""}
+      ${L.consoleId ? `
       <label>Fixture</label>
       <select data-link="target">
-        ${opt("", "— not linked —")}
-        ${sortedConsoleFixtures().map((c) => opt(c.id, `${c.name} · ${chRange(c)}`)).join("")}
-        ${missing ? opt(missing, "(not found in the console)") : ""}
-        ${opt("manual", "Manual address…")}
-      </select>
+        ${consoleFixtureOptions(L.consoleId)}
+        ${missing ? `<option value="${escapeHtml(missing)}" selected>(not found in the console)</option>` : ""}
+      </select>` : ""}
       ${L.start ? `
       <label>Start ch</label>
-      <input type="text" data-link="start" value="${addr(L.start)}" title="Start channel: 45, or universe/channel like 2/45"${L.consoleId ? ' disabled' : ""} />
+      <div class="hint" style="margin:0" title="The console fixture's start channel (change it in the console)">${addr(L.start)}</div>
       <label>Layout</label>
       <div class="layout">
         ${L.layout.map((a, k) => `<label class="lay" title="${escapeHtml(L.fixture?.channels[k]?.name ?? "")}"><span>${addr((L.start ?? 0) + k)}</span><select data-layout="${k}">${attrOpts(a)}</select></label>`).join("")}
         <div class="lay-btns">
-          <button type="button" data-link-act="add" title="Add a channel">+ ch</button>
-          <button type="button" data-link-act="remove" title="Remove the last channel">− ch</button>
-          ${L.consoleId ? `<button type="button" data-link-act="preset" title="Reset to the preset for the console fixture's type">Preset</button>` : ""}
+          <button type="button" data-link-act="preset" title="Reset to the preset for the console fixture's type">Preset</button>
         </div>
-      </div>` : ""}
-      ${!L.start ? `
-      <label>Register</label>
-      <div class="xyz">
-        <select data-reg-type>${CONSOLE_TYPES.filter((t) => t.key !== "none").map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("")}</select>
-        <button type="button" data-link-act="register" title="Create a console fixture for this one, with free faders patched to it">Register</button>
       </div>` : ""}
       <div class="readout" id="linkStatus"></div>
     </div>`;
 }
 
-/** Rig only: link every member to consecutive console fixtures. */
-export function rigLinkHtml() {
+/** Truss only: link every member to consecutive console fixtures. */
+export function trussLinkHtml() {
   return `
-    <div class="fields rig-fields">
-      <label>Link rig</label>
-      <select data-rig-link title="Link member 1 to the chosen console fixture, member 2 to the next one, …">
+    <div class="fields truss-fields">
+      <label>Link truss</label>
+      <select data-truss-link title="Link member 1 to the chosen console fixture, member 2 to the next one, …">
         <option value="">Members in order, from…</option>
-        ${sortedConsoleFixtures().map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} · ${chRange(c)}</option>`).join("")}
-        <option value="__unlink">Unlink all members</option>
+        ${consoleFixtureOptions()}
       </select>
     </div>`;
 }
 
-function linkRigFrom(rig: Rig, id: string) {
-  const members = rigMembers(rig);
-  if (id === "__unlink") {
-    members.forEach((m) => { m.link = { consoleId: null, start: null, layout: [] }; });
-    afterLinkChange();
-  } else {
-    const linked = linkInOrder(members, id);
-    if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console fixtures`, 4000);
-  }
+function linkTrussFrom(truss: Truss, id: string) {
+  const members = trussMembers(truss);
+  const linked = linkInOrder(members, id);
+  if (linked < members.length) setBanner(`Linked ${linked} of ${members.length}: ran out of console fixtures`, 4000);
 }
 
 // --- link changes (the inspector's controls and the chat's tools use these) ---
@@ -235,26 +229,13 @@ function releaseOwned(fixture: Fixture, keep: string | null) {
   if (fixture.link.owned && fixture.link.consoleId && keep !== fixture.link.consoleId) consoleLink.unregister([fixture.link.consoleId]);
 }
 
-/** Stage only: no console link (one the stage registered is removed in the console). */
-export function unlinkFixtures(fixtures: Fixture[]) {
-  for (const f of fixtures) {
-    releaseOwned(f, null);
-    f.link = { consoleId: null, start: null, layout: [], fixture: f.link.fixture ?? null };
-  }
-  afterLinkChange();
-}
-
-/** Drive `fixture` from DMX channels at `start` directly (no console fixture), `layout` = what each channel does (default: its library mode's, or the moving-light preset). */
-export function linkManual(fixture: Fixture, start: number, layout?: (DmxAttr | null)[]) {
-  releaseOwned(fixture, null);
-  const own = fixture.link.fixture?.channels.map((c) => c.attr);
-  fixture.link = {
-    consoleId: null,
-    start,
-    layout: layout?.length ? layout.slice(0, 16) : own?.length ? own : fixture.link.layout.length ? fixture.link.layout : [...LAYOUT_PRESETS["movable/multi"]],
-    fixture: fixture.link.fixture ?? null,
-  };
-  afterLinkChange();
+/** The console type a copy of `fixture` registers as: its own, its console fixture's, its library mode's, or the default. */
+export function consoleTypeOf(fixture: Fixture): ConsoleType {
+  const L = fixture.link;
+  const own = L.type ?? L.register;
+  if (own) return own;
+  const mode = consoleFixtureById(L.consoleId) ?? L.fixture;
+  return mode ? consoleTypeOfMode(mode) : DEFAULT_CONSOLE_TYPE;
 }
 
 /** Make a console fixture for each (a console type key; universe null = the first with room), as the inspector's Register does. */
@@ -273,24 +254,8 @@ export function bindLinkControls() {
   const targetEl = inspectorEl.querySelector<HTMLSelectElement>('[data-link="target"]');
   targetEl?.addEventListener("change", () => {
     if (!fixture) return;
-    const v = targetEl.value;
-    // Moving off a console fixture the stage registered: remove it there.
-    if (fixture.link.owned && fixture.link.consoleId && v !== fixture.link.consoleId) consoleLink.unregister([fixture.link.consoleId]);
-    if (v === "") fixture.link = { consoleId: null, start: null, layout: [] };
-    else if (v === "manual") fixture.link = { consoleId: null, start: fixture.link.start ?? 1, layout: fixture.link.layout.length ? fixture.link.layout : [...LAYOUT_PRESETS["movable/multi"]] };
-    else {
-      linkInOrder([fixture], v);
-      return;
-    }
-    afterLinkChange();
-  });
-  const input = inspectorEl.querySelector<HTMLInputElement>('[data-link="start"]');
-  input?.addEventListener("change", () => {
-    if (!fixture) return;
-    const v = parseAddr(input.value);
-    if (v == null) { input.value = fixture.link.start ? addr(fixture.link.start) : ""; return; }
-    fixture.link.start = v;
-    afterLinkChange();
+    // Moving off a console fixture the stage registered removes it there.
+    linkInOrder([fixture], targetEl.value);
   });
   inspectorEl.querySelectorAll<HTMLSelectElement>("[data-layout]").forEach((el) => {
     el.addEventListener("change", () => {
@@ -303,15 +268,6 @@ export function bindLinkControls() {
     el.addEventListener("click", () => {
       if (!fixture) return;
       const L = fixture.link;
-      if (el.dataset.linkAct === "add" && L.layout.length < 16) L.layout.push(null);
-      if (el.dataset.linkAct === "remove" && L.layout.length > 1) L.layout.pop();
-      if (el.dataset.linkAct === "register") {
-        const key = inspectorEl.querySelector<HTMLSelectElement>("[data-reg-type]")?.value ?? "";
-        rememberConsoleType(key);
-        L.register = consoleTypeFromKey(key);
-        L.universe = lastUniverse();
-        requestRegistrations();
-      }
       if (el.dataset.linkAct === "preset") {
         const ci = consoleFixtureById(L.consoleId);
         if (L.fixture) L.layout = L.fixture.channels.map((c) => c.attr);
@@ -320,17 +276,17 @@ export function bindLinkControls() {
       afterLinkChange();
     });
   });
-  const rigLinkEl = inspectorEl.querySelector<HTMLSelectElement>("[data-rig-link]");
-  rigLinkEl?.addEventListener("change", () => {
-    const rig = commonRig(selectedFixtures());
-    const v = rigLinkEl.value;
-    if (rig && v) linkRigFrom(rig, v);
+  const trussLinkEl = inspectorEl.querySelector<HTMLSelectElement>("[data-truss-link]");
+  trussLinkEl?.addEventListener("change", () => {
+    const truss = commonTruss(selectedFixtures());
+    const v = trussLinkEl.value;
+    if (truss && v) linkTrussFrom(truss, v);
   });
 }
 
 /**
  * What a fixture really has (its library mode's channels, or its console
- * layout), or null when it's stage-only and every attribute is its own.
+ * layout), or null while it waits for its console fixture.
  */
 function presentAttrList(fixture: Fixture): DmxAttr[] | null {
   const { fixture: profile, start, layout } = fixture.link;
@@ -345,8 +301,8 @@ function presentAttrs(fixture: Fixture) {
 }
 
 /**
- * Inspector rows: only what the fixture has (all of them when it's
- * stage-only), the color rows in its channel order (like its console faders).
+ * Inspector rows: only what the fixture has (all of them while it waits for
+ * its console fixture), the color rows in its channel order (like its console faders).
  */
 export function inspectorAttrs(fixture: Fixture) {
   const present = (presentAttrList(fixture) ?? []).filter(isColorRole);
@@ -412,7 +368,7 @@ function syncOtherChannels(fixture: Fixture) {
 
 /**
  * DMX rows in the inspector: values, units, and which channel / fader drives
- * each. When the fixture's channels have changed (linked, unlinked, a new
+ * each. When the fixture's channels have changed (linked elsewhere, a new
  * layout), the inspector is rebuilt with its new rows instead.
  */
 export function syncDmxRows(fixture: Fixture) {
@@ -449,21 +405,21 @@ export function syncDmxRows(fixture: Fixture) {
   status.textContent = fixture.link.register
     ? "Registering in the console…"
     : !linked.length
-    ? (fixture.link.start ? "No channels assigned in the layout." : "Not linked: values are set here only.")
+    ? "No channels assigned in the layout."
     : `${withFader} of ${linked.length} channels have a fader: those follow the console, and changes here move the fader.${owned}`;
 }
 
 // ---------------------------------------------------------------------
 // Registering stage fixtures in the console
 // ---------------------------------------------------------------------
-// A fixture placed with a console type (or a rig's members, or a copy of a
+// A fixture placed with a console type (or a truss's members, or a copy of a
 // registered fixture) asks the console to create a fixture at the next
 // free DMX block, patch one free fader per channel and name them. It starts
 // at the fixture's current values. A fixture waiting to register (link.register,
 // e.g. from a saved stage) registers once the console has started.
 
 const CONSOLE_TYPE_KEY = "unnaturallight.stage.consoleType";
-const lastConsoleType = () => readStored(CONSOLE_TYPE_KEY) || "movable/multi";
+const lastConsoleType = () => readStored(CONSOLE_TYPE_KEY) || CONSOLE_TYPES[0].key;
 export const rememberConsoleType = (key: string) => store(CONSOLE_TYPE_KEY, key);
 
 export const LIBRARY = "library";
@@ -488,9 +444,31 @@ export function readUniverse(select: HTMLSelectElement): number | null {
   return consoleLink.universes > 1 ? u : null;
 }
 
+export const EXISTING = "existing";
+
+/** The console types to place with, then the fixture library, then (when the console has some) existing console fixtures. */
 export function fillConsoleTypes(select: HTMLSelectElement) {
-  const types = [...CONSOLE_TYPES.slice(0, -1), { key: LIBRARY, label: "From fixture library…" }, CONSOLE_TYPES[CONSOLE_TYPES.length - 1]];
-  select.innerHTML = types.map((t) => `<option value="${t.key}"${t.key === lastConsoleType() ? " selected" : ""}>${t.label}</option>`).join("");
+  const types = [
+    ...CONSOLE_TYPES,
+    { key: LIBRARY, label: "From fixture library…" },
+    ...(consoleLink.fixtures().length ? [{ key: EXISTING, label: "Existing console fixture…" }] : []),
+  ];
+  const last = types.some((t) => t.key === lastConsoleType()) ? lastConsoleType() : types[0].key;
+  select.innerHTML = types.map((t) => `<option value="${t.key}"${t.key === last ? " selected" : ""}>${t.label}</option>`).join("");
+}
+
+/**
+ * Show a console fixture list (`row` holds `list`) while "Existing console
+ * fixture…" is chosen. Returns () => the picked console fixture (or null).
+ */
+export function existingPickerFor(select: HTMLSelectElement, row: HTMLElement, list: HTMLSelectElement): { sync: () => void; picked: () => ConsoleFixture | null } {
+  const sync = () => {
+    const on = select.value === EXISTING;
+    row.hidden = !on;
+    if (on) list.innerHTML = consoleFixtureOptions();
+  };
+  select.addEventListener("change", sync);
+  return { sync, picked: () => (select.value === EXISTING ? consoleFixtureById(list.value) : null) };
 }
 
 /**
@@ -539,7 +517,7 @@ export function requestRegistrations() {
       // What each channel does (so the console can e.g. show R/G/B faders as a color picker).
       roles: layout,
       values: layout.map((a) => (a ? fixture.dmx[a] : 0)),
-      group: rigOf(fixture)?.name ?? null,
+      group: trussOf(fixture)?.name ?? null,
       universe: fixture.link.universe ?? null,
     });
     registering.add(fixture.id);
@@ -548,24 +526,56 @@ export function requestRegistrations() {
 }
 
 function onRegistered(results: RegisterResult[]) {
-  const failed: string[] = [];
+  const failed: Fixture[] = [];
+  const reasons = new Set<string>();
   for (const r of results) {
     const fixture = byId(r.stageId);
     registering.delete(r.stageId);
     if (!fixture || !fixture.link.register) {
-      // Deleted (or unlinked) while waiting: undo it in the console.
+      // Deleted (or linked elsewhere) while waiting: undo it in the console.
       if (r.ok) consoleLink.unregister([r.consoleId]);
       continue;
     }
     const type = fixture.link.register;
     if (!r.ok) {
-      fixture.link.register = null;
-      failed.push(`${fixture.name}: ${r.error}`);
+      failed.push(fixture);
+      reasons.add(r.error);
       continue;
     }
     fixture.link = { consoleId: r.consoleId, start: r.start, layout: registerLayout(fixture.link, type), owned: true, type, register: null, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null };
   }
+  if (failed.length) removeUnregistered(failed, [...reasons]);
   renderInspector();
   changed();
-  if (failed.length) setBanner(`Not registered in the console (kept on the stage only) · ${failed.join(" · ")}`, 15000);
+}
+
+/**
+ * Every stage fixture is a console fixture: console fixtures deleted in the
+ * console take the stage fixtures linked to them along. A truss keeps the
+ * members it has left (re-laid-out to match), or goes when fewer than 2 are left.
+ */
+function removeLinkedTo(consoleIds: string[]) {
+  const ids = new Set(consoleIds);
+  const removed = state.fixtures.filter((f) => f.link.consoleId != null && ids.has(f.link.consoleId));
+  if (!removed.length) return;
+  dropFixtures(new Set(removed.map((f) => f.id)));
+  state.trusses = fitTrusses(state.trusses, state.fixtures);
+  setBanner(`Removed ${fixturesLabel(removed)} from the stage: deleted in the console`, 4000);
+  renderInspector();
+  changed();
+}
+
+/**
+ * Every stage fixture is a console fixture: ones the console had no room for
+ * leave the stage, with their whole truss (whose other members leave the
+ * console again).
+ */
+function removeUnregistered(failed: Fixture[], reasons: string[]) {
+  const failedIds = new Set(failed.map((f) => f.id));
+  const trussIds = new Set(failed.map((f) => f.trussId));
+  const removed = state.fixtures.filter((f) => failedIds.has(f.id) || (f.trussId != null && trussIds.has(f.trussId)));
+  consoleLink.unregister(ownedConsoleIds(removed));
+  dropFixtures(new Set(removed.map((f) => f.id)));
+  state.trusses = state.trusses.filter((t) => !trussIds.has(t.id));
+  setBanner(`Not added: the console has no room for ${fixturesLabel(removed)} · ${reasons.join(" · ")}`, 15000);
 }

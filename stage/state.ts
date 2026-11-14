@@ -1,4 +1,4 @@
-// The stage's data (box, fixtures, rigs, selection), saving it, and rig helpers.
+// The stage's data (box, fixtures, trusses, selection), saving it, and truss helpers.
 import {
   STORAGE_KEY,
   MAX_FIXTURES,
@@ -7,10 +7,10 @@ import {
   parseStage,
   serializeStage,
   DEFAULT_TRANSPARENT,
-  RIG_TYPES,
-  applyRig,
-  rigLowestY,
-  normalizeRig,
+  TRUSS_TYPES,
+  applyTruss,
+  trussLowestY,
+  normalizeTruss,
   deriveFromDmx,
   zoomFromBeam,
   applyFixture,
@@ -18,8 +18,8 @@ import {
   type ConsoleType,
   type DmxValues,
   type Fixture,
-  type Rig,
-  type RigType,
+  type Truss,
+  type TrussType,
   type Transparent,
   type StagePosition,
 } from "./stage-model.ts";
@@ -31,10 +31,10 @@ import { COLOR_ROLES } from "../shared/color.ts";
 import { PLACE_OFFSET } from "./view3d.ts";
 import { renderInspector } from "./sidebar.ts";
 import { changed, setBanner, setPlacing } from "./actions.ts";
-import { consoleLink, requestRegistrations } from "./link.ts";
+import { consoleLink, requestRegistrations, linkInOrder } from "./link.ts";
 import { readStoredJson, storeJson } from "../shared/storage.ts";
 
-export type { Fixture, Rig };
+export type { Fixture, Truss };
 
 /** The stage's data. */
 export const state: {
@@ -44,7 +44,7 @@ export const state: {
   selected: string[];
   /** Which box sides are transparent (floor is always solid). */
   transparent: Transparent;
-  rigs: Rig[];
+  trusses: Truss[];
   /** Named spots to aim at. */
   positions: StagePosition[];
   /** Boxes standing on the floor (platforms, drum risers). */
@@ -54,21 +54,30 @@ export const state: {
   fixtures: [],
   selected: [],
   transparent: { ...DEFAULT_TRANSPARENT },
-  rigs: [],
+  trusses: [],
   positions: [],
   risers: [],
 };
 
-/** A rig's settings from the Place rig dialog. */
-export type RigSettings = {
-  type: RigType;
+/** How what's being placed gets its console fixtures (from the Place fixture / truss dialog). */
+export type PlaceChoice = {
+  /** Console type the new console fixtures get. */
+  consoleType: ConsoleType;
+  /** Real fixture it is (null = generic). */
+  fixture: FixtureProfile | null;
+  /** Universe new console fixtures go in (null = first with room). */
+  universe: number | null;
+  /** Link to console fixtures from this one (its id; a truss's fixtures in order) instead of making new ones. */
+  linkFrom?: string | null;
+};
+
+/** A truss's settings from the Place truss dialog. */
+export type TrussSettings = PlaceChoice & {
+  type: TrussType;
   size: number;
   count: number;
   tilt: number;
   yaw: number;
-  consoleType: ConsoleType | null;
-  fixture: FixtureProfile | null;
-  universe: number | null;
 };
 
 /** What the stage is in the middle of, shared by its modules. */
@@ -78,8 +87,8 @@ export const ui: {
   placingPosition: boolean;
   /** Placing a riser (with `placing`): a click puts a riser's center there, on the floor. */
   placingRiser: boolean;
-  /** While placing a rig: its settings from the Place rig dialog (else null). */
-  placingRig: RigSettings | null;
+  /** While placing a truss: its settings from the Place truss dialog (else null). */
+  placingTruss: TrussSettings | null;
   aiming: boolean;
   /** The position being looked at (list, plan, 3D), or null. */
   activePosition: string | null;
@@ -96,7 +105,7 @@ export const ui: {
   placing: false,
   placingPosition: false,
   placingRiser: false,
-  placingRig: null,
+  placingTruss: null,
   aiming: false,
   activePosition: null,
   hoverPosition: null,
@@ -107,17 +116,17 @@ export const ui: {
 };
 
 export function loadData(data: unknown) {
-  const { box, fixtures, transparent, rigs, positions, risers } = parseStage(data);
+  const { box, fixtures, transparent, trusses, positions, risers } = parseStage(data, { linkedOnly: true });
   state.box = box;
   state.positions = positions;
   state.risers = risers;
   state.transparent = transparent;
-  state.rigs = rigs;
+  state.trusses = trusses;
   state.fixtures = fixtures;
   state.selected = fixtures.length ? [fixtures[0].id] : [];
 }
 
-export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.rigs, state.positions, state.risers);
+export const serialize = () => serializeStage(state.box, state.fixtures, state.transparent, state.trusses, state.positions, state.risers);
 
 let saveTimer = 0;
 let shareQueued = false;
@@ -169,117 +178,133 @@ export const byId = (id: string | null | undefined): Fixture | undefined => stat
 export const selectedFixtures = (): Fixture[] => state.selected.map(byId).filter((f) => f != null);
 
 // ---------------------------------------------------------------------
-// Rigs
+// Trusses
 // ---------------------------------------------------------------------
 
-export const rigById = (id: string | null | undefined): Rig | undefined => state.rigs.find((r) => r.id === id);
-export const rigOf = (fixture: Fixture | null | undefined): Rig | null => (fixture?.rigId ? rigById(fixture.rigId) ?? null : null);
-export const rigMembers = (rig: Rig): Fixture[] => state.fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
-export const syncRig = (rig: Rig) => applyRig(rig, rigMembers(rig));
+export const trussById = (id: string | null | undefined): Truss | undefined => state.trusses.find((r) => r.id === id);
+export const trussOf = (fixture: Fixture | null | undefined): Truss | null => (fixture?.trussId ? trussById(fixture.trussId) ?? null : null);
+export const trussMembers = (truss: Truss): Fixture[] => state.fixtures.filter((i) => i.trussId === truss.id).sort((a, b) => a.trussIndex - b.trussIndex);
+export const syncTruss = (truss: Truss) => applyTruss(truss, trussMembers(truss));
 
-/** The rig every selected fixture belongs to, if they all share one. */
-export function commonRig(sel: Fixture[]): Rig | null {
-  const rig = rigOf(sel[0]);
-  return rig && sel.every((i) => i.rigId === rig.id) ? rig : null;
+/** The console fixtures the stage registered for these fixtures (removed in the console when they go). */
+export const ownedConsoleIds = (fixtures: Fixture[]) => fixtures.flatMap((f) => (f.link.owned && f.link.consoleId ? [f.link.consoleId] : []));
+
+/** "Spot 1", or "3 fixtures", for messages. */
+export const fixturesLabel = (fixtures: Fixture[]) => (fixtures.length === 1 ? fixtures[0].name : `${fixtures.length} fixtures`);
+
+/** Take these fixtures off the stage (and out of the selection). */
+export function dropFixtures(ids: Set<string>) {
+  state.fixtures = state.fixtures.filter((f) => !ids.has(f.id));
+  state.selected = state.selected.filter((id) => !ids.has(id));
+}
+
+/** The truss every selected fixture belongs to, if they all share one. */
+export function commonTruss(sel: Fixture[]): Truss | null {
+  const truss = trussOf(sel[0]);
+  return truss && sel.every((i) => i.trussId === truss.id) ? truss : null;
 }
 
 /**
- * Move a fixture. A rig member can't move on its own, so the whole rig
+ * Move a fixture. A truss member can't move on its own, so the whole truss
  * shifts by the same amount instead.
  */
 export function moveFixture(fixture: Fixture, x: number, y: number, z: number) {
-  const rig = rigOf(fixture);
-  if (!rig) { fixture.x = x; fixture.y = y; fixture.z = z; return; }
-  rig.x = round(rig.x + x - fixture.x, 3);
-  rig.y = round(rig.y + y - fixture.y, 3);
-  rig.z = round(rig.z + z - fixture.z, 3);
-  syncRig(rig);
+  const truss = trussOf(fixture);
+  if (!truss) { fixture.x = x; fixture.y = y; fixture.z = z; return; }
+  truss.x = round(truss.x + x - fixture.x, 3);
+  truss.y = round(truss.y + y - fixture.y, 3);
+  truss.z = round(truss.z + z - fixture.z, 3);
+  syncTruss(truss);
 }
 
-/** Make a member fixture for `rig` at slot `k`, copying the look of `like`. */
+/** Make a member fixture for `truss` at slot `k`, copying the look of `like`. */
 type MemberLook = Pick<Fixture, "panLimit" | "tiltLimit" | "zoomMin" | "zoomMax" | "dimmerCurve"> & { dmx: Partial<DmxValues> };
 
-function makeRigMember(rig: Rig, k: number, like: MemberLook): Fixture {
+function makeTrussMember(truss: Truss, k: number, like: MemberLook): Fixture {
   const fixture = createFixture(0, 0, 0, state.fixtures.length, state.box);
   Object.assign(fixture, {
-    name: `${rig.name} · ${k + 1}`,
-    rigId: rig.id, rigIndex: k, follow: null,
+    name: `${truss.name} · ${k + 1}`,
+    trussId: truss.id, trussIndex: k, follow: null,
     panLimit: like.panLimit, tiltLimit: like.tiltLimit, zoomMin: like.zoomMin, zoomMax: like.zoomMax, dimmerCurve: like.dimmerCurve,
   });
   for (const a of ["dimmer", "zoom", ...COLOR_ROLES] as const) fixture.dmx[a] = like.dmx[a] ?? 0;
   deriveFromDmx(fixture);
-  fixture.link.register = rig.consoleType ?? null;
-  fixture.link.universe = rig.universe ?? null;
-  if (rig.fixture) applyFixture(fixture, rig.fixture);
+  fixture.link.register = truss.consoleType;
+  fixture.link.universe = truss.universe ?? null;
+  if (truss.fixture) applyFixture(fixture, truss.fixture);
   return fixture;
 }
 
-/** Create a rig centered at (x, y, z) from the Place rig dialog's settings. */
-export function addRigAt(cfg: RigSettings, x: number, y: number, z: number) {
+/** Create a truss centered at (x, y, z) from the Place truss dialog's settings. */
+export function addTrussAt(cfg: TrussSettings, x: number, y: number, z: number) {
   const room = MAX_FIXTURES - state.fixtures.length;
   if (cfg.count > room) {
     setPlacing(false);
-    setBanner(`Not enough room: this rig needs ${cfg.count} fixtures, ${room} left (max ${MAX_FIXTURES})`, 4000);
+    setBanner(`Not enough room: this truss needs ${cfg.count} fixtures, ${room} left (max ${MAX_FIXTURES})`, 4000);
     return;
   }
-  const n = state.rigs.length;
-  const sameType = state.rigs.filter((r) => r.type === cfg.type).length;
-  const name = `${RIG_TYPES[cfg.type].prefix} ${sameType + 1}`;
-  const rig = normalizeRig({ ...cfg, name, x: round(x, 2), y: round(y, 2), z: round(z, 2) }, n);
-  // Keep an upright / tilted rig above the floor.
-  const low = rigLowestY(rig);
-  if (low < PLACE_OFFSET) rig.y = round(rig.y + PLACE_OFFSET - low, 2);
+  const n = state.trusses.length;
+  const sameType = state.trusses.filter((r) => r.type === cfg.type).length;
+  const name = `${TRUSS_TYPES[cfg.type].prefix} ${sameType + 1}`;
+  const truss = normalizeTruss({ ...cfg, name, x: round(x, 2), y: round(y, 2), z: round(z, 2) }, n);
+  // Keep an upright / tilted truss above the floor.
+  const low = trussLowestY(truss);
+  if (low < PLACE_OFFSET) truss.y = round(truss.y + PLACE_OFFSET - low, 2);
   const like: MemberLook = {
     dmx: { dimmer: 255, red: 255, green: 255, blue: 255, zoom: zoomFromBeam(24, 5, 60) },
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60, dimmerCurve: "linear",
   };
-  const members = Array.from({ length: rig.count }, (_, k) => makeRigMember(rig, k, like));
-  state.rigs.push(rig);
+  const members = Array.from({ length: truss.count }, (_, k) => makeTrussMember(truss, k, like));
+  state.trusses.push(truss);
   state.fixtures.push(...members);
-  syncRig(rig);
+  syncTruss(truss);
   setPlacing(false);
   state.selected = members.map((m) => m.id);
+  // Link to existing console fixtures (which redraws); any past the last one register their own.
+  const linked = cfg.linkFrom ? linkInOrder(members, cfg.linkFrom) : 0;
+  if (linked) {
+    if (linked < members.length) setBanner(`Linked ${linked} of ${members.length} to existing console fixtures; the rest get new ones`, 4000);
+    return;
+  }
   renderInspector();
   changed();
   requestRegistrations();
 }
 
-/** Change how many fixtures a rig has; extras copy the first member's look. */
-function setRigCount(rig: Rig, n: number) {
-  const members = rigMembers(rig);
+/** Change how many fixtures a truss has; extras copy the first member's look. */
+function setTrussCount(truss: Truss, n: number) {
+  const members = trussMembers(truss);
   const max = MAX_FIXTURES - state.fixtures.length + members.length;
   n = clamp(Math.round(n), 2, max);
   if (n === members.length) return;
   if (n < members.length) {
     const dropped = members.slice(n);
-    const drop = new Set(dropped.map((m) => m.id));
-    state.fixtures = state.fixtures.filter((i) => !drop.has(i.id));
-    state.selected = state.selected.filter((id) => !drop.has(id));
-    consoleLink.unregister(dropped.flatMap((m) => (m.link.owned && m.link.consoleId ? [m.link.consoleId] : [])));
+    dropFixtures(new Set(dropped.map((m) => m.id)));
+    consoleLink.unregister(ownedConsoleIds(dropped));
   } else {
-    for (let k = members.length; k < n; k++) state.fixtures.push(makeRigMember(rig, k, members[0]));
+    for (let k = members.length; k < n; k++) state.fixtures.push(makeTrussMember(truss, k, members[0]));
   }
-  rig.count = n;
-  syncRig(rig);
+  truss.count = n;
+  syncTruss(truss);
   requestRegistrations();
 }
 
-/** The rig fields the inspector edits (its inputs' `data-r`). */
-export const RIG_FIELDS = ["name", "x", "y", "z", "size", "count", "tilt", "yaw"] as const;
-export type RigField = (typeof RIG_FIELDS)[number];
+/** The truss fields the inspector edits (its inputs' `data-r`). */
+export const TRUSS_FIELDS = ["name", "x", "y", "z", "size", "count", "tilt", "yaw"] as const;
+export type TrussField = (typeof TRUSS_FIELDS)[number];
 
-export function setRigField(rig: Rig, k: RigField, raw: string) {
+export function setTrussField(truss: Truss, k: TrussField, raw: string) {
   if (k === "name") {
-    rig.name = raw;
-    rigMembers(rig).forEach((m, i) => { m.name = `${raw} · ${i + 1}`; });
+    truss.name = raw;
+    trussMembers(truss).forEach((m, i) => { m.name = `${raw} · ${i + 1}`; });
     return;
   }
   const v = numberFrom(raw);
   if (v == null) return;
-  if (k === "count") setRigCount(rig, v);
-  else if (k === "size") rig.size = clamp(v, 0.5, 50);
-  else if (k === "tilt") rig.tilt = clamp(v, -90, 90);
-  else if (k === "yaw") rig.yaw = ((v + 180) % 360 + 360) % 360 - 180; // −180…180
-  else if (k === "x" || k === "y" || k === "z") rig[k] = v;
-  syncRig(rig);
+  if (k === "count") setTrussCount(truss, v);
+  else if (k === "size") truss.size = clamp(v, 0.5, 50);
+  else if (k === "tilt") truss.tilt = clamp(v, -90, 90);
+  else if (k === "yaw") truss.yaw = ((v + 180) % 360 + 360) % 360 - 180; // −180…180
+  else if (k === "x" || k === "y" || k === "z") truss[k] = v;
+  syncTruss(truss);
 }

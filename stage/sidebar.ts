@@ -13,13 +13,13 @@ import {
   beamDir,
   isInside,
   axisHits,
-  RIG_TYPES,
+  TRUSS_TYPES,
   setDmx,
   setColorHex,
   deriveFromDmx,
   type Fixture,
   type Frame,
-  type Rig,
+  type Truss,
   type Xyz,
 } from "./stage-model.ts";
 import { clamp, numberFrom } from "../shared/numbers.ts";
@@ -28,7 +28,7 @@ import { DMX_LABELS, DMX_SHORT, isDmxAttr, type DmxAttr } from "../shared/attrib
 import { escapeHtml, el } from "../shared/html.ts";
 import { bindPanTiltPad } from "../shared/pan-tilt-pad.ts";
 import { COLOR_ROLES, emitterHex, isColorRole } from "../shared/color.ts";
-import { state, selectedFixtures, rigOf, commonRig, setRigField, RIG_FIELDS, positionById, riserById, ui } from "./state.ts";
+import { state, selectedFixtures, trussOf, commonTruss, setTrussField, TRUSS_FIELDS, positionById, riserById, ui } from "./state.ts";
 import { MAX_RISERS, RISER_FIELDS, setRiserField } from "./risers.ts";
 import { isOneOf, isPresent } from "../shared/guards.ts";
 import {
@@ -37,7 +37,7 @@ import {
   stopFlash,
   changed,
   select,
-  selectRigOf,
+  selectTrussOf,
   holdDimmer,
   openContextMenu,
   openPositionMenu,
@@ -52,7 +52,7 @@ import {
   deleteRiser,
   openRiserMenu,
 } from "./actions.ts";
-import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
+import { linkSectionHtml, trussLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
 import { showTrace } from "./stage.ts";
 import { $, elById } from "../shared/query.ts";
 import { readStored, store } from "../shared/storage.ts";
@@ -138,7 +138,7 @@ export function renderList() {
   if (listTab === "risers") { renderRiserList(); return; }
   elById("count").textContent = `${state.fixtures.length} / ${MAX_FIXTURES}`;
   if (!state.fixtures.length) {
-    listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Place fixture”.</div>`;
+    listEl.innerHTML = `<div class="empty">None yet — press <kbd>P</kbd> or “+ Fixture”.</div>`;
     fixtureListKey = "";
     return;
   }
@@ -164,8 +164,8 @@ export function renderList() {
     row.children[1].textContent = fixture.name + (follows ? `  → ${follows.name}` : "") + (isInside(fixture, state.box) ? "" : "  ·  outside");
     row.addEventListener("click", (e) => {
       if (e.altKey) showTrace({ kind: "stageFixture", id: fixture.id }, e);
-      // A double-click on a rig's fixture selects the whole rig (⇧ / ⌘: adds it). (Not "dblclick": the first click rebuilds the rows.)
-      else if (!(e.detail === 2 && selectRigOf(fixture.id, e.shiftKey || e.metaKey))) select(fixture.id, e.shiftKey || e.metaKey);
+      // A double-click on a truss's fixture selects the whole truss (⇧ / ⌘: adds it). (Not "dblclick": the first click rebuilds the rows.)
+      else if (!(e.detail === 2 && selectTrussOf(fixture.id, e.shiftKey || e.metaKey))) select(fixture.id, e.shiftKey || e.metaKey);
     });
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); openContextMenu(fixture.id, e.clientX, e.clientY); });
     listEl.append(row);
@@ -347,19 +347,19 @@ elById("riserBtn").addEventListener("click", (e) => {
   else setPlacing(true, null, "riser");
 });
 
-/** Inspector block for editing a rig (shown when the selection is all one rig). */
-function rigSectionHtml(rig: Rig) {
+/** Inspector block for editing a truss (shown when the selection is all one truss). */
+function trussSectionHtml(truss: Truss) {
   return `
-    <div class="fields rig-fields">
-      <div class="subhead">Rig · ${RIG_TYPES[rig.type].name}</div>
-      <label>Rig name</label><input type="text" data-r="name" />
+    <div class="fields truss-fields">
+      <div class="subhead">Truss · ${TRUSS_TYPES[truss.type].name}</div>
+      <label>Truss name</label><input type="text" data-r="name" />
       <label>Center</label>
       <div class="xyz">
         <input type="number" step="${inputStep()}" data-r="x" title="x (− SR · + SL)" />
         <input type="number" step="${inputStep()}" data-r="y" title="height" />
         <input type="number" step="${inputStep()}" data-r="z" title="z (− upstage · + audience)" />
       </div>
-      <label>${RIG_TYPES[rig.type].sizeLabel} ${lengthUnit()}</label><input type="number" min="0" step="${inputStep()}" data-r="size" />
+      <label>${TRUSS_TYPES[truss.type].sizeLabel} ${lengthUnit()}</label><input type="number" min="0" step="${inputStep()}" data-r="size" />
       <label>Fixtures</label><input type="number" min="2" max="${MAX_FIXTURES}" step="1" data-r="count" />
       <label>Tilt °</label>
       <div class="slider" title="tilt: 0 = flat, 90 = upright facing the audience">
@@ -432,7 +432,7 @@ export function renderInspector() {
     return;
   }
   if (sel.length > 1) {
-    const selRig = commonRig(sel);
+    const selTruss = commonTruss(sel);
     inspectorEl.innerHTML = `
       ${inspectorHeading(`<span>${sel.length} selected</span>`)}
       <div class="fields">
@@ -446,7 +446,7 @@ export function renderInspector() {
         <select data-multi="dimmerCurve" title="How the real fixtures turn their dimmer value into light (as set in their menus), so the stage draws them as bright: the DMX sent doesn't change"><option value="" hidden>Mixed</option>${DIMMER_CURVES.map((c) => `<option value="${c}">${DIMMER_CURVE_LABELS[c]}</option>`).join("")}</select>
       </div>
       <p class="hint">Sets every selected fixture. Arrow keys, +/− and [ ] step each one's own 0–255 values (⇧ = 10).</p>
-      ${selRig ? rigSectionHtml(selRig) + rigLinkHtml() : ""}
+      ${selTruss ? trussSectionHtml(selTruss) + trussLinkHtml() : ""}
       ${FOLLOW_NOTE}
       <div class="buttons">
         <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
@@ -460,10 +460,10 @@ export function renderInspector() {
     syncInspector();
     return;
   }
-  const rig = rigOf(sel[0]);
-  const lock = rig ? 'disabled title="Set by the rig"' : "";
+  const truss = trussOf(sel[0]);
+  const lock = truss ? 'disabled title="Set by the truss"' : "";
   inspectorEl.innerHTML = `
-    ${inspectorHeading(rig ? `<span>in ${escapeHtml(rig.name)}</span>` : "")}
+    ${inspectorHeading(truss ? `<span>in ${escapeHtml(truss.name)}</span>` : "")}
     <div class="fields">
       <label>Name</label><input type="text" data-k="name" />
       <label>Location</label>
@@ -472,7 +472,7 @@ export function renderInspector() {
         <input type="number" step="${inputStep()}" data-k="y" title="height" ${lock} />
         <input type="number" step="${inputStep()}" data-k="z" title="z (− upstage · + audience)" ${lock} />
       </div>
-      <label></label><div class="hint" style="margin:0">x · height · z (${lengthUnit()})${rig ? " · set by the rig (drag to move the whole rig)" : ""}</div>
+      <label></label><div class="hint" style="margin:0">x · height · z (${lengthUnit()})${truss ? " · set by the truss (drag to move the whole truss)" : ""}</div>
 
       <div class="subhead">DMX values · 0–255</div>
       <div class="fixture-outline dmx-box" data-outline data-attrs="${inspectorAttrs(sel[0]).join(",")}">${dmxRowsHtml(inspectorAttrs(sel[0]))}
@@ -503,17 +503,17 @@ export function renderInspector() {
       <div class="readout" id="readout"></div>
     </div>
     ${linkSectionHtml(sel[0])}
-    ${rig ? rigSectionHtml(rig) + rigLinkHtml() : ""}
+    ${truss ? trussSectionHtml(truss) + trussLinkHtml() : ""}
     ${FOLLOW_NOTE}
     <div class="buttons">
       <button data-flash class="flash" title="Hold to flash white at full intensity (F)">Flash</button>
       <button data-act="aimSpot" title="Point the beam at a spot you click (A)">Aim at spot</button>
       <button data-act="home" title="Pan/tilt back to 0 (H)">Home</button>
-      ${rig ? `<button data-act="selectRig" title="Select every fixture in this rig">Select whole rig</button>` : `
+      ${truss ? `<button data-act="selectTruss" title="Select every fixture in this truss">Select whole truss</button>` : `
       <button data-act="zero" title="Make the current direction the new zero (Z)">Set zero here</button>
       <button data-act="aim" title="Point zero at the stage center">Aim zero at stage</button>`}
-      <button data-act="dup" title="${rig ? "Copy as a free fixture (not part of the rig)" : "Copy"}">Duplicate</button>
-      <button data-act="del" class="danger" title="${rig ? "Delete the whole rig" : "Delete"} (⌫ or right-click) · ⌘Z to undo">${rig ? "Delete rig" : "Delete"}</button>
+      <button data-act="dup" title="${truss ? "Copy as a free fixture (not part of the truss)" : "Copy"}">Duplicate</button>
+      <button data-act="del" class="danger" title="${truss ? "Delete the whole truss" : "Delete"} (⌫ or right-click) · ⌘Z to undo">${truss ? "Delete truss" : "Delete"}</button>
     </div>`;
   bindInspector();
   syncInspector();
@@ -665,26 +665,26 @@ function bindInspector() {
   bindLinkControls();
   inspectorEl.querySelectorAll<HTMLInputElement>("[data-r]").forEach((el) => {
     const k = el.dataset.r;
-    if (!isOneOf(RIG_FIELDS, k)) return;
-    // A new count rebuilds the rig's members, so it applies on Enter / leaving
+    if (!isOneOf(TRUSS_FIELDS, k)) return;
+    // A new count rebuilds the truss's members, so it applies on Enter / leaving
     // the field / the arrows, not per keystroke (typing 12 would pass through 1).
     el.addEventListener(k === "count" ? "change" : "input", () => {
-      const rig = commonRig(selectedFixtures());
-      if (!rig) return;
-      const before = rig.count;
-      // Lengths are typed in the shown unit; the rig keeps meters.
+      const truss = commonTruss(selectedFixtures());
+      if (!truss) return;
+      const before = truss.count;
+      // Lengths are typed in the shown unit; the truss keeps meters.
       const shown = isLength(k) ? numberFrom(el.value) : null;
-      setRigField(rig, k, shown != null ? String(fromShown(shown)) : el.value);
+      setTrussField(truss, k, shown != null ? String(fromShown(shown)) : el.value);
       // A new member count changes the list and possibly the selection.
-      if (rig.count !== before) { renderInspector(); changed(); return; }
-      // Moving / turning the rig can take members inside or outside the box,
+      if (truss.count !== before) { renderInspector(); changed(); return; }
+      // Moving / turning the truss can take members inside or outside the box,
       // so the list (with its "outside" marks) is always refreshed.
       changed({ inspector: k !== "name" });
     });
     // Left empty: show the value it kept.
     if (el.type === "number") el.addEventListener("blur", () => {
-      const rig = commonRig(selectedFixtures());
-      if (rig && el.value.trim() === "") el.value = String(round(Number(rig[k])));
+      const truss = commonTruss(selectedFixtures());
+      if (truss && el.value.trim() === "") el.value = String(round(Number(truss[k])));
     });
     if (el.type === "range") el.addEventListener("change", () => el.blur());
   });
@@ -719,19 +719,19 @@ function bindInspector() {
   });
 }
 
-function syncRigFields(rig: Rig) {
+function syncTrussFields(truss: Truss) {
   inspectorEl.querySelectorAll<HTMLInputElement>("[data-r]").forEach((el) => {
     const k = el.dataset.r;
-    if (el === document.activeElement || !isOneOf(RIG_FIELDS, k)) return;
-    const v = rig[k];
+    if (el === document.activeElement || !isOneOf(TRUSS_FIELDS, k)) return;
+    const v = truss[k];
     el.value = typeof v === "number" ? String(isLength(k) ? toShown(v) : round(v)) : v;
   });
 }
 
 export function syncInspector() {
   const sel = selectedFixtures();
-  const rig = commonRig(sel);
-  if (rig) syncRigFields(rig);
+  const truss = commonTruss(sel);
+  if (truss) syncTrussFields(truss);
   syncFollowNote(sel);
   if (sel.length > 1) {
     for (const attr of ["dimmer", "zoom"] as const) {

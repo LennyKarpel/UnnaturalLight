@@ -1,22 +1,25 @@
-// Header controls and dialogs: box size, View settings, Place rig, Place fixture.
+// Header controls and dialogs: box size, View settings, Place truss, Place fixture.
 import {
   MAX_FIXTURES,
   SURFACES,
-  RIG_TYPES,
-  RIG_TYPE_KEYS,
+  TRUSS_TYPES,
+  TRUSS_TYPE_KEYS,
   TRANSPARENT_SIDES,
-  normalizeRig,
+  normalizeTruss,
   consoleTypeFromKey,
+  consoleTypeOfMode,
+  DEFAULT_CONSOLE_TYPE,
   type Box,
-  type ConsoleType,
 } from "./stage-model.ts";
 import { clamp, numberFrom } from "../shared/numbers.ts";
-import { state, save, ui } from "./state.ts";
+import { state, save, ui, type PlaceChoice } from "./state.ts";
 import { updateSurfaces, updateBox } from "./view3d.ts";
 import { changed, setPlacing } from "./actions.ts";
 import {
   rememberConsoleType,
   LIBRARY,
+  EXISTING,
+  existingPickerFor,
   fillUniverses,
   readUniverse,
   fillConsoleTypes,
@@ -26,7 +29,6 @@ import { elById } from "../shared/query.ts";
 import { alwaysShowNames, setAlwaysShowNames } from "./names.ts";
 import { UNITS, convertLength, fromShown, inputStep, lengthUnit, onUnitChange, setLengthUnit, toShown, unitName, type Unit } from "./units.ts";
 import { isOneOf } from "../shared/guards.ts";
-import type { FixtureProfile } from "./fixture-library.ts";
 import { el } from "../shared/html.ts";
 
 // ---------------------------------------------------------------------
@@ -103,7 +105,7 @@ for (const b of unitButtons) b.addEventListener("click", () => { if (isOneOf(UNI
 onUnitChange(() => {
   syncUnitButtons();
   syncBoxInputs();
-  syncRigDialogType({ keepValues: true });
+  syncTrussDialogType({ keepValues: true });
 });
 
 // Names of positions and risers: always, or only the one pointed at / picked out (names.ts).
@@ -130,126 +132,136 @@ settingsDlg.querySelectorAll<HTMLElement>("[data-all]").forEach((el) => {
 });
 
 // ---------------------------------------------------------------------
-// Place rig dialog
+// Place truss dialog
 // ---------------------------------------------------------------------
 
-export const rigDlg = elById<HTMLDialogElement>("rigDlg");
-const rigInputs = {
-  type: elById<HTMLSelectElement>("rigType"),
-  size: elById<HTMLInputElement>("rigSize"),
-  count: elById<HTMLInputElement>("rigCount"),
-  tilt: elById<HTMLInputElement>("rigTilt"),
-  yaw: elById<HTMLInputElement>("rigYaw"),
-  consoleType: elById<HTMLSelectElement>("rigConsoleType"),
+export const trussDlg = elById<HTMLDialogElement>("trussDlg");
+const trussInputs = {
+  type: elById<HTMLSelectElement>("trussType"),
+  size: elById<HTMLInputElement>("trussSize"),
+  count: elById<HTMLInputElement>("trussCount"),
+  tilt: elById<HTMLInputElement>("trussTilt"),
+  yaw: elById<HTMLInputElement>("trussYaw"),
+  consoleType: elById<HTMLSelectElement>("trussConsoleType"),
 };
-const rigUniverseEl = elById<HTMLSelectElement>("rigUniverse");
-const rigRoomEl = elById("rigRoom");
-const rigLib = libraryPickerFor(rigInputs.consoleType, elById("rigLib"));
+const trussUniverseEl = elById<HTMLSelectElement>("trussUniverse");
+const trussRoomEl = elById("trussRoom");
+const trussLib = libraryPickerFor(trussInputs.consoleType, elById("trussLib"));
+const trussExisting = existingPickerFor(trussInputs.consoleType, elById("trussExistingRow"), elById<HTMLSelectElement>("trussExisting"));
 
-const rigBtn = elById("rigBtn");
-rigBtn.addEventListener("click", () => {
-  rigBtn.blur();
+const trussBtn = elById("trussBtn");
+trussBtn.addEventListener("click", () => {
+  trussBtn.blur();
   if (ui.placing) setPlacing(false);
   const room = MAX_FIXTURES - state.fixtures.length;
-  rigInputs.count.max = String(Math.max(2, room));
-  rigRoomEl.textContent = `${room} of ${MAX_FIXTURES} fixture slots free.`;
-  fillConsoleTypes(rigInputs.consoleType);
-  rigLib.sync();
-  fillUniverses(rigUniverseEl);
-  rigDlg.showModal();
+  trussInputs.count.max = String(Math.max(2, room));
+  trussRoomEl.textContent = `${room} of ${MAX_FIXTURES} fixture slots free.`;
+  fillConsoleTypes(trussInputs.consoleType);
+  trussLib.sync();
+  trussExisting.sync();
+  fillUniverses(trussUniverseEl);
+  trussDlg.showModal();
 });
-closable(rigDlg, "rigClose");
-elById("rigPlace").addEventListener("click", () => {
-  const cfg = normalizeRig({
-    type: rigInputs.type.value,
-    size: fromShown(numberFrom(rigInputs.size.value) ?? NaN),
-    count: rigInputs.count.value,
-    tilt: rigInputs.tilt.value,
-    yaw: rigInputs.yaw.value,
+closable(trussDlg, "trussClose");
+elById("trussPlace").addEventListener("click", () => {
+  const cfg = normalizeTruss({
+    type: trussInputs.type.value,
+    size: fromShown(numberFrom(trussInputs.size.value) ?? NaN),
+    count: trussInputs.count.value,
+    tilt: trussInputs.tilt.value,
+    yaw: trussInputs.yaw.value,
   }, 0);
   const room = MAX_FIXTURES - state.fixtures.length;
   if (cfg.count > room) {
-    rigRoomEl.textContent = `Only ${room} fixture slots free; lower the count to ${room} or fewer.`;
+    trussRoomEl.textContent = `Only ${room} fixture slots free; lower the count to ${room} or fewer.`;
     return;
   }
-  rigDlg.close();
-  let consoleType = consoleTypeFromKey(rigInputs.consoleType.value);
-  let fixture: FixtureProfile | null = null;
-  if (rigInputs.consoleType.value === LIBRARY) {
-    fixture = rigLib.profile();
-    if (!fixture) { rigRoomEl.textContent = "Pick a fixture and mode first."; return; }
-    consoleType = { mount: fixture.mount, color: fixture.color };
-  }
-  rememberConsoleType(rigInputs.consoleType.value);
-  setPlacing(true, {
-    type: cfg.type, size: cfg.size, count: cfg.count, tilt: cfg.tilt, yaw: cfg.yaw,
-    consoleType, fixture, universe: readUniverse(rigUniverseEl),
-  });
+  const choice = readPlaceChoice(trussInputs.consoleType, trussLib, trussExisting, trussUniverseEl);
+  if (typeof choice === "string") { trussRoomEl.textContent = choice; return; }
+  trussDlg.close();
+  setPlacing(true, { type: cfg.type, size: cfg.size, count: cfg.count, tilt: cfg.tilt, yaw: cfg.yaw, ...choice });
 });
 
-/** The unit the rig dialog's size was typed in. */
-let rigSizeShownIn: Unit = lengthUnit();
+/** The unit the truss dialog's size was typed in. */
+let trussSizeShownIn: Unit = lengthUnit();
 
 /**
  * Switching type relabels the size and loads that type's defaults and help.
  * `keepValues` (a new unit): only the size's label and number change.
  */
-function syncRigDialogType({ keepValues = false } = {}) {
-  const type = rigInputs.type.value;
-  const t = RIG_TYPES[isOneOf(RIG_TYPE_KEYS, type) ? type : "circle"];
-  elById("rigSizeLabel").textContent = `${t.sizeLabel} (${lengthUnit()})`;
-  rigInputs.size.step = inputStep();
+function syncTrussDialogType({ keepValues = false } = {}) {
+  const type = trussInputs.type.value;
+  const t = TRUSS_TYPES[isOneOf(TRUSS_TYPE_KEYS, type) ? type : "circle"];
+  elById("trussSizeLabel").textContent = `${t.sizeLabel} (${lengthUnit()})`;
+  trussInputs.size.step = inputStep();
   if (keepValues) {
-    const was = numberFrom(rigInputs.size.value);
-    if (was != null) rigInputs.size.value = String(convertLength(was, rigSizeShownIn, lengthUnit()));
-    rigSizeShownIn = lengthUnit();
+    const was = numberFrom(trussInputs.size.value);
+    if (was != null) trussInputs.size.value = String(convertLength(was, trussSizeShownIn, lengthUnit()));
+    trussSizeShownIn = lengthUnit();
     return;
   }
-  rigSizeShownIn = lengthUnit();
-  elById("rigHelp").textContent = `${t.name}: ${t.help}`;
-  rigInputs.size.value = String(toShown(t.defaults.size));
-  rigInputs.count.value = String(t.defaults.count);
-  rigInputs.tilt.value = String(t.defaults.tilt);
-  rigInputs.yaw.value = String(t.defaults.yaw);
+  trussSizeShownIn = lengthUnit();
+  elById("trussHelp").textContent = `${t.name}: ${t.help}`;
+  trussInputs.size.value = String(toShown(t.defaults.size));
+  trussInputs.count.value = String(t.defaults.count);
+  trussInputs.tilt.value = String(t.defaults.tilt);
+  trussInputs.yaw.value = String(t.defaults.yaw);
 }
-rigInputs.type.innerHTML = Object.entries(RIG_TYPES).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join("");
-rigInputs.type.addEventListener("change", () => syncRigDialogType());
-syncRigDialogType();
+trussInputs.type.innerHTML = Object.entries(TRUSS_TYPES).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join("");
+trussInputs.type.addEventListener("change", () => syncTrussDialogType());
+syncTrussDialogType();
+
+/**
+ * What a placing dialog's console type (with its library and console fixture
+ * pickers, and universe) asks for, remembered for next time; or why it can't
+ * be placed yet.
+ */
+function readPlaceChoice(
+  typeEl: HTMLSelectElement,
+  lib: ReturnType<typeof libraryPickerFor>,
+  existing: ReturnType<typeof existingPickerFor>,
+  universeEl: HTMLSelectElement,
+): PlaceChoice | string {
+  const key = typeEl.value;
+  const universe = readUniverse(universeEl);
+  let choice: PlaceChoice;
+  if (key === LIBRARY) {
+    const fixture = lib.profile();
+    if (!fixture) return "Pick a fixture and mode first.";
+    choice = { consoleType: consoleTypeOfMode(fixture), fixture, universe };
+  } else if (key === EXISTING) {
+    const ci = existing.picked();
+    if (!ci) return "Pick a console fixture first.";
+    choice = { consoleType: consoleTypeOfMode(ci), fixture: null, universe, linkFrom: ci.id };
+  } else choice = { consoleType: consoleTypeFromKey(key), fixture: null, universe };
+  rememberConsoleType(key);
+  return choice;
+}
 
 // Place fixture: pick its console type first.
 export const placeDlg = elById<HTMLDialogElement>("placeDlg");
 const placeTypeEl = elById<HTMLSelectElement>("placeType");
 const placeUniverseEl = elById<HTMLSelectElement>("placeUniverse");
 const placeLibMsg = elById("placeLibMsg");
-/** Console type for the fixture being placed (null = stage only). */
-export let placeType: ConsoleType | null = null;
-/** Real fixture for the fixture being placed (null = generic). */
-export let placeFixture: FixtureProfile | null = null;
-/** Universe the fixture being placed registers in (null = first with room). */
-export let placeUniverse: number | null = null;
+/** How the fixture being placed gets its console fixture. */
+export let placeChoice: PlaceChoice = { consoleType: DEFAULT_CONSOLE_TYPE, fixture: null, universe: null };
 const placeLib = libraryPickerFor(placeTypeEl, elById("placeLib"));
+const placeExistingPicker = existingPickerFor(placeTypeEl, elById("placeExistingRow"), elById<HTMLSelectElement>("placeExisting"));
 
 export function togglePlaceFixture() {
   if (ui.placing) { setPlacing(false); return; }
   fillConsoleTypes(placeTypeEl);
   placeLib.sync();
+  placeExistingPicker.sync();
   fillUniverses(placeUniverseEl);
   placeDlg.showModal();
 }
 
 elById("placeForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  placeFixture = null;
-  if (placeTypeEl.value === LIBRARY) {
-    const p = placeLib.profile();
-    if (!p) { placeLibMsg.textContent = "Pick a fixture and mode first."; return; }
-    placeFixture = p;
-    placeType = { mount: p.mount, color: p.color };
-  } else {
-    placeType = consoleTypeFromKey(placeTypeEl.value);
-  }
-  rememberConsoleType(placeTypeEl.value);
-  placeUniverse = readUniverse(placeUniverseEl);
+  const choice = readPlaceChoice(placeTypeEl, placeLib, placeExistingPicker, placeUniverseEl);
+  if (typeof choice === "string") { placeLibMsg.textContent = choice; return; }
+  placeChoice = choice;
   placeLibMsg.textContent = "";
   placeDlg.close();
   setPlacing(true);

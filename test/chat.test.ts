@@ -161,8 +161,8 @@ test("tool search: playback is always sent; the rest are deferred, found by Clau
   const api = (toApiTools(TOOLS) ?? []) as { name: string; defer_loading?: boolean }[];
   assert.equal(api[0].name, "tool_search_tool_bm25");
   assert.equal(api.length, TOOLS.length + 1);
-  const placeRig = api.find((t) => t.name === "place_rig");
-  assert.equal(placeRig?.defer_loading, true);
+  const placeTruss = api.find((t) => t.name === "place_truss");
+  assert.equal(placeTruss?.defer_loading, true);
   // No deferred tools: no search tool.
   const plain = (toApiTools(TOOLS.filter((t) => !t.deferred)) ?? []) as { name: string }[];
   assert.ok(plain.every((t) => t.name !== "tool_search_tool_bm25" && !("defer_loading" in t)));
@@ -171,21 +171,21 @@ test("tool search: playback is always sent; the rest are deferred, found by Clau
   assert.doesNotThrow(() => parseChatRequest({ messages: [{ role: "user", text: "x" }], tools: [{ name: "a", description: "", schema: {}, deferred: true }] }));
 });
 
-test("stage tools: fixtures by name, rig name or \"selected\"; rigs and positions by name", () => {
+test("stage tools: fixtures by name, truss name or \"selected\"; trusses and positions by name", () => {
   const calls: unknown[][] = [];
   const fixtures = [
-    { id: "f1", name: "Spot L", rig: null, selected: true },
-    { id: "f2", name: "Spot R", rig: null, selected: false },
-    { id: "r1", name: "Ring 1 · 1", rig: "Ring 1", selected: false },
-    { id: "r2", name: "Ring 1 · 2", rig: "Ring 1", selected: false },
+    { id: "f1", name: "Spot L", truss: null, selected: true },
+    { id: "f2", name: "Spot R", truss: null, selected: false },
+    { id: "r1", name: "Ring 1 · 1", truss: "Ring 1", selected: false },
+    { id: "r2", name: "Ring 1 · 2", truss: "Ring 1", selected: false },
   ];
   const fake: Fake<StageChat> = {
-    stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [{ id: "rig1", name: "Ring 1" }], fixtures, positions: [{ id: "p1", name: "DSC", x: 0, y: 0, z: 3 }, { id: "p2", name: "Drum riser", x: 0, y: 0.6, z: -2 }] }),
+    stage: () => ({ box: { w: 12, d: 8, h: 6 }, trusses: [{ id: "truss1", name: "Ring 1" }], fixtures, positions: [{ id: "p1", name: "DSC", x: 0, y: 0, z: 3 }, { id: "p2", name: "Drum riser", x: 0, y: 0.6, z: -2 }] }),
     aimFixtures: (ids: string[], at: unknown) => { calls.push(["aim", ids, at]); return {}; },
     aimAtPosition: (ids: string[], id: string) => { calls.push(["follow", ids, id]); return {}; },
     stopFollowing: (ids: string[]) => { calls.push(["unfollow", ids]); return []; },
     deleteFixtures: (ids: string[]) => { calls.push(["delete", ids]); return []; },
-    editRig: (id: string, fields: unknown) => { calls.push(["rig", id, fields]); return {}; },
+    editTruss: (id: string, fields: unknown) => { calls.push(["truss", id, fields]); return {}; },
   };
   (globalThis as { window?: unknown }).window = { stageChat: fake };
   try {
@@ -193,14 +193,14 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
     run("aim_fixtures", { fixtures: ["Ring 1"], at: { x: 0, y: 0, z: 0 } });
     run("aim_fixtures", { fixtures: ["selected", "spot r"], home: true });
     run("delete_fixtures", { fixtures: ["all"] });
-    run("edit_rig", { rig: "ring", center: { y: 5 } });
+    run("edit_truss", { truss: "ring", center: { y: 5 } });
     run("aim_fixtures", { fixtures: ["Ring 1"], position: "drum" });
     run("stop_following", { fixtures: ["selected"] });
     assert.deepEqual(calls, [
       ["aim", ["r1", "r2"], { x: 0, y: 0, z: 0 }],
       ["aim", ["f1", "f2"], null],
       ["delete", ["f1", "f2", "r1", "r2"]],
-      ["rig", "rig1", { y: 5 }],
+      ["truss", "truss1", { y: 5 }],
       ["follow", ["r1", "r2"], "p2"],
       ["unfollow", ["f1"]],
     ]);
@@ -209,7 +209,7 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
     assert.throws(() => run("aim_fixtures", { fixtures: ["Spot"], home: true }), /matches "Spot L", "Spot R"/);
     assert.throws(() => run("aim_fixtures", { fixtures: ["Spot L"] }), /Give one of/);
     assert.throws(() => run("move_fixtures", { fixtures: ["Spot L"], to: { x: 1 }, by: { x: 1 } }), /either to or by/);
-    assert.throws(() => run("edit_rig", { rig: "Line" }), /No rig "Line" \(rigs: Ring 1\)/);
+    assert.throws(() => run("edit_truss", { truss: "Line" }), /No truss "Line" \(trusses: Ring 1\)/);
   } finally {
     delete (globalThis as { window?: unknown }).window;
   }
@@ -218,7 +218,7 @@ test("stage tools: fixtures by name, rig name or \"selected\"; rigs and position
 test("stage tools: risers by name; sizes and center passed through in meters", () => {
   const calls: unknown[][] = [];
   const fake: Fake<StageChat> = {
-    stage: () => ({ box: { w: 12, d: 8, h: 6 }, rigs: [], fixtures: [], positions: [], risers: [{ id: "k1", name: "Drum riser", x: 0, z: -2, width: 2.4, depth: 2.4, height: 0.6, yaw: 0 }, { id: "k2", name: "Keys riser", x: 3, z: -2, width: 2.4, depth: 1.2, height: 0.4, yaw: 0 }] }),
+    stage: () => ({ box: { w: 12, d: 8, h: 6 }, trusses: [], fixtures: [], positions: [], risers: [{ id: "k1", name: "Drum riser", x: 0, z: -2, width: 2.4, depth: 2.4, height: 0.6, yaw: 0 }, { id: "k2", name: "Keys riser", x: 3, z: -2, width: 2.4, depth: 1.2, height: 0.4, yaw: 0 }] }),
     addRiser: (cfg: unknown) => { calls.push(["add", cfg]); return {}; },
     editRiser: (id: string, change: unknown) => { calls.push(["edit", id, change]); return {}; },
     deleteRiser: (id: string) => { calls.push(["delete", id]); return ""; },
@@ -367,8 +367,8 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
   const profile = { model: "Spot 7" };
   const stageFake: Fake<StageChat> = {
     stage: () => ({ fixtures: [
-      { id: "a", name: "Spot 7 1", rig: null, selected: false, console: null },
-      { id: "b", name: "Spot 7 2", rig: null, selected: false, console: null },
+      { id: "a", name: "Spot 7 1", truss: null, selected: false, console: "registering" },
+      { id: "b", name: "Spot 7 2", truss: null, selected: false, console: "registering" },
     ] }),
     manufacturers: async (q: string) => [{ key: "acme", name: "Acme" }, { key: "acme-pro", name: "Acme Pro" }].filter((m) => m.name.toLowerCase().includes(q.toLowerCase())),
     libraryFixtures: async () => [{ key: "spot-7", name: "Spot 7" }, { key: "spot-70", name: "Spot 70" }],
@@ -380,10 +380,7 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
     libraryProfile: async (m: { key: string }, f: string, i: number) => { calls.push(["profile", m.key, f, i]); return profile; },
     addFixtures: (points: unknown[], type: string, p: unknown) => { calls.push(["place", points.length, type, p]); return []; },
     linkToConsole: (ids: string[], id: string) => { calls.push(["link", ids, id]); return ids.length; },
-    linkManual: (ids: string[], start: number, layout: unknown) => calls.push(["manual", ids, start, layout]),
     register: (...a) => calls.push(["register", ...a]),
-    unlink: (ids: string[]) => calls.push(["unlink", ids]),
-    parseAddress: (t: string) => (t === "2/1" ? 513 : null),
   };
   const consoleFake: Fake<ConsoleChat> = {
     fixtures: () => [{ id: "c1", name: "Wash 1", group: "Washes", channels: [] }, { id: "c2", name: "Wash 2", group: "Washes", channels: [] }],
@@ -406,9 +403,7 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
     assert.deepEqual(await run("find_library_fixtures", { manufacturer: "acm" }), { manufacturers: ["Acme", "Acme Pro"] });
     assert.deepEqual(((await run("find_library_fixtures", { manufacturer: "Acme", model: "spot 7" })) as { modes: unknown[] }).modes.length, 3);
     run("link_fixtures", { fixtures: ["Spot 7 1", "Spot 7 2"], console_fixture: "Wash 1" });
-    run("link_fixtures", { fixtures: ["Spot 7 1"], address: "2/1", layout: ["dimmer", "other"] });
     run("link_fixtures", { fixtures: ["Spot 7 2"], register: "fixed/single", universe: 2 });
-    run("link_fixtures", { fixtures: ["Spot 7 2"], unlink: true });
     run("go", { step: "back" });
     run("set_levels", { live_submaster: 50 });
     run("edit_fixture", { fixture: "Wash 2", start: "100", mount: "movable" });
@@ -420,9 +415,7 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
       ["profile", "acme", "spot-7", 0],
       ["place", 1, "movable/multi", profile],
       ["link", ["a", "b"], "c1"],
-      ["manual", ["a"], 513, ["dimmer", null]],
       ["register", ["b"], "fixed/single", 2],
-      ["unlink", ["b"]],
       ["step", true],
       ["subs", 50, undefined],
       ["editFixture", "c2", { name: undefined, group: undefined, start: "100", channels: undefined, mount: "movable", color: undefined }],
@@ -430,8 +423,8 @@ test("library, link, step, submaster, fixture, group and show tools: what they p
       ["renameShow", "Friday"],
       ["save"],
     ]);
-    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], unlink: true, address: "1" }), /exactly one of/);
-    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], address: "9/1" }), /"9\/1" isn't a DMX address/);
+    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], console_fixture: "Wash 1", register: "fixed/single" }), /exactly one of/);
+    assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"] }), /exactly one of/);
     assert.throws(() => run("link_fixtures", { fixtures: ["Spot 7 1"], console_fixture: "Washes" }), /is a group/);
     assert.throws(() => run("edit_group", { group: "Washes" }), /either a new name or delete/);
   } finally {
@@ -457,9 +450,9 @@ test("stage fixture values, settings, duplicate, select and the whole patch: wha
   const calls: unknown[][] = [];
   const stageFake: Fake<StageChat> = {
     stage: () => ({ fixtures: [
-      { id: "a", name: "Spot L", rig: null, selected: true },
-      { id: "b", name: "Spot R", rig: null, selected: false },
-      { id: "r1", name: "Ring 1 · 1", rig: "Ring 1", selected: false },
+      { id: "a", name: "Spot L", truss: null, selected: true },
+      { id: "b", name: "Spot R", truss: null, selected: false },
+      { id: "r1", name: "Ring 1 · 1", truss: "Ring 1", selected: false },
     ] }),
     setValues: (...a) => { calls.push(["values", ...a]); return []; },
     editSettings: (...a) => { calls.push(["settings", ...a]); return {}; },

@@ -156,11 +156,11 @@ function traceStageFixture(s: Snapshot, id: string): Trace {
     }));
   }
   const link: Row[] = [];
-  if (!si.start) link.push({ label: "Not linked: every value is set on the stage", tone: "muted" });
+  if (!si.start) link.push({ label: "Waiting for its console fixture", tone: "muted" });
   else {
     const start = si.start;
     if (si.fixture) link.push({ label: `Fixture · ${si.fixture}` });
-    link.push({ label: si.consoleName ? `Console · ${si.consoleName}` : "Manual address", note: `Ch ${addr(s, start)}–${addr(s, start + si.layout.length - 1)}` });
+    link.push({ label: `Console · ${si.consoleName ?? "(not found)"}`, note: `Ch ${addr(s, start)}–${addr(s, start + si.layout.length - 1)}` });
     if (s.mix) link.push({ label: "Master", value: `${s.mix.master}%`, note: "scales every fader", tone: s.mix.master === 0 ? "warn" : undefined });
   }
   return {

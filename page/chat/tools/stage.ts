@@ -1,6 +1,6 @@
 /**
  * The chat's stage tools (round 3): look at the stage, place fixtures and
- * rigs, move, aim (at a spot or a named position), rename, delete, named
+ * trusses, move, aim (at a spot or a named position), rename, delete, named
  * positions, risers, and the box's size. They call the stage
  * (window.stageChat, stage/chat-hooks.ts) the same as its own controls.
  */
@@ -47,9 +47,9 @@ const someXyz = (v: unknown, what: string) => {
 
 const CONSOLE_TYPE = {
   type: "string",
-  enum: ["movable/multi", "movable/single", "fixed/multi", "fixed/single", "none"],
+  enum: ["movable/multi", "movable/single", "fixed/multi", "fixed/single"],
   description:
-    "Its console fixture (channels and faders it gets): movable/multi = pan, tilt, RGB, zoom (7 ch, the default); movable/single (4 ch); fixed/multi (dimmer + RGB, 4 ch); fixed/single (dimmer, 1 ch); none = on the stage only",
+    "Its console fixture (channels and faders it gets): movable/multi = pan, tilt, RGB, zoom (7 ch, the default); movable/single (4 ch); fixed/multi (dimmer + RGB, 4 ch); fixed/single (dimmer, 1 ch)",
 };
 
 // --- the fixture library ------------------------------------------------------------
@@ -57,7 +57,7 @@ const CONSOLE_TYPE = {
 const LIBRARY = {
   type: "object",
   description:
-    "A real fixture from the Open Fixture Library (find it with find_library_fixtures): its console fixture gets that mode's channels, named, and the stage draws its pan / tilt / zoom ranges. Overrides console_type (except \"none\").",
+    "A real fixture from the Open Fixture Library (find it with find_library_fixtures): its console fixture gets that mode's channels, named, and the stage draws its pan / tilt / zoom ranges. Overrides console_type.",
   properties: {
     manufacturer: { type: "string", description: "Manufacturer name or key" },
     model: { type: "string", description: "Fixture name or key" },
@@ -103,11 +103,11 @@ export async function libraryProfile(v: unknown): Promise<FixtureProfile> {
   return s.libraryProfile(man, fix.key, mode.index);
 }
 
-const FIXTURES = { type: "array", minItems: 1, items: { type: "string" }, description: "Fixture names, rig names (all its fixtures), \"all\" or \"selected\"" };
+const FIXTURES = { type: "array", minItems: 1, items: { type: "string" }, description: "Fixture names, truss names (all its fixtures), \"all\" or \"selected\"" };
 
 type StageFixture = ReturnType<StageChat["stage"]>["fixtures"][number];
 
-/** Stage fixtures by name, rig name, "all" or "selected" (what's selected on the stage), in stage order. */
+/** Stage fixtures by name, truss name, "all" or "selected" (what's selected on the stage), in stage order. */
 function stageFixtures(queries: unknown): StageFixture[] {
   const all = stage().stage().fixtures;
   const list = (Array.isArray(queries) ? queries : [queries]).map((q) => String(q ?? "").trim());
@@ -119,14 +119,14 @@ function stageFixtures(queries: unknown): StageFixture[] {
     for (const f of sel) found.add(f.id);
   }
   const rest = list.filter((q) => !isSel(q));
-  if (rest.length || !found.size) for (const f of findFixtures(all.map((f) => ({ ...f, group: f.rig })), rest)) found.add(f.id);
+  if (rest.length || !found.size) for (const f of findFixtures(all.map((f) => ({ ...f, group: f.truss })), rest)) found.add(f.id);
   return all.filter((f) => found.has(f.id));
 }
 
-/** Rigs, named positions and risers by name (see findByName). */
+/** Trusses, named positions and risers by name (see findByName). */
 const findPosition = (query: unknown) => findByName(stage().stage().positions, query, "position", "There are no named positions yet");
 const findRiser = (query: unknown) => findByName(stage().stage().risers, query, "riser", "There are no risers");
-const findRig = (query: unknown) => findByName(stage().stage().rigs, query, "rig", "There are no rigs");
+const findTruss = (query: unknown) => findByName(stage().stage().trusses, query, "truss", "There are no trusses", "trusses");
 
 const RISER_SIZES = {
   width: { type: "number", minimum: 0.1, maximum: 50, description: "Meters, along x before it's turned" },
@@ -152,28 +152,25 @@ const xyzText = (p: unknown) => {
 export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "get_stage",
-    description: `The stage: the box's size, every rig (name, type, center, size, count, tilt, yaw; model: the library fixture its fixtures are), every fixture (name, position, rig, pan and tilt in degrees, console: the console fixture it's linked to, "manual <address>", or missing when it's only on the stage; selected; following: the named position it follows), the named positions (spots to aim at) and the risers (platforms standing on the floor: center x / z, width, depth, height, yaw). Fields that are empty, false or the rig's are left out. ${WHERE}`,
+    description: `The stage: the box's size, every truss (name, type, center, size, count, tilt, yaw; model: the library fixture its fixtures are), every fixture (name, position, truss, pan and tilt in degrees, console: the console fixture it's linked to, or "registering" while its console fixture is being made; selected; following: the named position it follows), the named positions (spots to aim at) and the risers (platforms standing on the floor: center x / z, width, depth, height, yaw). Fields that are empty, false or the truss's are left out. ${WHERE}`,
     schema: NO_ARGS,
     describe: () => "Looked at the stage",
     run: () => {
       const s = stage().stage();
-      // Kept short (the whole answer stays in the conversation): no ids, nothing empty or false, a rig's model said once.
-      const rigModel = new Map(s.rigs.map((r) => [r.name, s.fixtures.find((f) => f.rig === r.name)?.model]));
+      // Kept short (the whole answer stays in the conversation): no ids, nothing empty or false, a truss's model said once.
+      const trussModel = new Map(s.trusses.map((r) => [r.name, s.fixtures.find((f) => f.truss === r.name)?.model]));
       return {
         ...s,
-        rigs: s.rigs.map(({ id: _id, ...r }) => ({ ...r, ...(rigModel.get(r.name) ? { model: rigModel.get(r.name) } : {}) })),
+        trusses: s.trusses.map(({ id: _id, ...r }) => ({ ...r, ...(trussModel.get(r.name) ? { model: trussModel.get(r.name) } : {}) })),
         positions: s.positions.map(({ id: _id, ...p }) => p),
         risers: s.risers.map(({ id: _id, ...r }) => r),
-        fixtures: s.fixtures.map(({ id: _id, inConsole, ...f }) => {
-          const kept = Object.fromEntries(Object.entries(f).filter(([k, v]) => v != null && v !== false && !(k === "model" && f.rig && v === rigModel.get(f.rig))));
-          return inConsole && !f.console ? { ...kept, console: "registering" } : kept;
-        }),
+        fixtures: s.fixtures.map(({ id: _id, ...f }) => Object.fromEntries(Object.entries(f).filter(([k, v]) => v != null && v !== false && !(k === "model" && f.truss && v === trussModel.get(f.truss))))),
       };
     },
   },
   {
     name: "place_fixtures",
-    description: `Put new fixtures on the stage, each at a point, aimed at the stage floor's center. Each also gets a console fixture with faders (unless console_type is "none"). ${WHERE}`,
+    description: `Put new fixtures on the stage, each at a point, aimed at the stage floor's center. Each also gets a console fixture with faders (every stage fixture is a console fixture; to use existing console fixtures instead, link_fixtures them after). ${WHERE}`,
     schema: {
       type: "object",
       properties: {
@@ -191,7 +188,7 @@ export const STAGE_TOOLS: ToolDef[] = [
     describe: (a) => {
       const n = Array.isArray(a.fixtures) ? a.fixtures.length : 0;
       const lib = (a.library ?? null) as Args | null;
-      return `Place ${n} ${lib ? `${lib.manufacturer} ${lib.model}` : `fixture${n === 1 ? "" : "s"}`}${a.console_type === "none" ? " (stage only)" : ""}`;
+      return `Place ${n} ${lib ? `${lib.manufacturer} ${lib.model}` : `fixture${n === 1 ? "" : "s"}`}`;
     },
     run: async (a) => {
       if (!Array.isArray(a.fixtures) || !a.fixtures.length) throw new Error("Which points?");
@@ -201,8 +198,8 @@ export const STAGE_TOOLS: ToolDef[] = [
     },
   },
   {
-    name: "place_rig",
-    description: `Put a new rig on the stage: fixtures arranged as a circle (a ring; size = diameter), a square (size = side) or a line (size = length), centered at a point. Circle and square fixtures point at the rig's center; a line's all point the same way (straight down when flat). tilt: 0 = flat (hanging), 90 = upright facing the audience (a line: +90 aims upstage, −90 at the audience). yaw turns it about the vertical. Defaults: circle / square 4 m, 8 fixtures; line 6 m, 6 fixtures; tilt 0, yaw 0. ${WHERE}`,
+    name: "place_truss",
+    description: `Put a new truss on the stage: fixtures arranged as a circle (a ring; size = diameter), a square (size = side) or a line (size = length), centered at a point. Circle and square fixtures point at the truss's center; a line's all point the same way (straight down when flat). tilt: 0 = flat (hanging), 90 = upright facing the audience (a line: +90 aims upstage, −90 at the audience). yaw turns it about the vertical. Defaults: circle / square 4 m, 8 fixtures; line 6 m, 6 fixtures; tilt 0, yaw 0. ${WHERE}`,
     schema: {
       type: "object",
       properties: {
@@ -219,14 +216,14 @@ export const STAGE_TOOLS: ToolDef[] = [
       required: ["type", "center"],
       additionalProperties: false,
     },
-    describe: (a) => `Place a ${a.type} rig${a.name ? ` "${a.name}"` : ""} at ${xyzText(a.center)}`,
+    describe: (a) => `Place a ${a.type} truss${a.name ? ` "${a.name}"` : ""} at ${xyzText(a.center)}`,
     run: async (a) => {
       const type = a.type === "circle" || a.type === "square" || a.type === "line" ? a.type : null;
       if (!type) throw new Error("type must be circle, square or line");
       const c = spot(a.center, "center");
       const opt = (k: string) => (a[k] == null ? undefined : num(a[k], k));
       const profile = a.library == null ? null : await libraryProfile(a.library);
-      return stage().addRig({
+      return stage().addTruss({
         type, ...c,
         size: opt("size"), count: opt("count"), tilt: opt("tilt"), yaw: opt("yaw"),
         consoleType: String(a.console_type ?? "movable/multi"),
@@ -236,12 +233,12 @@ export const STAGE_TOOLS: ToolDef[] = [
     },
   },
   {
-    name: "edit_rig",
-    description: `Change a rig: its name, center (moves the whole rig), size, number of fixtures, tilt or yaw. Its fixtures follow. ${WHERE}`,
+    name: "edit_truss",
+    description: `Change a truss: its name, center (moves the whole truss), size, number of fixtures, tilt or yaw. Its fixtures follow. ${WHERE}`,
     schema: {
       type: "object",
       properties: {
-        rig: { type: "string", description: "The rig's name" },
+        truss: { type: "string", description: "The truss's name" },
         name: { type: "string", maxLength: 40 },
         center: XYZ,
         size: { type: "number", minimum: 0.5, maximum: 50 },
@@ -249,7 +246,7 @@ export const STAGE_TOOLS: ToolDef[] = [
         tilt: { type: "number", minimum: -90, maximum: 90 },
         yaw: { type: "number", minimum: -180, maximum: 180 },
       },
-      required: ["rig"],
+      required: ["truss"],
       additionalProperties: false,
     },
     describe: (a) => {
@@ -258,21 +255,21 @@ export const STAGE_TOOLS: ToolDef[] = [
         a.center != null && `center ${xyzText(a.center)}`,
         ...(["size", "count", "tilt", "yaw"] as const).map((k) => a[k] != null && `${k} ${a[k]}`),
       ].filter(Boolean);
-      return `${a.rig}: ${what.join(", ") || "no change"}`;
+      return `${a.truss}: ${what.join(", ") || "no change"}`;
     },
     run: (a) => {
-      const rig = findRig(a.rig);
+      const truss = findTruss(a.truss);
       const fields: Record<string, string | number> = {};
       if (a.name != null) fields.name = String(a.name);
       if (a.center != null) Object.assign(fields, someXyz(a.center, "center"));
       for (const k of ["size", "count", "tilt", "yaw"]) if (a[k] != null) fields[k] = num(a[k], k);
       if (!Object.keys(fields).length) throw new Error("Nothing to change");
-      return stage().editRig(rig.id, fields);
+      return stage().editTruss(truss.id, fields);
     },
   },
   {
     name: "move_fixtures",
-    description: `Move fixtures that aren't in a rig: to a point (any of x / y / z; the others stay) or by an offset. To move a rig's fixtures, move the rig (edit_rig). Moving doesn't re-aim them, except fixtures following a named position. ${WHERE}`,
+    description: `Move fixtures that aren't in a truss: to a point (any of x / y / z; the others stay) or by an offset. To move a truss's fixtures, move the truss (edit_truss). Moving doesn't re-aim them, except fixtures following a named position. ${WHERE}`,
     schema: {
       type: "object",
       properties: { fixtures: FIXTURES, to: XYZ, by: { ...XYZ, description: "Offset in meters" } },
@@ -288,7 +285,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "aim_fixtures",
-    description: `Point fixtures' beams (a rig's name aims all its fixtures) at a named position, at a spot, or send them home (pan and tilt centered). Sets their pan and tilt, within their range. Aimed at a named position, they follow it: when the position or the fixture moves they re-aim. For fixtures in the console the aim goes into the cue on stage (its pan / tilt faders), and that cue keeps following the position until its pan / tilt are changed some other way; other cues are untouched. At a spot or home: set once, and any following stops. E.g. the floor's center is (0, 0, 0); downstage center floor is (0, 0, depth/2 − 1). ${WHERE}`,
+    description: `Point fixtures' beams (a truss's name aims all its fixtures) at a named position, at a spot, or send them home (pan and tilt centered). Sets their pan and tilt, within their range. Aimed at a named position, they follow it: when the position or the fixture moves they re-aim. For fixtures in the console the aim goes into the cue on stage (its pan / tilt faders), and that cue keeps following the position until its pan / tilt are changed some other way; other cues are untouched. At a spot or home: set once, and any following stops. E.g. the floor's center is (0, 0, 0); downstage center floor is (0, 0, depth/2 − 1). ${WHERE}`,
     schema: {
       type: "object",
       properties: {
@@ -409,7 +406,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "set_stage_fixtures",
     description:
-      "Set what stage fixtures show, as the inspector's sliders do: dimmer (%), color (#rrggbb, mixed onto the color channels each has), pan / tilt / zoom or any channel (0–255; pan / tilt 128 = straight ahead from its zero). Works on every stage fixture, including ones only on the stage (not in the console), which set_fixture can't reach. For fixtures in the console the values go to their channels in the cue on stage, as the inspector's do; to change another cue, use set_fixture. Setting pan or tilt stops following a position (to aim at a spot, aim_fixtures is easier).",
+      "Set what stage fixtures show, as the inspector's sliders do: dimmer (%), color (#rrggbb, mixed onto the color channels each has), pan / tilt / zoom or any channel (0–255; pan / tilt 128 = straight ahead from its zero). Works on every stage fixture: the values go to their channels in the cue on stage, as the inspector's do; to change another cue, use set_fixture. Setting pan or tilt stops following a position (to aim at a spot, aim_fixtures is easier).",
     schema: {
       type: "object",
       properties: {
@@ -456,7 +453,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "edit_stage_fixtures",
     description:
-      "Change stage fixtures' own settings, as the inspector's Ranges, Dimmer curve and zero do. pan_range / tilt_range: how far the real fixture turns each way from its zero (± degrees; a 540° pan is ±270). beam_min / beam_max: its beam angle (degrees) at zoom 0 and 255 (the same for both on a fixture without zoom). dimmer_curve: as set in the real fixture's menu (it only changes how bright the stage draws it). zero: \"here\" makes where it points now its zero (pan / tilt 128), \"stage\" points its zero at the stage (for a rig's fixtures the rig sets their zero: skipped). These don't change the DMX sent.",
+      "Change stage fixtures' own settings, as the inspector's Ranges, Dimmer curve and zero do. pan_range / tilt_range: how far the real fixture turns each way from its zero (± degrees; a 540° pan is ±270). beam_min / beam_max: its beam angle (degrees) at zoom 0 and 255 (the same for both on a fixture without zoom). dimmer_curve: as set in the real fixture's menu (it only changes how bright the stage draws it). zero: \"here\" makes where it points now its zero (pan / tilt 128), \"stage\" points its zero at the stage (for a truss's fixtures the truss sets their zero: skipped). These don't change the DMX sent.",
     schema: {
       type: "object",
       properties: {
@@ -483,7 +480,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "duplicate_fixtures",
-    description: "Copy stage fixtures, with all their settings, 0.5 m to stage left (copies of a rig's fixtures are free fixtures). Each copy of a fixture the stage set up in the console gets its own console fixture and faders.",
+    description: "Copy stage fixtures, with all their settings, 0.5 m to stage left (copies of a truss's fixtures are free fixtures). Each copy of a fixture the stage set up in the console gets its own console fixture and faders.",
     schema: { type: "object", properties: { fixtures: FIXTURES }, required: ["fixtures"], additionalProperties: false },
     describe: (a) => `Duplicate ${who(a)}`,
     run: (a) => stage().duplicateFixtures(stageFixtures(a.fixtures).map((f) => f.id)),
@@ -500,7 +497,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "rename_stage_fixture",
-    description: "Rename a fixture on the stage. (A rig's fixtures are named after the rig: rename the rig with edit_rig.)",
+    description: "Rename a fixture on the stage. (A truss's fixtures are named after the truss: rename the truss with edit_truss.)",
     schema: { type: "object", properties: { fixture: { type: "string" }, name: { type: "string", maxLength: 40 } }, required: ["fixture", "name"], additionalProperties: false },
     describe: (a) => `Rename ${a.fixture} to "${a.name}"`,
     run: (a) => {
@@ -511,7 +508,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   },
   {
     name: "delete_fixtures",
-    description: "Delete stage fixtures, and the console fixtures the stage made for them. A fixture in a rig deletes its whole rig.",
+    description: "Delete stage fixtures, and the console fixtures the stage made for them. A fixture in a truss deletes its whole truss.",
     schema: { type: "object", properties: { fixtures: FIXTURES }, required: ["fixtures"], additionalProperties: false },
     describe: (a) => `Delete ${who(a)}`,
     run: (a) => ({ deleted: stage().deleteFixtures(stageFixtures(a.fixtures).map((f) => f.id)) }),
@@ -539,7 +536,7 @@ export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "find_library_fixtures",
     description:
-      "Search the Open Fixture Library (real fixtures; needs internet): manufacturers matching a name, or one manufacturer's fixtures matching a model name. When one fixture matches, its modes too (name, channel count, whether it can be used). Then place it with place_fixtures / place_rig's library.",
+      "Search the Open Fixture Library (real fixtures; needs internet): manufacturers matching a name, or one manufacturer's fixtures matching a model name. When one fixture matches, its modes too (name, channel count, whether it can be used). Then place it with place_fixtures / place_truss's library.",
     schema: {
       type: "object",
       properties: {
@@ -574,28 +571,24 @@ export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "link_fixtures",
     description:
-      "How stage fixtures get their DMX (what get_stage shows as console). Give exactly one of: console_fixture (link to that console fixture; several stage fixtures link in order to it and the console fixtures after it, by channel), address (drive them straight from DMX channels from there, each fixture's block after the last), register (give each a new console fixture of that type, with faders; library fixtures bring their own channels), or unlink (stage only). Moving off a console fixture the stage made deletes it in the console.",
+      "How stage fixtures get their DMX (what get_stage shows as console). Every stage fixture is a console fixture. Give exactly one of: console_fixture (link to that console fixture; several stage fixtures link in order to it and the console fixtures after it, by channel) or register (give each a new console fixture of that type, with faders; library fixtures bring their own channels). Moving off a console fixture the stage made deletes it in the console.",
     schema: {
       type: "object",
       properties: {
         fixtures: FIXTURES,
         console_fixture: { type: "string", description: "A console fixture's name (list_fixtures)" },
-        address: { type: "string", description: "DMX start address: 45, or 2/45 for universe 2" },
-        layout: { type: "array", items: { type: "string", enum: [...DMX_ATTRS, "other"] }, description: "With address: what each channel does (default: its library mode's, else pan, tilt, dimmer, R, G, B, zoom)" },
         register: { ...CONSOLE_TYPE, description: "Console fixture type to make (movable/multi, movable/single, fixed/multi, fixed/single)" },
         universe: { type: "integer", minimum: 1, description: "With register: only in this universe" },
-        unlink: { type: "boolean" },
       },
       required: ["fixtures"],
       additionalProperties: false,
     },
     describe: (a) => {
-      const how = a.console_fixture != null ? `link to ${a.console_fixture}` : a.address != null ? `address ${a.address}` : a.register != null ? `register (${a.register})` : a.unlink ? "unlink" : "?";
+      const how = a.console_fixture != null ? `link to ${a.console_fixture}` : a.register != null ? `register (${a.register})` : "?";
       return `${who(a)}: ${how}`;
     },
     run: (a) => {
-      const ways = [a.console_fixture != null, a.address != null, a.register != null, a.unlink === true].filter(Boolean).length;
-      if (ways !== 1) throw new Error("Give exactly one of console_fixture, address, register or unlink");
+      if ((a.console_fixture != null) === (a.register != null)) throw new Error("Give exactly one of console_fixture or register");
       const ids = stageFixtures(a.fixtures).map((f) => f.id);
       const s = stage();
       if (a.console_fixture != null) {
@@ -604,15 +597,7 @@ export const STAGE_TOOLS: ToolDef[] = [
         if (more.length) throw new Error(`"${a.console_fixture}" is a group: name one console fixture`);
         const n = s.linkToConsole(ids, target.id);
         if (n < ids.length) return { linked: n, of: ids.length, note: "Ran out of console fixtures after it" };
-      } else if (a.address != null) {
-        const start = s.parseAddress(String(a.address));
-        if (start == null) throw new Error(`"${a.address}" isn't a DMX address (45, or 2/45)`);
-        const layout = Array.isArray(a.layout) ? a.layout.map((r): DmxAttr | null => (isDmxAttr(r) ? r : null)) : undefined;
-        s.linkManual(ids, start, layout);
-      } else if (a.register != null) {
-        if (a.register === "none") throw new Error("To leave them stage only, use unlink");
-        s.register(ids, String(a.register), a.universe == null ? null : Number(a.universe));
-      } else s.unlink(ids);
+      } else s.register(ids, String(a.register), a.universe == null ? null : Number(a.universe));
       const all = s.stage().fixtures;
       return ids.map((id) => all.find((f) => f.id === id)).filter(Boolean).map((f) => ({ fixture: f?.name, console: f?.console }));
     },

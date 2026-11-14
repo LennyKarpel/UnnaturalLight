@@ -43,6 +43,7 @@ import {
 import { inlineRename, clickToRename } from "./inline-rename.ts";
 import { el, button } from "../shared/html.ts";
 import { clamp } from "../shared/numbers.ts";
+import { notifyStageRemoved } from "./stage-link.ts";
 
 export let fixtureFormStart = 1;
 export let fixtureFormCount = 1;
@@ -529,6 +530,7 @@ function renderFixtureRow(fixture: Fixture): HTMLElement {
     state.fixtures = state.fixtures.filter((item) => item.id !== fixture.id);
     renderFixtures();
     persistSession();
+    notifyStageRemoved([fixture.id]);
   });
 
   row.append(name, range, groupPicker.el, mount, color, remove);

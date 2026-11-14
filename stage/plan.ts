@@ -2,10 +2,10 @@
 import * as THREE from "three";
 import { describeSpot, fmtLength, gridStep, onUnitChange, snapLength } from "./units.ts";
 import { alwaysShowNames, onNamesChange } from "./names.ts";
-import { beamDir, axisHits, rigOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
+import { beamDir, axisHits, trussOutline, type Box, type Fixture, type StagePosition, type Xyz } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
-import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
+import { state, byId, selectedFixtures, moveFixture, addTrussAt, positionById, riserById, ui } from "./state.ts";
+import { look, changed, select, selectTrussOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
 import { riserCorners, handleSpot, resizeTo, yawToward, SIZE_HANDLES, RISER_MIN, RISER_MAX_H, type Riser, type RiserHandle } from "./risers.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
@@ -355,13 +355,13 @@ function drawPlanNow() {
     }
   }
 
-  // Rig outlines
-  const selRigIds = new Set(selectedFixtures().map((i) => i.rigId).filter(isPresent));
-  for (const rig of state.rigs) {
-    ctx.strokeStyle = selRigIds.has(rig.id) ? "#00dddd88" : "#8a93a688";
+  // Truss outlines
+  const selTrussIds = new Set(selectedFixtures().map((i) => i.trussId).filter(isPresent));
+  for (const truss of state.trusses) {
+    ctx.strokeStyle = selTrussIds.has(truss.id) ? "#00dddd88" : "#8a93a688";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    rigOutline(rig).forEach((p, k) => {
+    trussOutline(truss).forEach((p, k) => {
       const [px, py] = fixturePlan(p);
       if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
     });
@@ -566,7 +566,7 @@ plan.addEventListener("pointerdown", (e) => {
   if (ui.placing) {
     const p = { x: 0, y: 0, z: 0, ...pv().placeDefault(state.box) };
     setAB(p, a, b);
-    if (ui.placingRig) addRigAt(ui.placingRig, p.x, clamp(p.y, 0, 50), p.z);
+    if (ui.placingTruss) addTrussAt(ui.placingTruss, p.x, clamp(p.y, 0, 50), p.z);
     else addFixtureAt(p.x, clamp(p.y, 0, 50), p.z);
     return;
   }
@@ -618,11 +618,11 @@ plan.addEventListener("pointerdown", (e) => {
   plan.setPointerCapture(e.pointerId);
 });
 
-// Double-click a rig's fixture: select the whole rig (⇧ / ⌘: add it to the selection).
+// Double-click a truss's fixture: select the whole truss (⇧ / ⌘: add it to the selection).
 plan.addEventListener("dblclick", (e) => {
   if (ui.placing || ui.aiming) return;
   const fixture = planFixtureAt(...planPosition(e));
-  if (fixture) selectRigOf(fixture.id, e.shiftKey || e.metaKey);
+  if (fixture) selectTrussOf(fixture.id, e.shiftKey || e.metaKey);
 });
 
 plan.addEventListener("pointermove", (e) => {

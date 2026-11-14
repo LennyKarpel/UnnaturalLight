@@ -3,7 +3,7 @@
 UnnaturalLight is a lighting console and a 3D stage visualizer that run in your web browser and work together:
 
 - The **Console** is your lighting desk: 256 faders, cues grouped into songs, a patch, and DMX output to up to 8 universes through Enttec DMX USB Pro interfaces.
-- The **Stage** is a 3D model of your performance space. Place fixtures (generic ones, real models from a library, or whole rigs), and see each beam and where it lands on the floor, walls and ceiling.
+- The **Stage** is a 3D model of your performance space. Place fixtures (generic ones, real models from a library, or whole trusses), and see each beam and where it lands on the floor, walls and ceiling.
 
 The two stay **in sync**: when you place a fixture on the stage it's set up in the console with its own faders; moving those faders moves the fixture on the stage; and adjusting the fixture on the stage moves its faders.
 
@@ -64,7 +64,7 @@ If a page ever looks out of date after an update, press **⌘⇧R** (hard reload
 ## 2. Quick start: your first fixture and cue
 
 1. **Size the stage.** In the Stage's header, set **Box W / D / H** (width, depth, height, in meters or feet: see **⚙ View**) to your space.
-2. **Place a fixture.** Click **+ Place fixture** (or press `P`).
+2. **Place a fixture.** Click **+ Fixture** (or press `P`).
    - Choose a **console type**: *Movable · Multi-color* gives a moving light with color; *From fixture library…* lets you pick a real fixture (see [Real fixtures](#real-fixtures-from-the-fixture-library)).
    - Click **Place…**, then click where it goes: on the ceiling, a wall or the floor in the 3D view, on the ground outside the box, or anywhere in the plan.
 3. **See it in the console.** The console now has a fixture for it on its *Fixtures* tab, and faders patched to its channels and named after it, e.g. *Fixture 4 Dim*, *Fixture 4 Pan* (the fader rows scroll to them). They start at the fixture's current values.
@@ -107,10 +107,10 @@ The **Chat** button in the page header opens a panel on the right where you can 
   - *Cues and songs:* read a cue's levels (and which fixtures it aims at named positions); set faders in a cue; copy levels from one cue to another (all of them, or just some fixtures'); add a cue (empty or a copy of another), rename it or change its fade time, move it, delete it; add a step to a cue, set a step's fade and hold, delete one (and set faders or fixtures in a step); add, rename, duplicate, delete or reorder a song (deleting one takes it out of every set).
   - *Sets:* list the sets; add songs to a set (at the end or at a place in it), take one out, move one; make a new set (empty or with songs), rename, duplicate or delete one; run a set (from its first song or a place in it). Unless you name a set, it works on the one the Run tab runs. The Set tab shows the set it changed.
   - *Fixtures and patch:* add console fixtures that aren't on the stage (one or several, with what each channel does; each gets the next free channels and its own faders); rename one, move it to a group, give it another start address or channel count (its faders' patch moves with it, and a linked stage fixture follows) or change its type; rename or delete a group; delete console fixtures (one placed on the stage is deleted on the stage); patch a fader to channels, each with its own max (the level it gets at full), or rename it; patch every fader 1:1 or unpatch them all (like the Patch tab's **1:1** and **Unpatch all**, without the question). Set a fixture's (or a group's, e.g. "Ring 1") dimmer in %, color (any color name; it's mixed onto the fixture's emitters), pan, tilt, zoom, or any channel by its role. Unless you name a cue, edits go into the **LIVE cue**, so you see them at once.
-  - *Stage:* see the stage (box, rigs, fixtures and where they point); place fixtures at spots (each gets a console fixture with faders unless you say stage only), generic or a real fixture from the [fixture library](#real-fixtures-from-the-fixture-library) (the chat can search it by manufacturer and model and list a fixture's modes; it needs internet); place a rig (of either kind too) (circle, square or line: center, size, count, tilt, yaw); change a rig (its center moves it); move fixtures (to a spot or by an offset); set fixtures' dimmer, color, pan, tilt, zoom or any channel as the inspector does (this works on fixtures only on the stage too; for console fixtures the values go into the cue on stage); change fixtures' Ranges (how far pan and tilt go, the beam angle at zoom 0 and 255), dimmer curve and zero (here, or aimed at the stage), e.g. from a real fixture's spec sheet; duplicate fixtures; select fixtures so you can carry on by hand; aim fixtures (or a whole rig) at a named position (they follow it) or a spot, or home them; stop fixtures following; add, rename, move or delete named positions; add, move, resize, turn, rename or delete risers; rename or delete fixtures (a rig's fixture deletes its whole rig); set the box's size; change how fixtures get their DMX, as the inspector's [Console link](#linking-a-fixture-by-hand) does: link to a console fixture (several fixtures, or a rig, link in order to the console fixtures from it), drive them from a manual address (with a layout), register a new console fixture for each, or unlink them. What it changes is selected on the stage, so you can see it. Coordinates are in meters from the center of the stage floor (x: stage right − to left +, y: up, z: upstage − to downstage +), but plain words like "over center stage, 5 m up" work.
+  - *Stage:* see the stage (box, trusses, fixtures and where they point); place fixtures at spots (each gets a console fixture with faders), generic or a real fixture from the [fixture library](#real-fixtures-from-the-fixture-library) (the chat can search it by manufacturer and model and list a fixture's modes; it needs internet); place a truss, generic or from the library (circle, square or line: center, size, count, tilt, yaw); change a truss (its center moves it); move fixtures (to a spot or by an offset); set fixtures' dimmer, color, pan, tilt, zoom or any channel as the inspector does (the values go into the cue on stage); change fixtures' Ranges (how far pan and tilt go, the beam angle at zoom 0 and 255), dimmer curve and zero (here, or aimed at the stage), e.g. from a real fixture's spec sheet; duplicate fixtures; select fixtures so you can carry on by hand; aim fixtures (or a whole truss) at a named position (they follow it) or a spot, or home them; stop fixtures following; add, rename, move or delete named positions; add, move, resize, turn, rename or delete risers; rename or delete fixtures (a truss's fixture deletes its whole truss); set the box's size; change how fixtures get their DMX, as the inspector's [Console link](#linking-a-fixture-by-hand) does: link to a console fixture (several fixtures, or a truss, link in order to the console fixtures from it) or register a new console fixture for each. What it changes is selected on the stage, so you can see it. Coordinates are in meters from the center of the stage floor (x: stage right − to left +, y: up, z: upstage − to downstage +), but plain words like "over center stage, 5 m up" work.
   - *The show:* rename it; save it (downloads the show file, like **Save show**; give a name to save it as that).
   - *DMX outputs:* see where each universe goes; connect or disconnect the DMX USB Pro; send a universe over Art-Net (to a node or broadcast) or sACN, or stop that; look for Art-Net nodes; change how many universes the show uses.
-- **Undo:** after a request that changed the show or the stage (cues, steps, songs, sets, fixture levels, console fixtures, groups and patch, the show's name, fixtures placed, moved, aimed, lit, set up, duplicated or linked, rigs, the box), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show or the stage since. Playback (LIVE, GO, master, submasters), DMX outputs and a saved file aren't undone.
+- **Undo:** after a request that changed the show or the stage (cues, steps, songs, sets, fixture levels, console fixtures, groups and patch, the show's name, fixtures placed, moved, aimed, lit, set up, duplicated or linked, trusses, the box), an **Undo** button under the reply puts all of that request's edits back. It's offered for the latest request only, and only while nothing else has changed the show or the stage since. Playback (LIVE, GO, master, submasters), DMX outputs and a saved file aren't undone.
 - **Each action shows as a line in the chat** (✓ done, ✗ failed with the reason, – stopped before it ran). With **Show details** on (chat settings, below), click a line to see the tool used, what it was sent and what it answered. A **⌕ Looked up tools** line is the model finding the tools it needs (most are only found when needed, which keeps each request small). Under each request a small line says which model answered, how many tools it used, how long it took and how many tokens it read (and how many of those came cheaply from the cache) and wrote; tokens are what API usage is billed by.
 - **It does what you ask straight away**, GO included: it never asks you to confirm. Word requests carefully during a show.
 - **Resize it** by dragging its left edge (the grip in the middle marks it); double-click the edge for the default width. With the edge focused, ← / → resize it too (⇧ for bigger steps). The width is remembered.
@@ -153,7 +153,7 @@ The app keeps other web pages and other computers out (see *Other web pages* in 
 ### The stage area
 
 - **Box W / D / H** in the header set the size of the performance area.
-- **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a rig's center and size, positions, the readout and banners, and the grids: 1 m squares, or in feet 5 ft squares with 1 ft lines between (in 3D those fade out where they'd crowd together; the plan switches to 5 ft when zoomed out). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
+- **Meters or feet:** **⚙ View → Units** picks the unit every size and place on the stage is shown and typed in: the box size, a fixture's **Location**, a truss's center and size, positions, the readout and banners, and the grids: 1 m squares, or in feet 5 ft squares with 1 ft lines between (in 3D those fade out where they'd crowd together; the plan switches to 5 ft when zoomed out). Dragging and placing snap to 0.1 m, or 3 inches in feet (⌥ for 1 cm / 1 inch). It's remembered in this browser; the show itself is always saved in meters, so other windows can use the other unit. The chat answers in your unit too.
 - **The GO bar**, at the top of the 3D view, is the console's GO area in miniature, laid out the same way: **LIVE** on the left (with its step, e.g. **Cue 2 · step 1 of 3**), **«** **‹** **GO** **›** **»** in the middle with the readout under them (**23% · into step 1 of 2**), **UP NEXT** on the right with its fade (**4s**, **3 steps · 12s**). Each button does exactly what the console's own does, on the lights (GO fades to UP NEXT, and is Pause / Resume while that fade plays, as the console's; › / ‹ step through a cue's [steps](#songs-and-cues); « » make the cue before or after LIVE the LIVE one, across set songs too). A long cue name is cut short (…); hover it for all of it. Under them, the console's **crossfader**: it moves as a fade plays (smoothly, as the stage draws it), shows where UP NEXT's steps land, and dragging it blends LIVE into UP NEXT exactly as dragging the console's does (it stops a running fade, as there). A button is off whenever the console's is, with the same tooltip; GO lights up while a fade plays. The buttons keep their places whatever the cues are called. (Both are drawn from one place, `goArea` in `console/live.ts`, so they can't disagree.)
 - The **amber line** marks the audience edge. *Stage left / right* are from the performer's point of view, facing the audience.
 - **Names:** fixtures, positions and risers are named only while you point at them (in 3D, the plan or a list) or pick them out, so a busy stage stays readable. **⚙ View → Always show names** names them all, as before (in the plan for fixtures; 3D names a fixture only while you point at it). It's remembered in this browser.
@@ -175,11 +175,11 @@ The **plan** (top of the right-hand sidebar) is a 2D view of the stage from one 
 | **Front** | the audience | heights, side to side |
 | **SR** / **SL** | stage right / stage left | heights, up / downstage |
 
-Each view shows every fixture's beam direction, the dot where its beam lands, and rig outlines.
+Each view shows every fixture's beam direction, the dot where its beam lands, and truss outlines.
 
 ### Placing fixtures
 
-1. Click **+ Place fixture** or press `P`.
+1. Click **+ Fixture** or press `P`.
 2. Pick a **console type**. This decides what the fixture can do and how many console channels and faders it gets:
 
    | Console type | Channels / faders | Controls |
@@ -189,7 +189,7 @@ Each view shows every fixture's beam direction, the dot where its beam lands, an
    | Fixed · Multi-color | 4 | Dimmer, Red, Green, Blue |
    | Fixed · Single color | 1 | Dimmer |
    | **From fixture library…** | the fixture mode's own | a real fixture |
-   | Stage only | none | the fixture exists only on the stage |
+   | **Existing console fixture…** | that console fixture's | links to a console fixture you already have (pick it below) |
 
    With several DMX universes you also choose the **Universe**.
 3. Click **Place…**, then click where it goes:
@@ -245,7 +245,7 @@ Every fixture is controlled by values from **0 to 255**, just like a dimmer chan
 | **Deep Red / White / Amber / Lime / Cyan / Indigo / UV** | the amount of each extra emitter, for fixtures that have them |
 | **Zoom** | narrowest … widest beam |
 
-Change them with the keys, or the sliders and numbers in the inspector. Like the fixture's faders in the console, they have a line around them with the fixture's name on it, in the same color as its outline in the console (gold when it isn't linked), and each value sits in its own box, like a fader. Each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; a linked fixture shows only the channels it has — e.g. no pan and tilt on a fixed light (a stage-only fixture shows them all); a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage. After **Dimmer** are small **B** and **F** buttons that work like the console's under a dimmer fader: hold **B** to black the fixture out, hold **F** to flash it full and white; both last only while held. On a fixture linked to the console they hold its dimmer fader's B / F there (so the real lights do it, and the console's buttons light up); on a stage-only fixture they just change how it looks on the stage. Beside the **Pan** and **Tilt** sliders, in the color strips' column, is the same **✥** pan / tilt pad as in the console (upright, spanning both rows): hold the mouse button on it and move the mouse — left / right = pan, up / down = tilt, ⇧ = fine:
+Change them with the keys, or the sliders and numbers in the inspector. Like the fixture's faders in the console, they have a line around them with the fixture's name on it, in the same color as its outline in the console (gold while it waits for its console fixture), and each value sits in its own box, like a fader. Each color channel has a thin upright strip between its name and slider in the color it controls, like the console's color faders; the color rows follow the fixture's channel order, like its console faders; a linked fixture shows only the channels it has — e.g. no pan and tilt on a fixed light (one still waiting for its console fixture shows them all); a library fixture's channels the stage doesn't draw — strobe, dimmer curve, fan, fine channels, … — are under **Other channels**, whose sliders set those channels in the console, with nothing changing on the stage. After **Dimmer** are small **B** and **F** buttons that work like the console's under a dimmer fader: hold **B** to black the fixture out, hold **F** to flash it full and white; both last only while held. On a fixture linked to the console they hold its dimmer fader's B / F there (so the real lights do it, and the console's buttons light up); on a fixture whose dimmer has no fader they just change how it looks on the stage. Beside the **Pan** and **Tilt** sliders, in the color strips' column, is the same **✥** pan / tilt pad as in the console (upright, spanning both rows): hold the mouse button on it and move the mouse — left / right = pan, up / down = tilt, ⇧ = fine:
 
 | Key | Does |
 |---|---|
@@ -256,7 +256,7 @@ Change them with the keys, or the sliders and numbers in the inspector. Like the
 | hold `⇧` | steps of 10 instead of 1 |
 | `H` | **Home**: pan and tilt back to 128 |
 
-The inspector's upright color bar beside the color rows (filled with the fixture's color, like the console's color bar; click it to pick a color) and **color** in the key strip sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255. **Dimmer curve** (under them) is how the real fixture turns its dimmer value into light, as set in its menu: **Linear** (the default), **Square law** (low values stay dim; common on LED fixtures), **Inverse square** (low values come up quickly) or **S-curve** (gentle at both ends). Set it to match the fixture and the stage draws it as bright as it really is: with square law, dimmer 64 (25%) draws at about 6% and dimmer 1 at next to nothing. The % beside the dimmer, the list's level bar and the HUD show that light. It only changes the drawing: the DMX sent is the same. It's saved with the stage, and a rig's new members copy it.
+The inspector's upright color bar beside the color rows (filled with the fixture's color, like the console's color bar; click it to pick a color) and **color** in the key strip sets the fixture's color channels together — mixed onto every color channel it's linked with (see [Mixing onto extra emitters](#mixing-onto-extra-emitters)), or red, green and blue when it has none (see [The color picker](#the-color-picker); its second row, **On stage**, shows the colors of the fixtures on the stage). **Ranges** set what the ends mean for that fixture: how far pan and tilt go (± degrees) and the beam angle at zoom 0 and 255. **Dimmer curve** (under them) is how the real fixture turns its dimmer value into light, as set in its menu: **Linear** (the default), **Square law** (low values stay dim; common on LED fixtures), **Inverse square** (low values come up quickly) or **S-curve** (gentle at both ends). Set it to match the fixture and the stage draws it as bright as it really is: with square law, dimmer 64 (25%) draws at about 6% and dimmer 1 at next to nothing. The % beside the dimmer, the list's level bar and the HUD show that light. It only changes the drawing: the DMX sent is the same. It's saved with the stage, and a truss's new members copy it.
 
 #### The color picker
 
@@ -285,7 +285,7 @@ Library fixtures get these roles from their channels automatically (warm and col
 ### Aiming
 
 - **Aim at spot** (`A`): select one or more fixtures, press `A`, and click a spot on the floor, a wall or the ceiling (or in the plan). Every selected fixture points at it. Great for focusing several fixtures on one spot.
-- **Aim at a position:** select fixtures (double-click a rig's fixture for the whole rig), then right-click and pick **Aim at position ▸** and the position (pointing at one in that sub-menu lights it up on the stage), or click **Aim** beside the position in the Positions list (see [Named positions](#named-positions)). The fixtures then **follow** the position: see [Following a position](#following-a-position).
+- **Aim at a position:** select fixtures (double-click a truss's fixture for the whole truss), then right-click and pick **Aim at position ▸** and the position (pointing at one in that sub-menu lights it up on the stage), or click **Aim** beside the position in the Positions list (see [Named positions](#named-positions)). The fixtures then **follow** the position: see [Following a position](#following-a-position).
 - **Each fixture has its own "zero"**: the direction it points at pan / tilt 128, and which way is "up" for it. It's shown as a dashed cyan line on the selected fixture.
   - **Set zero here** (`Z`): make the current direction the new zero.
   - **Aim zero at stage**: point the zero at the center of the stage.
@@ -327,36 +327,36 @@ A **riser** is a box standing on the stage floor: a platform, a drum riser, a de
 
 ### Following a position
 
-Fixtures aimed at a named position **follow** it: move the position (or the fixtures, or their rig) and they re-aim to stay on it.
+Fixtures aimed at a named position **follow** it: move the position (or the fixtures, or their truss) and they re-aim to stay on it.
 
 - **Fixtures in the console** (pan / tilt on faders): the aim goes into the **cue on stage** (both cues while the crossfader is between them), like recording a position preset into it. The cue keeps the pan / tilt values, and remembers that they aim at the position. Move the position later and **every cue that aims at it** re-aims, played or not, in every song. So *"Lead → DSC"* in cue 3 still finds DSC after you move it, when cue 3 comes round.
 - **Other cues are untouched:** a cue that sets its own pan / tilt plays those. The fixture follows the position only while a cue that aims it there is on stage.
 - **Changing pan / tilt any other way lets go**, in that cue only: moving the pan or tilt fader, the ✥ pad, the inspector, **Aim at spot**, **Home**, or the chat. The fixture stays where it is; it just stops following.
-- **Fixtures only on the stage** follow the same way, without cues, until their pan / tilt are changed some other way.
+- **Fixtures without pan / tilt faders** (e.g. still waiting for their console fixture) follow the same way, without cues, until their pan / tilt are changed some other way.
 - **You can see it:** the inspector shows **Following ‹position›** (for several fixtures, *8 of 8 following*), and the fixture list shows *→ ‹position›* after the name.
 - **Change it in the inspector:** the position is a dropdown: pick another and the selected fixtures aim at it and follow it instead (*(several)* when they follow different ones). When none follow, the same line reads **Aim at** *Choose a position…*. **Stop following** keeps them aimed where they are but stops following.
 - **Deleting a position** leaves the fixtures and cues aimed where they are (⌘Z brings it back, still followed). Copying a cue copies its aims.
 - Aims use the pan nearest the fixture's home, so a position always gives a fixture the same pan / tilt.
-### Rigs: circles, squares and lines of fixtures
+### Trusses: circles, squares and lines of fixtures
 
-A **rig** is a group of fixtures in a fixed arrangement that you place and move as one:
+A **truss** is a circle, square or line of fixtures in a fixed arrangement that you place and move as one, like fixtures hung on a real truss:
 
-| Rig | Fixtures are | They point |
+| Truss | Fixtures are | They point |
 |---|---|---|
 | **Circle** | evenly around a ring | at its center |
 | **Square** | evenly around its edges | at its center |
 | **Line** | evenly along a bar | all the same way (down, when flat) |
 
-1. Click **+ Place rig**. Choose the type, its **size** (diameter, side or length), how many **fixtures**, **tilt** (0 = flat / hanging, 90 = upright facing the audience; for a line, −90 points it at the audience), **yaw** (rotation), and the **console type** (generic or from the fixture library) and universe.
-2. Click **Place…**, then click where the rig's center goes. Every fixture in it starts at full dimmer and white.
+1. Click **+ Truss**. Choose the type, its **size** (diameter, side or length), how many **fixtures**, **tilt** (0 = flat / hanging, 90 = upright facing the audience; for a line, −90 points it at the audience), **yaw** (rotation), and the **console type** (generic or from the fixture library) and universe.
+2. Click **Place…**, then click where the truss's center goes. Every fixture in it starts at full dimmer and white.
 
-Working with a rig:
+Working with a truss:
 
 - All its fixtures are selected after placing, so the keys move them all together (e.g. `⇧↓` tilts every fixture down evenly).
-- Click one fixture to adjust just it; double-click any of its fixtures (in 3D, the plan or the fixture list), or use **Select whole rig** (inspector or right-click), to select them all again. **⇧- or ⌘-double-click** adds the whole rig to what's already selected (e.g. two rigs, or a rig and a few single fixtures).
-- Dragging any of its fixtures moves the whole rig.
-- The inspector's **Rig** section changes the rig's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live. A new number of fixtures applies when you press `Enter`, leave the field or click its arrows, so typing e.g. 12 doesn't first rebuild the rig with 1.
-- In the console, a rig's fixtures are grouped under the rig's name.
+- Click one fixture to adjust just it; double-click any of its fixtures (in 3D, the plan or the fixture list), or use **Select whole truss** (inspector or right-click), to select them all again. **⇧- or ⌘-double-click** adds the whole truss to what's already selected (e.g. two trusses, or a truss and a few single fixtures).
+- Dragging any of its fixtures moves the whole truss.
+- The inspector's **Truss** section changes the truss's position, size and number of fixtures, and its **tilt** (−90…90°) and **yaw** (−180…180°) with sliders; the fixtures rearrange live. A new number of fixtures applies when you press `Enter`, leave the field or click its arrows, so typing e.g. 12 doesn't first rebuild the truss with 1.
+- In the console, a truss's fixtures are grouped under the truss's name.
 
 ### Flash
 
@@ -365,12 +365,12 @@ Hold `F` (or the **Flash** button) to show the selected fixtures — or all fixt
 ### Copy, delete, undo
 
 - **Duplicate** (right-click or inspector) copies the selected fixtures. If the original was set up in the console, the copy gets its own console fixture and faders too.
-- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a rig removes the whole rig. Fixtures the stage set up in the console are removed there too, and their faders freed.
-- **⌘Z** brings back what you deleted: fixtures, rigs, a named position or a riser (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
+- **Delete** (`⌫` or `Delete`, right-click, or inspector) removes the selected fixtures. Deleting a fixture in a truss removes the whole truss. Fixtures the stage set up in the console are removed there too, and their faders freed.
+- **⌘Z** brings back what you deleted: fixtures, trusses, a named position or a riser (up to 50 times, in any stage window, even after a reload). **⇧⌘Z** (or **⌘Y**) deletes it again; a new delete clears what can be redone. Only deletes are undone: moves, aims and other edits aren't (the chat's **Undo** covers its own changes).
 
 ### The right-click menu
 
-Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole rig**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item. Right-click a named position for **Delete position**, and a riser for **Duplicate riser** and **Delete riser**.
+Right-click a fixture (3D view, plan or list) for: **Aim at spot…**, **Aim at position ▸** (a sub-menu of the named positions), **Stop following** (when a selected fixture follows one), **Home**, **Set zero here**, **Aim zero at stage**, **Select whole truss**, **Flash**, **Duplicate** and **Delete**. Shortcut keys are shown beside each item. Right-click a named position for **Delete position**, and a riser for **Duplicate riser** and **Delete riser**.
 
 ### The inspector
 
@@ -382,9 +382,9 @@ The inspector, at the bottom, shows the selected fixture:
 - **DMX values** (Dimmer … Zoom) with what each means (%, degrees). If the fixture is linked to the console, each also shows its **channel and fader** (e.g. `12 F12`).
 - **Color**, **Ranges**, **Zero frame**, and the beam hit readout.
 - **Console link**: which console fixture it's connected to (see [Console and Stage together](#6-console-and-stage-together)).
-- **Rig** settings for rig fixtures.
+- **Truss** settings for truss fixtures.
 
-With several fixtures selected (for example a whole rig) it shows **Dimmer**, **Zoom**, **Color** and **Dimmer curve** (**Mixed** when they differ), which set every selected fixture at once. The sliders start at the selection's average. Zoom is the 0–255 value; each fixture turns it into a beam angle using its own **Ranges**.
+With several fixtures selected (for example a whole truss) it shows **Dimmer**, **Zoom**, **Color** and **Dimmer curve** (**Mixed** when they differ), which set every selected fixture at once. The sliders start at the selection's average. Zoom is the 0–255 value; each fixture turns it into a beam angle using its own **Ranges**.
 
 The small overlay in the 3D view's top-left corner (the **HUD**) shows the selected fixture's main values at a glance.
 
@@ -448,7 +448,7 @@ The **show** holds every song. A **set** is the running order for one event (*Br
 
 ### Fixtures
 
-The Fixtures tab lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Fixtures placed on the stage add themselves here; you can also add your own.
+The Fixtures tab lists your fixtures. Each has a **DMX start channel and channel count** (up to 64 channels), a type (**Fixed / Movable**, **Single / Multi-color**) and an optional **group**. Fixtures placed on the stage add themselves here; you can also add your own. Removing a fixture here (✕) also removes the stage fixtures linked to it (a truss keeps its other fixtures).
 
 ### Patch
 
@@ -473,9 +473,9 @@ When you place a fixture with a console type, the console automatically:
 3. sets those faders to the fixture's current values, so nothing jumps, and
 4. scrolls the fader rows to them and highlights them while the fixture is selected on the stage.
 
-If there aren't enough faders or channels, the fixture stays on the stage only and a message (shown for 15 s) tells you why; it isn't linked, so changing it on the stage doesn't reach the console.
+Every fixture on the stage is a console fixture: deleting a console fixture also removes the stage fixtures linked to it (a truss closes up around the gap). If there aren't enough faders or channels, the fixture isn't added (nor, for a truss, the whole truss) and a message (shown for 15 s) tells you why. A show saved with fixtures that weren't in the console loads without them.
 
-To set up a fixture that's already on the stage, use **Register** in its inspector's *Console link* section.
+To use console fixtures you already have instead, choose **Existing console fixture…** as the console type when placing: a fixture links to the one you pick; a truss's fixtures link in order to it and the ones after it (by channel), and any past the last one get new ones.
 
 ### Finding a fixture's faders
 
@@ -491,7 +491,7 @@ Select a fixture on the stage (click it, or `Tab` to it) and the console's fader
 
 ### Linking a fixture by hand
 
-In the stage inspector's **Console link** section you can instead link a fixture to an **existing console fixture**, type a **manual address** (e.g. `45`, or `2/45` for universe 2), or choose **— not linked —**. The **Layout** shows what each of its channels drives on the stage, and can be changed. For a rig, **Link rig** links all its fixtures to consecutive console fixtures at once.
+In the stage inspector's **Console link** section you can link a fixture to a different **console fixture** instead (one the stage made for it is then removed from the console). Its **Start ch** is the console fixture's (change that in the console). The **Layout** shows what each of its channels drives on the stage, and can be changed. For a truss, **Link truss** links all its fixtures to consecutive console fixtures at once.
 
 ### Tracing a signal (⌥-click)
 
@@ -517,7 +517,7 @@ A DMX **universe** is 512 channels sent down one cable by one interface. For big
 
 With several universes, channel numbers are shown and typed as **universe/channel**, e.g. **`2/45`** is channel 45 of universe 2. This works everywhere: the patch, the channel picker (type `2/45`, or just `45` to see channel 45 in every universe), fixtures, the stage and traces.
 
-- When placing a fixture (or rig) on the stage, choose which **Universe** it goes in, or *First with room*.
+- When placing a fixture (or truss) on the stage, choose which **Universe** it goes in, or *First with room*.
 - A fixture always fits inside one universe.
 - On the Channels tab, a switch picks which universe the meters show.
 - You can't reduce the number of universes while something is using the ones that would go; move or remove it first.
@@ -568,7 +568,7 @@ If no nodes are found: check the node and this computer are on the same network 
 To keep copies, share them or move to another computer:
 
 - **Console** (the **Show** menu in the page header): **Save show** (**⌘S**) downloads the show (songs, sets, cues, patch, fixtures, fader names, universes, tab order) as a file; **Load show** opens one; **New show** starts fresh (it asks first if you have unsaved changes) and downloads its show file straight away, as **Save show** does. **Save as…** (**⇧⌘S**) asks for a new name, renames the show and saves its file under that name: from then on you're working on the renamed show, and files you saved before stay as they were. **Rename** changes the name where it stands, without saving.
-- The show file also holds the **stage** (box size, fixtures, rigs, view settings) and the **chats**, so one file is the whole show. Loading a show file replaces the stage and chats with the file's, in every window; a file saved without them (older, or the show server was offline) gets a blank stage and no chats, as **New show** does (the default box, nothing in it).
+- The show file also holds the **stage** (box size, fixtures, trusses, view settings) and the **chats**, so one file is the whole show. Loading a show file replaces the stage and chats with the file's, in every window; a file saved without them (older, or the show server was offline) gets a blank stage and no chats, as **New show** does (the default box, nothing in it).
 
 ---
 
@@ -641,7 +641,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | The page says **Forbidden** (or the terminal says `refused …`) | Open the app at `http://localhost:8080` or the address the server prints. Other names for this computer (an alias in `/etc/hosts`, a tunnel) are refused on purpose; another computer's address also needs `--lan`. |
 | A part of the app doesn't load, and the browser's console says *Refused to … Content Security Policy* | The page's policy blocked it: a script or address it doesn't allow (see *Other web pages* in `README.md`). Add the address to `CONNECT_ORIGINS` or the import map, or move an inline script into a file. |
 | The fixture library won't load | Check your internet connection. Generic console types still work. |
-| A fixture wasn't added to the console | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up, then use **Register** in the fixture's inspector. |
+| A fixture wasn't added | Read the message: there may be no free faders (a fader counts as free if it's unpatched, or patched to just that channel and not renamed), no free channels in that universe, or the console may already have 64 fixtures. Free some up and place it again, or place it on an **Existing console fixture…**. |
 | Moving a fixture on the stage also moved another | They share a fader in the console's patch. |
 | The page looks out of date after an update | Press **⌘⇧R**. |
 | Can't reduce the number of universes | Something still uses the higher universes; the message names it. |
@@ -667,7 +667,7 @@ Keys are ignored while you're typing in a field (press `Esc` or `Enter` to leave
 | **Master / submaster** | faders that scale everything / one cue |
 | **Fixture** | a lighting unit; on the console it owns a block of channels |
 | **Mode** | one of a real fixture's channel layouts (e.g. 5-channel or 14-channel) |
-| **Rig** | a group of fixtures arranged in a circle, square or line |
+| **Truss** | a group of fixtures arranged in a circle, square or line |
 | **Zero** | the direction a fixture points at pan / tilt 128 |
 | **Position** | a named spot on the stage (e.g. *DSC*) that fixtures aim at and follow, like a console's position preset; cues remember aims at it |
 | **Riser** | a box standing on the stage floor (platform, drum riser, deck) |

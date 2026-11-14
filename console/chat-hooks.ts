@@ -61,6 +61,7 @@ import { renderCues } from "./cues.ts";
 import { renderPatchTable } from "./patch-tab.ts";
 import { applyShowName } from "./nav.ts";
 import { batchFixtureNames } from "./fixtures-tab.ts";
+import { notifyStageRemoved } from "./stage-link.ts";
 import { clamp, clampByte, clampInt } from "../shared/numbers.ts";
 import {
   afterStageFixturesChanged,
@@ -474,6 +475,7 @@ export const consoleChat = {
   deleteFixtures(ids: string[]) {
     unregisterFromStage(ids);
     persistSession();
+    notifyStageRemoved(ids);
   },
 
   // --- DMX outputs (on the show server) --------------------------------------

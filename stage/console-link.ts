@@ -28,10 +28,12 @@ export function createConsoleLink({
   onLevels,
   onStageHello,
   onRegistered,
+  onRemoved,
 }: {
   onLevels: () => void;
   onStageHello: () => void;
   onRegistered: (results: RegisterResult[]) => void;
+  onRemoved: (consoleIds: string[]) => void;
 }) {
   let levels: number[] | null = null;
   /** levels not rounded (mid-fade in-between values), for drawing */
@@ -55,6 +57,7 @@ export function createConsoleLink({
   const toConsole = joinLink("stage", {
     hello: onStageHello,
     registered: onRegistered,
+    removed: onRemoved,
     levels(data) {
       levels = data.levels;
       exact = data.exact;

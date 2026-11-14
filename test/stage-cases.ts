@@ -1,4 +1,4 @@
-// Inputs for the stage model's geometry (pan / tilt, aiming, rigs, loading),
+// Inputs for the stage model's geometry (pan / tilt, aiming, trusses, loading),
 // and what to record from each. stage-model.test.ts compares the model with
 // test/data/stage-geometry.json, recorded once from the three.js-based
 // version, so the three.js-free math gives the same answers.
@@ -43,21 +43,21 @@ export function runCases(m: M) {
     fixtures.push(row);
   }
   out.fixtures = fixtures;
-  const rigs: unknown[] = [];
+  const trusses: unknown[] = [];
   for (const type of ["circle", "square", "line"]) for (const [tilt, yaw, count] of [[0, 0, 8], [90, 0, 6], [30, 45, 5], [-60, -120, 4]]) {
     const saved = {
-      rigs: [{ id: "r", type, x: 1, y: 4, z: -1, tilt, yaw, size: 4, count }],
-      fixtures: Array.from({ length: count }, (_, i) => ({ id: `m${i}`, rigId: "r", rigIndex: i, x: 0, y: 0, z: 0 })),
+      trusses: [{ id: "r", type, x: 1, y: 4, z: -1, tilt, yaw, size: 4, count }],
+      fixtures: Array.from({ length: count }, (_, i) => ({ id: `m${i}`, trussId: "r", trussIndex: i, x: 0, y: 0, z: 0 })),
     };
     const st = m.parseStage(saved);
-    const rig = st.rigs[0];
-    rigs.push({
+    const truss = st.trusses[0];
+    trusses.push({
       type, tilt, yaw, count,
       members: st.fixtures.map((f) => ({ at: [f.x, f.y, f.z], base: f.base })),
-      outline: m.rigOutline(rig).map(pt),
-      lowest: m.rigLowestY(rig),
+      outline: m.trussOutline(truss).map(pt),
+      lowest: m.trussLowestY(truss),
     });
   }
-  out.rigs = rigs;
+  out.trusses = trusses;
   return out;
 }

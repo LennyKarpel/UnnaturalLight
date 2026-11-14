@@ -64,8 +64,8 @@
             <label id="boxUnit">m</label>
           </div>
           <div class="spacer"></div>
-          <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (P)">+ Place fixture</button>
-          <button id="rigBtn" title="Place a rig: a preset group of fixtures">+ Place rig</button>
+          <button id="addBtn" class="primary" title="Click in the plan, or in 3D on a surface or the ground outside, to place (P)">+ Fixture</button>
+          <button id="trussBtn" title="Place a truss: a preset group of fixtures">+ Truss</button>
           <button id="positionBtn" title="Put a named position on the stage (floor, wall, ceiling) to aim fixtures at">+ Position</button>
           <button id="riserBtn" title="Put a riser (a platform standing on the floor) on the stage">+ Riser</button>
           <button id="settingsBtn" title="View settings: units, transparent sides">⚙ View</button>
@@ -166,9 +166,13 @@
               <label for="placeUniverse">Universe</label>
               <select id="placeUniverse"></select>
             </div>
+            <div class="fields" id="placeExistingRow" hidden>
+              <label for="placeExisting">Console fixture</label>
+              <select id="placeExisting"></select>
+            </div>
             <div class="lib" id="placeLib" hidden></div>
             <p class="hint warn" id="placeLibMsg"></p>
-            <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the stage fixture. "Stage only" doesn't touch the console.</p>
+            <p class="hint">The console gets a matching fixture at the next free DMX block, with free faders patched to its channels and named after the stage fixture, or the fixture is linked to an existing console fixture.</p>
             <div class="buttons">
               <button class="primary" type="submit">Place…</button>
             </div>
@@ -176,35 +180,39 @@
         </section>
       </dialog>
 
-      <dialog id="rigDlg" class="dlg">
+      <dialog id="trussDlg" class="dlg">
         <header class="dlg-head">
-          <h2>Place a rig</h2>
-          <button id="rigClose" type="button" aria-label="Close">✕</button>
+          <h2>Place a truss</h2>
+          <button id="trussClose" type="button" aria-label="Close">✕</button>
         </header>
         <section>
           <div class="fields">
-            <label for="rigType">Type</label>
-            <select id="rigType"></select>
-            <label for="rigSize" id="rigSizeLabel">Size (m)</label>
-            <input id="rigSize" type="number" min="0.5" max="50" step="0.5" value="4" />
-            <label for="rigCount">Fixtures</label>
-            <input id="rigCount" type="number" min="2" max="32" step="1" value="8" />
-            <label for="rigTilt">Tilt °</label>
-            <input id="rigTilt" type="number" min="-90" max="90" step="5" value="0" />
-            <label for="rigYaw">Yaw °</label>
-            <input id="rigYaw" type="number" step="5" value="0" />
-            <label for="rigConsoleType">Console type</label>
-            <select id="rigConsoleType" title="Each fixture in the rig gets a console fixture of this type (grouped under the rig's name)"></select>
+            <label for="trussType">Type</label>
+            <select id="trussType"></select>
+            <label for="trussSize" id="trussSizeLabel">Size (m)</label>
+            <input id="trussSize" type="number" min="0.5" max="50" step="0.5" value="4" />
+            <label for="trussCount">Fixtures</label>
+            <input id="trussCount" type="number" min="2" max="32" step="1" value="8" />
+            <label for="trussTilt">Tilt °</label>
+            <input id="trussTilt" type="number" min="-90" max="90" step="5" value="0" />
+            <label for="trussYaw">Yaw °</label>
+            <input id="trussYaw" type="number" step="5" value="0" />
+            <label for="trussConsoleType">Console type</label>
+            <select id="trussConsoleType" title="Each fixture in the truss gets a console fixture of this type (grouped under the truss's name), or links to existing ones"></select>
           </div>
           <div class="fields" data-universe-row hidden>
-            <label for="rigUniverse">Universe</label>
-            <select id="rigUniverse"></select>
+            <label for="trussUniverse">Universe</label>
+            <select id="trussUniverse"></select>
           </div>
-          <div class="lib" id="rigLib" hidden></div>
-          <p class="hint" id="rigHelp"></p>
-          <p class="hint" id="rigRoom"></p>
+          <div class="fields" id="trussExistingRow" hidden>
+            <label for="trussExisting">From console fixture</label>
+            <select id="trussExisting" title="The truss's fixtures link in order to this console fixture and the ones after it (by channel); any past the last get new ones"></select>
+          </div>
+          <div class="lib" id="trussLib" hidden></div>
+          <p class="hint" id="trussHelp"></p>
+          <p class="hint" id="trussRoom"></p>
           <div class="buttons">
-            <button id="rigPlace" class="primary" type="button">Place…</button>
+            <button id="trussPlace" class="primary" type="button">Place…</button>
           </div>
         </section>
       </dialog>

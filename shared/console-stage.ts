@@ -142,11 +142,14 @@ export type StageLevels = {
  *   hello       the console started (the stage sends its layouts now)
  *   levels      output levels, patch and fixtures (every output change)
  *   registered  results of a `register`
+ *   removed     console fixtures deleted in the console (the stage removes
+ *               its fixtures linked to them)
  */
 export type StageEnd = {
   hello: () => void;
   levels: (data: StageLevels) => void;
   registered: (results: RegisterResult[]) => void;
+  removed: (consoleIds: string[]) => void;
 };
 
 type Ends = { console: ConsoleEnd; stage: StageEnd };

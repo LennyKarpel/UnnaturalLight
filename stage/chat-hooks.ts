@@ -1,14 +1,14 @@
 // What the chat panel (../page/chat/) can see and do on the stage
 // (window.stageChat): the same functions as the stage's own controls, so its
-// edits are saved and shared the usual way. Fixtures and rigs are passed by id.
-import { MAX_FIXTURES, RIG_TYPES, DIMMER_CURVES, aimAt, aimZeroAt, defaultTarget, deriveFromDmx, setColorHex, setDmx, setZeroHere, homeFixture, type DimmerCurve, type Fixture, consoleTypeFromKey, createFixture, round, linkChannels, type RigType } from "./stage-model.ts";
-import { state, byId, positionById, riserById, rigById, rigOf, rigMembers, moveFixture, addRigAt, setRigField, serialize, save, RIG_FIELDS, type RigField } from "./state.ts";
+// edits are saved and shared the usual way. Fixtures and trusses are passed by id.
+import { MAX_FIXTURES, TRUSS_TYPES, DIMMER_CURVES, aimAt, aimZeroAt, defaultTarget, deriveFromDmx, setColorHex, setDmx, setZeroHere, homeFixture, type DimmerCurve, type Fixture, consoleTypeFromKey, consoleTypeOfMode, createFixture, round, linkChannels, type TrussType } from "./stage-model.ts";
+import { state, byId, positionById, riserById, trussById, trussOf, trussMembers, moveFixture, addTrussAt, setTrussField, serialize, save, TRUSS_FIELDS, type TrussField } from "./state.ts";
 import { changed, deleteSelected, duplicateFixtures, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser } from "./actions.ts";
 import { setRiserField, RISER_FIELDS, type Riser, type RiserField } from "./risers.ts";
 import { renderInspector } from "./sidebar.ts";
 import { updateBox } from "./view3d.ts";
 import { syncBoxInputs } from "./dialogs.ts";
-import { requestRegistrations, linkInOrder, unlinkFixtures, linkManual, registerFixtures, consoleFixtureById, addr, parseAddr } from "./link.ts";
+import { requestRegistrations, linkInOrder, registerFixtures, consoleFixtureById } from "./link.ts";
 import { listManufacturers, listFixtures, loadFixture, modesOf, profileFor, type FixtureProfile } from "./fixture-library.ts";
 import { applyFixture } from "./stage-model.ts";
 import type { DmxAttr } from "../shared/attributes.ts";
@@ -30,9 +30,9 @@ const fixtureOrThrow = (id: string) => {
   return f;
 };
 
-const rigOrThrow = (id: string) => {
-  const r = rigById(id);
-  if (!r) throw new Error("No such rig");
+const trussOrThrow = (id: string) => {
+  const r = trussById(id);
+  if (!r) throw new Error("No such truss");
   return r;
 };
 
@@ -72,15 +72,12 @@ const stageChat = {
   async libraryModes(manufacturer: string, fixture: string) {
     return modesOf(await loadFixture(manufacturer, fixture));
   },
-  /** The profile for one mode, to place with addFixtures / addRig. */
+  /** The profile for one mode, to place with addFixtures / addTruss. */
   async libraryProfile(manufacturer: { key: string; name: string }, fixture: string, modeIndex: number): Promise<FixtureProfile> {
     return profileFor(await loadFixture(manufacturer.key, fixture), manufacturer.name, manufacturer.key, fixture, modeIndex);
   },
 
   // --- console links ----------------------------------------------------------
-
-  /** A DMX address the person typed (45, or 2/45), or null. */
-  parseAddress: (text: string) => parseAddr(text),
 
   /** Link fixtures in order to console fixtures, the first to `consoleId` (by channel order after it). Returns how many were linked. */
   linkToConsole(ids: string[], consoleId: string) {
@@ -88,20 +85,6 @@ const stageChat = {
     const n = linkInOrder(ids.map(fixtureOrThrow), consoleId);
     showChanged(ids);
     return n;
-  },
-  /** Stage only: no console link. */
-  unlink(ids: string[]) {
-    unlinkFixtures(ids.map(fixtureOrThrow));
-    showChanged(ids);
-  },
-  /** Drive fixtures from DMX channels directly, each from its own start (consecutive blocks from `start`). */
-  linkManual(ids: string[], start: number, layout?: (DmxAttr | null)[]) {
-    let at = start;
-    for (const f of ids.map(fixtureOrThrow)) {
-      linkManual(f, at, layout);
-      at += f.link.layout.length;
-    }
-    showChanged(ids);
   },
   /** Give each a new console fixture (a console type key; ignored for library fixtures, which bring their own channels). */
   register(ids: string[], typeKey: string, universe: number | null) {
@@ -111,21 +94,20 @@ const stageChat = {
 
   /** The console fixtures that stage fixtures made (their console ids): the stage owns those. */
   consoleIds: () => state.fixtures.flatMap((f) => (f.link.consoleId ? [f.link.consoleId] : [])),
-  /** The box, rigs and fixtures, for the model to read. */
+  /** The box, trusses and fixtures, for the model to read. */
   stage() {
     return {
       box: { ...state.box },
-      rigs: state.rigs.map((r) => ({
+      trusses: state.trusses.map((r) => ({
         id: r.id, name: r.name, type: r.type,
         x: r.x, y: r.y, z: r.z, size: r.size, count: r.count, tilt: r.tilt, yaw: r.yaw,
       })),
       fixtures: state.fixtures.map((f) => ({
         id: f.id, name: f.name,
         x: f.x, y: f.y, z: f.z,
-        rig: rigOf(f)?.name ?? null,
+        truss: trussOf(f)?.name ?? null,
         pan: round(f.pan, 1), tilt: round(f.tilt, 1),
-        inConsole: !!(f.link.consoleId || f.link.register),
-        console: f.link.consoleId ? consoleFixtureById(f.link.consoleId)?.name ?? "(missing console fixture)" : f.link.start ? `manual ${addr(f.link.start)}` : f.link.register ? "registering" : null,
+        console: f.link.consoleId ? consoleFixtureById(f.link.consoleId)?.name ?? "(missing console fixture)" : "registering",
         ...(f.link.fixture ? { model: `${f.link.fixture.manufacturer} ${f.link.fixture.model} (${f.link.fixture.mode})` } : {}),
         selected: state.selected.includes(f.id),
         following: followingOf(f)?.name ?? null,
@@ -208,14 +190,13 @@ const stageChat = {
   },
 
   /**
-   * New free fixtures at these points; `type` = a console type key or "none"
-   * (stage only). With a library `profile` they're that real fixture (named
+   * New free fixtures at these points; `type` = a console type key. With a library `profile` they're that real fixture (named
    * after its model unless named), and their console fixtures get its channels.
    */
   addFixtures(points: { x: number; y: number; z: number; name?: string | undefined }[], type: string, profile?: FixtureProfile | null) {
     const room = MAX_FIXTURES - state.fixtures.length;
     if (points.length > room) throw new Error(`Only room for ${room} more fixtures (max ${MAX_FIXTURES})`);
-    const register = type === "none" ? null : profile ? { mount: profile.mount, color: profile.color } : consoleTypeFromKey(type);
+    const register = profile ? consoleTypeOfMode(profile) : consoleTypeFromKey(type);
     const added = points.map((p) => {
       const f = createFixture(p.x, p.y, p.z, state.fixtures.length, state.box);
       if (profile) {
@@ -232,49 +213,49 @@ const stageChat = {
     return added.map((f) => f.name);
   },
 
-  /** A new rig (circle, square, line) centered at (x, y, z). */
-  addRig(cfg: { type: RigType; x: number; y: number; z: number; size?: number | undefined; count?: number | undefined; tilt?: number | undefined; yaw?: number | undefined; consoleType: string; name?: string | undefined; profile?: FixtureProfile | null }) {
-    const d = RIG_TYPES[cfg.type].defaults;
+  /** A new truss (circle, square, line) centered at (x, y, z). */
+  addTruss(cfg: { type: TrussType; x: number; y: number; z: number; size?: number | undefined; count?: number | undefined; tilt?: number | undefined; yaw?: number | undefined; consoleType: string; name?: string | undefined; profile?: FixtureProfile | null }) {
+    const d = TRUSS_TYPES[cfg.type].defaults;
     const count = Math.round(cfg.count ?? d.count);
     const room = MAX_FIXTURES - state.fixtures.length;
-    if (count < 2) throw new Error("A rig needs at least 2 fixtures");
-    if (count > room) throw new Error(`This rig needs ${count} fixtures; there's room for ${room} (max ${MAX_FIXTURES})`);
-    const before = new Set(state.rigs.map((r) => r.id));
-    addRigAt({
+    if (count < 2) throw new Error("A truss needs at least 2 fixtures");
+    if (count > room) throw new Error(`This truss needs ${count} fixtures; there's room for ${room} (max ${MAX_FIXTURES})`);
+    const before = new Set(state.trusses.map((r) => r.id));
+    addTrussAt({
       type: cfg.type,
       size: clamp(cfg.size ?? d.size, 0.5, 50),
       count,
       tilt: clamp(cfg.tilt ?? d.tilt, -90, 90),
       yaw: cfg.yaw ?? d.yaw,
-      consoleType: cfg.consoleType === "none" ? null : cfg.profile ? { mount: cfg.profile.mount, color: cfg.profile.color } : consoleTypeFromKey(cfg.consoleType),
+      consoleType: cfg.profile ? consoleTypeOfMode(cfg.profile) : consoleTypeFromKey(cfg.consoleType),
       fixture: cfg.profile ?? null,
       universe: null,
     }, cfg.x, cfg.y, cfg.z);
-    const rig = state.rigs.find((r) => !before.has(r.id));
-    if (!rig) throw new Error("The rig wasn't added");
+    const truss = state.trusses.find((r) => !before.has(r.id));
+    if (!truss) throw new Error("The truss wasn't added");
     if (cfg.name?.trim()) {
-      setRigField(rig, "name", cfg.name.trim());
-      showChanged(rigMembers(rig).map((m) => m.id));
+      setTrussField(truss, "name", cfg.name.trim());
+      showChanged(trussMembers(truss).map((m) => m.id));
     }
-    return { name: rig.name, x: rig.x, y: rig.y, z: rig.z, fixtures: rigMembers(rig).map((m) => m.name) };
+    return { name: truss.name, x: truss.x, y: truss.y, z: truss.z, fixtures: trussMembers(truss).map((m) => m.name) };
   },
 
-  /** Change a rig's name, position (center), size, count, tilt or yaw. */
-  editRig(id: string, fields: Partial<Record<RigField, string | number>>) {
-    const rig = rigOrThrow(id);
-    for (const k of RIG_FIELDS) if (fields[k] != null) setRigField(rig, k, String(fields[k]));
-    showChanged(rigMembers(rig).map((m) => m.id));
-    return { name: rig.name, x: rig.x, y: rig.y, z: rig.z, size: rig.size, count: rig.count, tilt: rig.tilt, yaw: rig.yaw };
+  /** Change a truss's name, position (center), size, count, tilt or yaw. */
+  editTruss(id: string, fields: Partial<Record<TrussField, string | number>>) {
+    const truss = trussOrThrow(id);
+    for (const k of TRUSS_FIELDS) if (fields[k] != null) setTrussField(truss, k, String(fields[k]));
+    showChanged(trussMembers(truss).map((m) => m.id));
+    return { name: truss.name, x: truss.x, y: truss.y, z: truss.z, size: truss.size, count: truss.count, tilt: truss.tilt, yaw: truss.yaw };
   },
 
   /**
    * Move free fixtures to a point (`to`, any of x / y / z) or by an offset
-   * (`by`). Rig members are moved with their rig (editRig).
+   * (`by`). Truss members are moved with their truss (editTruss).
    */
   moveFixtures(ids: string[], move: { to?: Partial<Record<"x" | "y" | "z", number>>; by?: Partial<Record<"x" | "y" | "z", number>> }) {
     const fixtures = ids.map(fixtureOrThrow);
-    const rigs = [...new Set(fixtures.map((f) => rigOf(f)?.name).filter((n) => n != null))];
-    if (rigs.length) throw new Error(`Fixtures in ${rigs.length > 1 ? "rigs" : "rig"} ${rigs.join(", ")} move with the rig: change its center with edit_rig`);
+    const trusses = [...new Set(fixtures.map((f) => trussOf(f)?.name).filter((n) => n != null))];
+    if (trusses.length) throw new Error(`Fixtures in ${trusses.length > 1 ? "trusses" : "truss"} ${trusses.join(", ")} move with the truss: change its center with edit_truss`);
     for (const f of fixtures) {
       const to = move.to ?? {};
       const by = move.by ?? {};
@@ -343,8 +324,8 @@ const stageChat = {
    * A fixture's own settings, as the inspector's Ranges, Dimmer curve and
    * zero frame: how far pan / tilt go (± degrees), the beam angle at zoom 0
    * and 255, the dimmer curve, and `zero`: "here" (where it points now
-   * becomes pan / tilt 128) or "stage" (its zero aimed at the stage). A rig
-   * member's zero is its rig's, so `zero` skips them (listed in `skipped`).
+   * becomes pan / tilt 128) or "stage" (its zero aimed at the stage). A truss
+   * member's zero is its truss's, so `zero` skips them (listed in `skipped`).
    */
   editSettings(ids: string[], s: { panRange?: number | undefined; tiltRange?: number | undefined; beamMin?: number | undefined; beamMax?: number | undefined; dimmerCurve?: string | undefined; zero?: "here" | "stage" | undefined }) {
     const fixtures = ids.map(fixtureOrThrow);
@@ -363,12 +344,12 @@ const stageChat = {
       if (s.dimmerCurve != null) f.dimmerCurve = s.dimmerCurve as DimmerCurve;
       deriveFromDmx(f);
       if (s.zero) {
-        if (f.rigId) skipped.push(f.name);
+        if (f.trussId) skipped.push(f.name);
         else if (s.zero === "here") setZeroHere(f);
         else aimZeroAt(f, defaultTarget(f, state.box));
       }
     }
-    if (s.zero) stopFollowing(fixtures.filter((f) => !f.rigId));
+    if (s.zero) stopFollowing(fixtures.filter((f) => !f.trussId));
     showChanged(fixtures.map((f) => f.id));
     return { fixtures: fixtures.map(fixtureSettings), ...(skipped.length ? { skipped } : {}) };
   },
@@ -388,11 +369,11 @@ const stageChat = {
     return state.selected.map((id) => byId(id)?.name ?? id);
   },
 
-  /** Delete fixtures (a rig member takes its whole rig with it). Returns what was deleted. */
+  /** Delete fixtures (a truss member takes its whole truss with it). Returns what was deleted. */
   deleteFixtures(ids: string[]) {
     const fixtures = ids.map(fixtureOrThrow);
-    const rigs = [...new Set(fixtures.map(rigOf).filter((r) => r != null))];
-    const names = [...rigs.map((r) => `${r.name} (${r.count} fixtures)`), ...fixtures.filter((f) => !f.rigId).map((f) => f.name)];
+    const trusses = [...new Set(fixtures.map(trussOf).filter((r) => r != null))];
+    const names = [...trusses.map((r) => `${r.name} (${r.count} fixtures)`), ...fixtures.filter((f) => !f.trussId).map((f) => f.name)];
     state.selected = fixtures.map((f) => f.id);
     deleteSelected();
     return names;

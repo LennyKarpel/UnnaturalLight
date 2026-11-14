@@ -21,7 +21,7 @@ function near(actual: unknown, expected: unknown, where: string, eps = 1e-9): vo
   }
 }
 
-test("stage model: pan / tilt, aiming, beam hits and rigs match what three.js computed", () => {
+test("stage model: pan / tilt, aiming, beam hits and trusses match what three.js computed", () => {
   const expected = JSON.parse(fs.readFileSync(new URL("./data/stage-geometry.json", import.meta.url), "utf8"));
   near(runCases(model), expected, "stage");
 });
@@ -39,15 +39,32 @@ test("stage model: aiming at a spot points the beam at it", () => {
 });
 
 test("stage model: saved stages load with defaults and clean values", () => {
-  const st = model.parseStage({ box: { w: "abc", d: 500 }, fixtures: [{ x: "1.5", panLimit: null, dmx: { pan: 999 } }], rigs: [{ type: "circle", size: "" }] });
+  const st = model.parseStage({ box: { w: "abc", d: 500 }, fixtures: [{ x: "1.5", panLimit: null, dmx: { pan: 999 } }], trusses: [{ type: "circle", size: "" }] });
   assert.deepEqual(st.box, { w: 12, d: 100, h: 6 });
   const f = st.fixtures[0];
   assert.equal(f.x, 1.5);
   assert.equal(f.panLimit, 270); // a saved null is the default, not 0
   assert.equal(f.dmx.pan, 255);
-  assert.equal(st.rigs.length, 0); // a rig with no members is dropped
-  const again = model.parseStage(model.serializeStage(st.box, st.fixtures, st.transparent, st.rigs, st.positions, st.risers));
+  assert.equal(st.trusses.length, 0); // a truss with no members is dropped
+  const again = model.parseStage(model.serializeStage(st.box, st.fixtures, st.transparent, st.trusses, st.positions, st.risers));
   assert.deepEqual(again.fixtures, st.fixtures);
+});
+
+test("stage model: loading a show drops fixtures that aren't console fixtures, and a truss keeps the members left", () => {
+  const linked = (id: string, k: number) => ({ id, trussId: "t", trussIndex: k, link: { consoleId: `c${id}` } });
+  const saved = {
+    trusses: [{ id: "t", type: "line", count: 4 }],
+    fixtures: [
+      linked("a", 0), { id: "b", trussId: "t", trussIndex: 1 }, linked("c", 2), linked("d", 3),
+      { id: "manual", link: { start: 45, layout: ["dimmer"] } },
+      { id: "pending", link: { register: { mount: "fixed", color: "single" } } },
+    ],
+  };
+  const st = model.parseStage(saved, { linkedOnly: true });
+  assert.deepEqual(st.fixtures.map((f) => f.id), ["a", "c", "d", "pending"]);
+  assert.deepEqual([st.trusses[0].count, st.fixtures.slice(0, 3).map((f) => f.trussIndex)], [3, [0, 1, 2]]);
+  assert.deepEqual(st.trusses[0].consoleType, { mount: "movable", color: "multi" }); // saved without one: the default
+  assert.equal(model.parseStage(saved).fixtures.length, 6); // not loading a show (e.g. the model's cases): all kept
 });
 
 test("stage model: setZeroHere keeps the beam where it points", () => {

@@ -99,8 +99,8 @@ function fakeShow() {
   const placed: { x: number; y: number; z: number }[][] = [];
   /** The stage: empty unless a case sets it up (ask's `setup`). Risers and positions are kept; aims are recorded on the fixtures. */
   const stageState = {
-    rigs: [] as { id: string; name: string; type: string; x: number; y: number; z: number; size: number; count: number }[],
-    fixtures: [] as { id: string; name: string; x: number; y: number; z: number; rig: string | null; aimedAt?: { x: number; y: number; z: number } | string }[],
+    trusses: [] as { id: string; name: string; type: string; x: number; y: number; z: number; size: number; count: number }[],
+    fixtures: [] as { id: string; name: string; x: number; y: number; z: number; truss: string | null; aimedAt?: { x: number; y: number; z: number } | string }[],
     positions: [] as { id: string; name: string; x: number; y: number; z: number }[],
     risers: [] as { id: string; name: string; x: number; z: number; width: number; depth: number; height: number; yaw: number }[],
   };
@@ -109,8 +109,8 @@ function fakeShow() {
   const stage = {
     stage: () => ({
       box: { w: 12, d: 8, h: 6 },
-      rigs: stageState.rigs,
-      fixtures: stageState.fixtures.map(({ aimedAt: _, ...f }) => ({ ...f, pan: 0, tilt: 0, inConsole: false, console: null, selected: false, following: null })),
+      trusses: stageState.trusses,
+      fixtures: stageState.fixtures.map(({ aimedAt: _, ...f }) => ({ ...f, pan: 0, tilt: 0, console: f.name, selected: false, following: null })),
       positions: stageState.positions,
       risers: stageState.risers,
       maxFixtures: 200,
@@ -142,7 +142,7 @@ function fakeShow() {
       placed.push(points);
       return points.map((p, i) => ({ name: `Fixture ${i + 1}`, ...p }));
     },
-    addRig: (rig: { type: string; count: number }) => ({ name: "Line 1", fixtures: Array.from({ length: rig.count }, (_, i) => `Line 1 · ${i + 1}`) }),
+    addTruss: (truss: { type: string; count: number }) => ({ name: "Line 1", fixtures: Array.from({ length: truss.count }, (_, i) => `Line 1 · ${i + 1}`) }),
   };
   /** Every hook call is recorded; a hook the fake doesn't have is recorded and does nothing. */
   const recorded = <T extends object>(hooks: T) =>
@@ -250,13 +250,13 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
     assert.deepEqual(r.edits, ["renameShow"]);
   });
 
-  test("hangs a line of fixtures over the front of the stage (as single fixtures or a line rig)", async () => {
+  test("hangs a line of fixtures over the front of the stage (as single fixtures or a line truss)", async () => {
     const r = await ask("Hang 4 lights in a line across the front of the stage, 5 meters up.");
-    const rig = r.calls.find((c) => c.hook === "addRig")?.args[0] as { type: string; x: number; y: number; z: number; count: number } | undefined;
-    if (rig) {
-      assert.deepEqual([rig.type, rig.count, rig.y], ["line", 4, 5]);
-      assert.ok(rig.z > 0, `downstage (z > 0): ${JSON.stringify(rig)}`);
-      assert.deepEqual(r.edits, ["addRig"]);
+    const truss = r.calls.find((c) => c.hook === "addTruss")?.args[0] as { type: string; x: number; y: number; z: number; count: number } | undefined;
+    if (truss) {
+      assert.deepEqual([truss.type, truss.count, truss.y], ["line", 4, 5]);
+      assert.ok(truss.z > 0, `downstage (z > 0): ${JSON.stringify(truss)}`);
+      assert.deepEqual(r.edits, ["addTruss"]);
       return;
     }
     const points = r.placed.flat();
@@ -279,12 +279,12 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
     assert.deepEqual(r.edits, ["addRiser"]);
   });
 
-  test("aims a rig at a riser (the riser's top: a named position there, or the spot)", async () => {
+  test("aims a truss at a riser (the riser's top: a named position there, or the spot)", async () => {
     const r = await ask("Aim the ring at the drum riser.", ({ stageState }) => {
       stageState.risers.push({ id: "k1", name: "Drum riser", x: 1, z: -2, width: 2.4, depth: 2.4, height: 0.6, yaw: 0 });
-      stageState.rigs.push({ id: "rig1", name: "Ring 1", type: "ring", x: 0, y: 5, z: 0, size: 3, count: 6 });
-      for (let i = 1; i <= 6; i++) stageState.fixtures.push({ id: `r${i}`, name: `Ring 1 · ${i}`, x: 0, y: 5, z: 0, rig: "Ring 1" });
-      stageState.fixtures.push({ id: "f1", name: "Spot L", x: -4, y: 5, z: 2, rig: null });
+      stageState.trusses.push({ id: "truss1", name: "Ring 1", type: "ring", x: 0, y: 5, z: 0, size: 3, count: 6 });
+      for (let i = 1; i <= 6; i++) stageState.fixtures.push({ id: `r${i}`, name: `Ring 1 · ${i}`, x: 0, y: 5, z: 0, truss: "Ring 1" });
+      stageState.fixtures.push({ id: "f1", name: "Spot L", x: -4, y: 5, z: 2, truss: null });
     });
     const targets = r.stageState.fixtures.map((f) => (typeof f.aimedAt === "string" ? r.stageState.positions.find((p) => p.id === f.aimedAt) ?? f.aimedAt : f.aimedAt));
     assert.equal(targets.at(-1), undefined, "Spot L isn't in the ring: left alone");
@@ -295,17 +295,17 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
     assert.ok(r.edits.every((e) => e === "addPosition" || e === "aimAtPosition" || e === "aimFixtures"), `only aims: ${r.edits.join(", ")}`);
   });
 
-  /** Two spots only on the stage (not in the console) and a 6-fixture ring. */
-  const rigged = ({ stageState }: ReturnType<typeof fakeShow>) => {
-    stageState.rigs.push({ id: "rig1", name: "Ring 1", type: "ring", x: 0, y: 5, z: 0, size: 3, count: 6 });
-    for (let i = 1; i <= 6; i++) stageState.fixtures.push({ id: `r${i}`, name: `Ring 1 · ${i}`, x: 0, y: 5, z: 0, rig: "Ring 1" });
-    stageState.fixtures.push({ id: "sl", name: "Spot L", x: -4, y: 5, z: 2, rig: null }, { id: "sr", name: "Spot R", x: 4, y: 5, z: 2, rig: null });
+  /** Two spots and a 6-fixture ring. */
+  const withTruss = ({ stageState }: ReturnType<typeof fakeShow>) => {
+    stageState.trusses.push({ id: "truss1", name: "Ring 1", type: "ring", x: 0, y: 5, z: 0, size: 3, count: 6 });
+    for (let i = 1; i <= 6; i++) stageState.fixtures.push({ id: `r${i}`, name: `Ring 1 · ${i}`, x: 0, y: 5, z: 0, truss: "Ring 1" });
+    stageState.fixtures.push({ id: "sl", name: "Spot L", x: -4, y: 5, z: 2, truss: null }, { id: "sr", name: "Spot R", x: 4, y: 5, z: 2, truss: null });
   };
   const args = (r: Awaited<ReturnType<typeof ask>>, hook: string) => r.calls.filter((c) => c.hook === hook).map((c) => c.args);
   const RING = ["r1", "r2", "r3", "r4", "r5", "r6"];
 
-  test("lights stage-only fixtures", async () => {
-    const r = await ask("Make Spot L and Spot R blue at 70%.", rigged);
+  test("lights fixtures by name", async () => {
+    const r = await ask("Make Spot L and Spot R blue at 70%.", withTruss);
     const sets = args(r, "setValues") as [string[], { levels?: { dimmer?: number }; color?: string }][];
     assert.ok(sets.length, `tools used: ${r.used.join(", ")}`);
     assert.deepEqual(sets.flatMap(([ids]) => ids).sort(), ["sl", "sr"]);
@@ -318,7 +318,7 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
   });
 
   test("sets a real fixture's ranges from its spec sheet", async () => {
-    const r = await ask("The ring's fixtures pan 540 degrees and tilt 270, with a fixed 16 degree beam. Set them up to match.", rigged);
+    const r = await ask("The ring's fixtures pan 540 degrees and tilt 270, with a fixed 16 degree beam. Set them up to match.", withTruss);
     const edits = args(r, "editSettings") as [string[], { panRange?: number; tiltRange?: number; beamMin?: number; beamMax?: number }][];
     assert.ok(edits.length, `tools used: ${r.used.join(", ")}`);
     const ids = [...new Set(edits.flatMap(([ids]) => ids))].sort();
@@ -329,13 +329,13 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
   });
 
   test("duplicates a fixture", async () => {
-    const r = await ask("Duplicate Spot L.", rigged);
+    const r = await ask("Duplicate Spot L.", withTruss);
     assert.deepEqual(args(r, "duplicateFixtures"), [[["sl"]]]);
     assert.deepEqual(r.edits, ["duplicateFixtures"]);
   });
 
   test("selects fixtures to work on by hand", async () => {
-    const r = await ask("Select the ring and Spot R so I can adjust them.", rigged);
+    const r = await ask("Select the ring and Spot R so I can adjust them.", withTruss);
     const picks = args(r, "select") as [string[]][];
     assert.ok(picks.length, `tools used: ${r.used.join(", ")}`);
     assert.deepEqual([...picks.at(-1)![0]].sort(), [...RING, "sr"].sort());

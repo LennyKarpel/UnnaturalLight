@@ -17,19 +17,19 @@ import {
   axisHits,
   SURFACES,
   TRANSPARENT_OPACITY,
-  rigLowestY,
-  rigOutline,
+  trussLowestY,
+  trussOutline,
   type Fixture,
-  type RigShape,
+  type TrussShape,
   type StagePosition,
   type Xyz,
 } from "./stage-model.ts";
 import { clamp } from "../shared/numbers.ts";
 import { rotate, type Vec } from "./rotation.ts";
-import { state, byId, selectedFixtures, moveFixture, addRigAt, positionById, riserById, ui } from "./state.ts";
+import { state, byId, selectedFixtures, moveFixture, addTrussAt, positionById, riserById, ui } from "./state.ts";
 import { RISER_DEFAULTS, RISER_MIN, RISER_MAX_H, SIZE_HANDLES, TURN_HANDLE_GAP, resizeTo, yawToward, type Riser, type RiserHandle } from "./risers.ts";
 import { runFrameStart } from "./frame.ts";
-import { look, changed, select, selectRigOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
+import { look, changed, select, selectTrussOf, applyAim, addFixtureAt, addPositionAt, addRiserAt, setActivePosition, setActiveRiser, setHoverItem, setHoverPosition, setBanner, openContextMenu, openPositionMenu, openRiserMenu, showPositionSpot, describeRiser } from "./actions.ts";
 import { followingOf } from "./follow.ts";
 import { showTrace } from "./stage.ts";
 import { isPresent } from "../shared/guards.ts";
@@ -261,17 +261,17 @@ ghostStem.renderOrder = 10;
 ghost.visible = ghostStem.visible = false;
 scene.add(ghost, ghostStem);
 
-// Rig outlines (ring, square or line), rebuilt from the rig's shape.
-const rigVisuals = new Map<string, THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>();
-const rigGhost = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x00dddd, depthTest: false }));
-rigGhost.renderOrder = 10;
-rigGhost.visible = false;
-scene.add(rigGhost);
+// Truss outlines (ring, square or line), rebuilt from the truss's shape.
+const trussVisuals = new Map<string, THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>();
+const trussGhost = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x00dddd, depthTest: false }));
+trussGhost.renderOrder = 10;
+trussGhost.visible = false;
+scene.add(trussGhost);
 
-/** Redraw a line object as the outline of a rig (or rig-like settings). */
-function setOutline(line: THREE.Line, rig: RigShape) {
+/** Redraw a line object as the outline of a truss (or truss-like settings). */
+function setOutline(line: THREE.Line, truss: TrussShape) {
   line.geometry.dispose();
-  line.geometry = new THREE.BufferGeometry().setFromPoints(rigOutline(rig).map(toVector3));
+  line.geometry = new THREE.BufferGeometry().setFromPoints(trussOutline(truss).map(toVector3));
 }
 
 // Aim-mode preview: target marker + a line from each selected fixture.
@@ -706,20 +706,20 @@ export function syncScene() {
       visuals.delete(id);
     }
   }
-  const rigIds = new Set(state.rigs.map((r) => r.id));
-  for (const [id, line] of rigVisuals) {
-    if (!rigIds.has(id)) { scene.remove(line); rigVisuals.delete(id); }
+  const trussIds = new Set(state.trusses.map((r) => r.id));
+  for (const [id, line] of trussVisuals) {
+    if (!trussIds.has(id)) { scene.remove(line); trussVisuals.delete(id); }
   }
-  const selRigs = new Set(selectedFixtures().map((i) => i.rigId).filter(isPresent));
-  for (const rig of state.rigs) {
-    let line = rigVisuals.get(rig.id);
+  const selTrusses = new Set(selectedFixtures().map((i) => i.trussId).filter(isPresent));
+  for (const truss of state.trusses) {
+    let line = trussVisuals.get(truss.id);
     if (!line) {
       line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x8a93a6 }));
-      rigVisuals.set(rig.id, line);
+      trussVisuals.set(truss.id, line);
       scene.add(line);
     }
-    setOutline(line, rig);
-    line.material.color.set(selRigs.has(rig.id) ? 0x00dddd : 0x8a93a6);
+    setOutline(line, truss);
+    line.material.color.set(selTrusses.has(truss.id) ? 0x00dddd : 0x8a93a6);
   }
 
   const { w, d, h } = state.box;
@@ -897,7 +897,7 @@ function placePosition(outside: boolean) {
 
 export function updateGhost(e: PointerEvent | null) {
   if (ui.placingRiser) {
-    ghost.visible = ghostStem.visible = rigGhost.visible = false;
+    ghost.visible = ghostStem.visible = trussGhost.visible = false;
     if (e) rayFromEvent(e);
     const p = e ? riserSpot() : null;
     riserGhost.visible = !!p;
@@ -908,7 +908,7 @@ export function updateGhost(e: PointerEvent | null) {
   if (riserGhost.visible) { riserGhost.visible = false; requestRender(); }
   // A position goes on the surface under the pointer, like an aim: show the target ring there.
   if (ui.placingPosition) {
-    ghost.visible = ghostStem.visible = rigGhost.visible = false;
+    ghost.visible = ghostStem.visible = trussGhost.visible = false;
     if (e) rayFromEvent(e);
     const t = e ? positionTarget() : null;
     showPositionPreview(t?.p ?? null, t?.surface ?? null);
@@ -918,13 +918,13 @@ export function updateGhost(e: PointerEvent | null) {
   if (ui.placing && e) rayFromEvent(e);
   const p = ui.placing && e ? placePosition(e.altKey) : null;
   ghost.visible = ghostStem.visible = !!p;
-  rigGhost.visible = !!p && !!ui.placingRig;
+  trussGhost.visible = !!p && !!ui.placingTruss;
   if (!p) return;
-  if (ui.placingRig) {
-    const preview = { ...ui.placingRig, x: p.x, y: p.y, z: p.z };
-    const low = rigLowestY(preview);
+  if (ui.placingTruss) {
+    const preview = { ...ui.placingTruss, x: p.x, y: p.y, z: p.z };
+    const low = trussLowestY(preview);
     if (low < PLACE_OFFSET) { preview.y += PLACE_OFFSET - low; p.y = preview.y; }
-    setOutline(rigGhost, preview);
+    setOutline(trussGhost, preview);
   }
   ghost.position.copy(p);
   const inside = isInside({ x: p.x, y: p.y, z: p.z }, state.box);
@@ -1130,11 +1130,11 @@ view.addEventListener("pointermove", (e) => {
   changed({ list: false });
 }, true);
 
-// Double-click a rig's fixture: select the whole rig (⇧ / ⌘: add it to the selection).
+// Double-click a truss's fixture: select the whole truss (⇧ / ⌘: add it to the selection).
 view.addEventListener("dblclick", (e) => {
   if (e.target !== renderer.domElement || ui.placing || ui.aiming) return;
   const id = pickFixture(e);
-  if (id) selectRigOf(id, e.shiftKey || e.metaKey);
+  if (id) selectTrussOf(id, e.shiftKey || e.metaKey);
 }, true);
 
 renderer.domElement.addEventListener("pointerleave", () => { updateGhost(null); showAimPreview(null); if (!dragPosition) setHoverPosition(null); setHoverItem(null, null); });
@@ -1215,7 +1215,7 @@ view.addEventListener("pointerup", (e) => {
   }
   if (ui.placing) {
     const p = placePosition(e.altKey);
-    if (p) (ui.placingRig ? addRigAt(ui.placingRig, p.x, p.y, p.z) : addFixtureAt(p.x, p.y, p.z));
+    if (p) (ui.placingTruss ? addTrussAt(ui.placingTruss, p.x, p.y, p.z) : addFixtureAt(p.x, p.y, p.z));
     return;
   }
   if (ui.aiming) {

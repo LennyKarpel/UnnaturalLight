@@ -26,20 +26,22 @@ import {
   save,
   byId,
   selectedFixtures,
-  rigById,
-  rigOf,
-  rigMembers,
-  syncRig,
+  trussById,
+  trussOf,
+  trussMembers,
+  syncTruss,
   positionById,
   riserById,
   ui,
-  type RigSettings,
+  ownedConsoleIds,
+  fixturesLabel,
+  type TrussSettings,
 } from "./state.ts";
 import { view, syncScene, updateGhost, showAimPreview } from "./view3d.ts";
 import { drawPlan } from "./plan.ts";
 import { inspectorEl, renderList, renderInspector, syncInspector, renderHud, showPositions, showRisers } from "./sidebar.ts";
-import { placeType, placeFixture, placeUniverse } from "./dialogs.ts";
-import { consoleLink, pushToConsole, requestRegistrations } from "./link.ts";
+import { placeChoice } from "./dialogs.ts";
+import { consoleLink, pushToConsole, requestRegistrations, linkInOrder, consoleTypeOf } from "./link.ts";
 import { aimAndFollow, followingOf, stopFollowing, syncFollowing } from "./follow.ts";
 import { trace, publishStage } from "./stage.ts";
 import * as THREE from "three";
@@ -55,7 +57,7 @@ export const flashing = new Set();
 let flashStart = 0;
 let flashTimer = 0;
 
-// Blackout: while the inspector's B is held, a stage-only fixture draws dark.
+// Blackout: while the inspector's B is held, a fixture without a dimmer fader draws dark.
 export const blackedOut = new Set();
 
 /** What a fixture looks like right now (its own settings, white/full while flashing, or dark while blacked out). */
@@ -129,11 +131,11 @@ export function select(id: string | null, additive = false) {
   changed({ inspector: false });
 }
 
-/** Select every fixture in `id`'s rig (double-click; `additive`, ⇧ / ⌘: added to the selection); false if it isn't in one. */
-export function selectRigOf(id: string, additive = false): boolean {
-  const rig = rigOf(byId(id));
-  if (!rig) return false;
-  const members = rigMembers(rig).map((m) => m.id);
+/** Select every fixture in `id`'s truss (double-click; `additive`, ⇧ / ⌘: added to the selection); false if it isn't in one. */
+export function selectTrussOf(id: string, additive = false): boolean {
+  const truss = trussOf(byId(id));
+  if (!truss) return false;
+  const members = trussMembers(truss).map((m) => m.id);
   state.selected = additive ? [...state.selected.filter((s) => !members.includes(s)), ...members] : members;
   renderInspector();
   changed({ inspector: false });
@@ -142,7 +144,7 @@ export function selectRigOf(id: string, additive = false): boolean {
 
 const bannerEl = elById("banner");
 const PLACE_HINT = bannerEl.textContent;
-const RIG_PLACE_HINT = "Click where the rig's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
+const TRUSS_PLACE_HINT = "Click where the truss's center goes: a surface or the ground in 3D, or the plan · Esc cancels";
 const POSITION_PLACE_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to put a position there · Esc cancels";
 const RISER_PLACE_HINT = "Click a spot on the floor (or in the plan) for the riser's center · Esc cancels";
 const AIM_HINT = "Click a spot on the floor, a wall or the ceiling (or in the plan) to aim the selected fixtures at it · Esc cancels";
@@ -156,18 +158,18 @@ export function setBanner(text: string | null, ms = 0) {
   if (ms) bannerTimer = window.setTimeout(() => setBanner(null), ms);
 }
 
-/** Start (`on`) or stop placing: a fixture, a rig (`rigCfg`), or (`kind`) a named position or a riser. */
-export function setPlacing(on: boolean, rigCfg: RigSettings | null = null, kind: "position" | "riser" | null = null) {
+/** Start (`on`) or stop placing: a fixture, a truss (`trussCfg`), or (`kind`) a named position or a riser. */
+export function setPlacing(on: boolean, trussCfg: TrussSettings | null = null, kind: "position" | "riser" | null = null) {
   if (on && ui.aiming) setAiming(false);
   const position = kind === "position", riser = kind === "riser";
   ui.placing = on;
-  ui.placingRig = on ? rigCfg : null;
+  ui.placingTruss = on ? trussCfg : null;
   ui.placingPosition = on && position;
   ui.placingRiser = on && riser;
   view.classList.toggle("placing", on);
-  setBanner(on ? (position ? POSITION_PLACE_HINT : riser ? RISER_PLACE_HINT : rigCfg ? RIG_PLACE_HINT : PLACE_HINT) : null);
-  elById("addBtn").classList.toggle("active", on && !rigCfg && !kind);
-  elById("rigBtn").classList.toggle("active", on && !!rigCfg);
+  setBanner(on ? (position ? POSITION_PLACE_HINT : riser ? RISER_PLACE_HINT : trussCfg ? TRUSS_PLACE_HINT : PLACE_HINT) : null);
+  elById("addBtn").classList.toggle("active", on && !trussCfg && !kind);
+  elById("trussBtn").classList.toggle("active", on && !!trussCfg);
   elById("positionBtn").classList.toggle("active", on && position);
   elById("riserBtn").classList.toggle("active", on && riser);
   if (!on) { updateGhost(null); showAimPreview(null); }
@@ -379,9 +381,9 @@ export function duplicateRiser(id: string) {
 export function addFixtureAt(x: number, y: number, z: number) {
   if (state.fixtures.length >= MAX_FIXTURES) { setPlacing(false); return; }
   const fixture = createFixture(x, y, z, state.fixtures.length, state.box);
-  fixture.link.register = placeType;
-  fixture.link.universe = placeUniverse;
-  const profile = placeFixture;
+  const { consoleType, fixture: profile, universe, linkFrom } = placeChoice;
+  fixture.link.register = consoleType;
+  fixture.link.universe = universe;
   if (profile) {
     applyFixture(fixture, profile);
     const same = state.fixtures.filter((i) => i.link.fixture?.model === profile.model).length;
@@ -390,14 +392,14 @@ export function addFixtureAt(x: number, y: number, z: number) {
   state.fixtures.push(fixture);
   setPlacing(false);
   select(fixture.id);
-  requestRegistrations();
+  if (!linkFrom || !linkInOrder([fixture], linkFrom)) requestRegistrations();
 }
 
 /**
  * The inspector's B / F on the dimmer, held (`on`) or released: blackout or
  * full and white. A fixture whose dimmer has a console fader is held in the
  * console, like its B / F there, so the lights do it too (and the stage shows
- * what comes back); a stage-only one just looks it here.
+ * what comes back); one without a fader just looks it here.
  */
 export function holdDimmer(kind: "blackout" | "flash", fixture: Fixture, on: boolean) {
   const channel = linkChannels(fixture).find((c) => c.attr === "dimmer")?.channel;
@@ -426,11 +428,11 @@ export function openContextMenu(id: string, x: number, y: number) {
   menuPosition = null;
   if (!state.selected.includes(id)) select(id);
   const n = state.selected.length;
-  const rig = rigOf(byId(id));
+  const truss = trussOf(byId(id));
   const title = n === 1 ? byId(id)?.name ?? "" : `${n} fixtures`;
   const count = n > 1 ? ` ${n}` : "";
   const delCount = deletionIds().size;
-  const delLabel = rig ? `Delete rig${delCount > 1 ? ` (${delCount})` : ""}` : `Delete${count}`;
+  const delLabel = truss ? `Delete truss${delCount > 1 ? ` (${delCount})` : ""}` : `Delete${count}`;
   const item = (cmd: Action | "flash", label: string, key = "", cls = "") =>
     `<button type="button" data-cmd="${cmd}" class="menu-item ${cls}"><span>${label}</span><kbd>${key}</kbd></button>`;
   // Named positions in a sub-menu (opens on hover, focus or a click on it).
@@ -446,7 +448,7 @@ export function openContextMenu(id: string, x: number, y: number) {
     ${positions}
     ${following ? item("unfollow", "Stop following") : ""}
     ${item("home", "Home", "H")}
-    ${rig ? item("selectRig", "Select whole rig") : `${item("zero", "Set zero here", "Z")}${item("aim", "Aim zero at stage")}`}
+    ${truss ? item("selectTruss", "Select whole truss") : `${item("zero", "Set zero here", "Z")}${item("aim", "Aim zero at stage")}`}
     ${item("flash", "Flash (hold)", "F")}
     <hr />
     ${item("dup", `Duplicate${count}`)}
@@ -561,12 +563,12 @@ export function duplicateFixtures(wanted: Fixture[]): Fixture[] {
   const room = MAX_FIXTURES - state.fixtures.length;
   const src = wanted.slice(0, Math.max(0, room));
   if (!src.length) return [];
-  // Copies are free fixtures, even when copied from a rig.
+  // Copies are free fixtures, even when copied from a truss.
   const copies = src.map((fixture) => ({
     ...structuredClone(fixture), id: newId("fixture"), name: `${fixture.name} copy`, x: round(fixture.x + 0.5),
-    rigId: null, rigIndex: 0, follow: null,
-    // Copies get their own console fixture if the original came from the stage.
-    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: (fixture.link.owned ? fixture.link.type : fixture.link.register) ?? null, fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
+    trussId: null, trussIndex: 0, follow: null,
+    // Copies get their own console fixture, of the original's type.
+    link: { consoleId: null, start: null, layout: [], owned: false, type: null, register: consoleTypeOf(fixture), fixture: fixture.link.fixture ?? null, universe: fixture.link.universe ?? null },
   }));
   state.fixtures.push(...copies);
   state.selected = copies.map((c) => c.id);
@@ -577,7 +579,7 @@ export function duplicateFixtures(wanted: Fixture[]): Fixture[] {
 }
 
 /**
- * Deleted fixtures (and rigs), newest last, so ⌘Z can put them back. Kept
+ * Deleted fixtures (and trusses), newest last, so ⌘Z can put them back. Kept
  * with the saved stage, so ⌘Z in any stage window undoes the last delete
  * made in any of them (in memory only if storage is unavailable).
  * Each entry: { indexes, data } (data = the removed fixtures as a stage file).
@@ -620,12 +622,12 @@ function writeRedo(list: RedoEntry[]) {
   storeJson(REDO_KEY, redoMemory);
 }
 
-/** What a delete removes: the selection, widened to whole rigs. */
+/** What a delete removes: the selection, widened to whole trusses. */
 function deletionIds() {
   const ids = new Set(state.selected);
   for (const fixture of selectedFixtures()) {
-    const rig = rigOf(fixture);
-    if (rig) rigMembers(rig).forEach((m) => ids.add(m.id));
+    const truss = trussOf(fixture);
+    if (truss) trussMembers(truss).forEach((m) => ids.add(m.id));
   }
   return ids;
 }
@@ -635,20 +637,20 @@ export function deleteSelected({ redoing = false } = {}) {
   const removed: { fixture: Fixture; index: number }[] = [];
   state.fixtures.forEach((fixture, index) => { if (ids.has(fixture.id)) removed.push({ fixture, index }); });
   if (!removed.length) return;
-  const rigIds = new Set(removed.map((r) => r.fixture.rigId).filter(isPresent));
-  const rigs = state.rigs.filter((r) => rigIds.has(r.id));
+  const trussIds = new Set(removed.map((r) => r.fixture.trussId).filter(isPresent));
+  const trusses = state.trusses.filter((r) => trussIds.has(r.id));
   writeUndo([...readUndo(), {
     indexes: removed.map((r) => r.index),
-    data: serializeStage(state.box, removed.map((r) => r.fixture), state.transparent, rigs),
+    data: serializeStage(state.box, removed.map((r) => r.fixture), state.transparent, trusses),
   }]);
   state.fixtures = state.fixtures.filter((i) => !ids.has(i.id));
-  state.rigs = state.rigs.filter((r) => !rigIds.has(r.id));
+  state.trusses = state.trusses.filter((r) => !trussIds.has(r.id));
   // Fixtures the stage registered leave the console too (their faders are freed).
-  consoleLink.unregister(removed.flatMap((r) => (r.fixture.link.owned && r.fixture.link.consoleId ? [r.fixture.link.consoleId] : [])));
+  consoleLink.unregister(ownedConsoleIds(removed.map((r) => r.fixture)));
   select(null);
-  const what = rigs.length === 1 && removed.every((r) => r.fixture.rigId === rigs[0].id)
-    ? rigs[0].name
-    : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
+  const what = trusses.length === 1 && removed.every((r) => r.fixture.trussId === trusses[0].id)
+    ? trusses[0].name
+    : fixturesLabel(removed.map((r) => r.fixture));
   if (!redoing) writeRedo([]); // a new delete: nothing to redo any more
   setBanner(`Deleted ${what} · ⌘Z to undo`, 4000);
 }
@@ -657,7 +659,7 @@ export function undoDelete() {
   const list = readUndo();
   const entry = list.pop();
   if (!entry) return;
-  const { fixtures, rigs, positions, risers } = parseStage(entry.data);
+  const { fixtures, trusses, positions, risers } = parseStage(entry.data);
   // A deleted riser: put it back where it was in the list.
   if (entry.riserIndex != null) {
     writeUndo(list);
@@ -692,10 +694,10 @@ export function undoDelete() {
   }
   writeUndo(list);
   if (!removed.length) return;
-  state.rigs.push(...rigs.filter((r) => !rigById(r.id)));
+  state.trusses.push(...trusses.filter((r) => !trussById(r.id)));
   // Re-insert in original order so each lands back at its old index.
   for (const { fixture, index } of removed) state.fixtures.splice(Math.min(index, state.fixtures.length), 0, fixture);
-  rigs.forEach(syncRig);
+  trusses.forEach(syncTruss);
   // Their console fixtures were removed on delete: register them again.
   for (const { fixture } of removed) {
     if (!fixture.link.owned) continue;
@@ -706,7 +708,7 @@ export function undoDelete() {
   renderInspector();
   changed();
   writeRedo([...readRedo(), { fixtures: removed.map((r) => r.fixture.id), positions: [], risers: [] }]);
-  const what = rigs.length === 1 ? rigs[0].name : removed.length === 1 ? removed[0].fixture.name : `${removed.length} fixtures`;
+  const what = trusses.length === 1 ? trusses[0].name : fixturesLabel(removed.map((r) => r.fixture));
   setBanner(`Restored ${what} · ⇧⌘Z to delete again`, 2500);
 }
 
@@ -726,19 +728,19 @@ export function redoDelete() {
 }
 
 /** What the inspector's buttons and the right-click menu do (their `data-act` / `data-cmd`). */
-export const ACTIONS = ["home", "zero", "aimSpot", "aim", "selectRig", "dup", "del", "unfollow"] as const;
+export const ACTIONS = ["home", "zero", "aimSpot", "aim", "selectTruss", "dup", "del", "unfollow"] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export function act(name: Action) {
   const sel = selectedFixtures();
   if (name === "home") { stopFollowing(sel); sel.forEach(homeFixture); }
   if (name === "unfollow") stopFollowing(sel);
-  // A rig member's zero is set by its rig, so these skip rig members.
-  const free = sel.filter((i) => !i.rigId);
+  // A truss member's zero is set by its truss, so these skip truss members.
+  const free = sel.filter((i) => !i.trussId);
   if (name === "zero") free.forEach(setZeroHere);
   if (name === "aimSpot") { setAiming(!ui.aiming); return; }
   if (name === "aim") free.forEach((i) => aimZeroAt(i, defaultTarget(i, state.box)));
-  if (name === "selectRig") { if (sel[0]) selectRigOf(sel[0].id); return; }
+  if (name === "selectTruss") { if (sel[0]) selectTrussOf(sel[0].id); return; }
   if (name === "dup") { duplicateSelected(); return; }
   if (name === "del") { deleteSelected(); return; }
   changed();

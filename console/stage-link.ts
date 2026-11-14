@@ -66,6 +66,11 @@ let toStage: ((fn: (stage: StageEnd) => void) => void) | null = null;
 let linked: StageLinkApi | null = null;
 let queued = false;
 let trace: TracePopover | null = null;
+/** Tell the stage these console fixtures were deleted in the console (it removes the stage fixtures linked to them). */
+export function notifyStageRemoved(consoleIds: string[]) {
+  if (consoleIds.length) toStage?.((stage) => stage.removed(consoleIds));
+}
+
 /** Tell the stage the output changed (coalesced to one call per tick). */
 export function notifyStage() {
   if (!toStage || queued) return;

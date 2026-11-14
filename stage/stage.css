@@ -331,7 +331,7 @@
   .seg button { padding: 2px 8px; font-size: var(--text-xs); }
   dialog.dlg .fields { grid-template-columns: 110px 1fr; }
   dialog.dlg .fields input[type="number"] { width: 100%; }
-  .fields.rig-fields { margin-top: 10px; }
+  .fields.truss-fields { margin-top: 10px; }
   input:disabled { opacity: 0.5; cursor: not-allowed; }
   /* The DMX values, outlined like the fixture's faders in the console (theme.css); each row in its own box, like a console fader. */
   .dmx-box { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: 4px 8px; align-items: center; margin-top: 8px; padding: 10px 6px 6px; --outline-bg: var(--panel); }

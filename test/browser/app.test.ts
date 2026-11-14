@@ -153,21 +153,19 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     await a.hooks(({ c }) => c.deleteGroup("Truss"));
     assert.equal((await par()).group, null);
     assert.equal(await a.hooks(({ c }) => c.renameShow("Friday tour")), "Friday tour");
-    // Stage links: a library-style fixture placed stage only, then driven by address, linked to Par, and registered.
+    // Stage links: a library-style fixture placed (it gets its own console fixture), linked to Par (its own is removed), and registered again.
     const profile: FixtureProfile = { manufacturer: "Acme", model: "Mini", mode: "3ch", key: "acme/mini", channels: [{ name: "Dimmer", attr: "dimmer" }, { name: "Strobe", attr: null }, { name: "Zoom", attr: "zoom" }], mount: "fixed", color: "single", panLimit: null, tiltLimit: null, zoomMin: null, zoomMax: null };
-    await a.hooks(({ s }, profile) => s.addFixtures([{ x: 0, y: 4, z: 0 }], "none", profile), profile);
+    await a.hooks(({ s }, profile) => s.addFixtures([{ x: 0, y: 4, z: 0 }], "movable/multi", profile), profile);
     const mini = async () => (await a.hooks(({ s }) => s.stage())).fixtures.find((f) => f.name === "Mini 1")!;
-    assert.deepEqual([(await mini()).console, (await mini()).model], [null, "Acme Mini (3ch)"]);
+    await a.waitFor(`window.stageChat.stage().fixtures.find((f) => f.name === "Mini 1")?.console === "Mini 1"`, "the registered console fixture");
+    assert.equal((await mini()).model, "Acme Mini (3ch)");
+    assert.deepEqual((await fixtures()).find((f) => f.name === "Mini 1")?.channels.map((ch) => ch.role), ["dimmer", null, "zoom"]);
     const sid = (await mini()).id;
-    await a.hooks(({ s }, sid) => s.linkManual([sid], 300), sid);
-    assert.equal((await mini()).console, "manual 300");
     assert.equal(await a.hooks(({ s }, sid, id) => s.linkToConsole([sid], id), sid, id), 1);
     assert.equal((await mini()).console, "Par");
+    await a.waitFor(`!window.consoleChat.fixtures().some((f) => f.name === "Mini 1")`, "linking elsewhere to remove the console fixture the stage made");
     await a.hooks(({ s }, sid) => s.register([sid], "fixed/single", null), sid);
-    await a.waitFor(`window.stageChat.stage().fixtures.find((f) => f.name === "Mini 1")?.console === "Mini 1"`, "the registered console fixture");
-    assert.deepEqual((await fixtures()).find((f) => f.name === "Mini 1")?.channels.map((ch) => ch.role), ["dimmer", null, "zoom"]);
-    await a.hooks(({ s }, sid) => s.unlink([sid]), sid);
-    await a.waitFor(`!window.consoleChat.fixtures().some((f) => f.name === "Mini 1")`, "unlinking to remove the console fixture the stage made");
+    await a.waitFor(`window.stageChat.stage().fixtures.find((f) => f.name === "Mini 1")?.console === "Mini 1"`, "registering it again");
     // Undo, as the chat panel does it: the show, then the stage.
     await a.hooks(({ c, s }, undoShow, undoStage) => { c.restoreEdits(undoShow); s.restoreEdits(undoStage); }, undoShow, undoStage);
     assert.equal((await fixtures()).some((f) => f.name === "Par"), false);
@@ -176,28 +174,74 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.deepEqual(a.errors, []);
   });
 
-  test("double-clicking a rig's fixture selects the rig; with ⇧ or ⌘ it adds the rig to the selection", async () => {
+  test("+ Fixture and + Truss on existing console fixtures link to them; deleting a console fixture takes its stage fixtures along", async () => {
+    const undoShow = await a.hooks(({ c }) => c.editSnapshot());
+    const undoStage = await a.hooks(({ s }) => s.editSnapshot().data);
+    await a.hooks(({ c }) => c.addFixtures({ name: "Wash", channels: 4, qty: 4, roles: ["dimmer", "red", "green", "blue"], group: "", universe: null, mount: "fixed", color: "multi" }));
+    const consoleFixtures = () => a.hooks(({ c }) => c.fixtures());
+    const washes = (await consoleFixtures()).filter((f) => f.name.startsWith("Wash")).sort((x, y) => x.channels[0].channel - y.channels[0].channel);
+    assert.equal(washes.length, 4);
+    const before = (await consoleFixtures()).length;
+    const pick = (dialog: string, type: string, list: string, id: string) => a.evaluate(`(() => {
+      const type = document.getElementById(${JSON.stringify(type)});
+      type.value = "existing";
+      type.dispatchEvent(new Event("change", { bubbles: true }));
+      const list = document.getElementById(${JSON.stringify(list)});
+      if (list.closest("[hidden]") || !document.getElementById(${JSON.stringify(dialog)}).open) throw new Error("the console fixture list isn't showing");
+      list.value = ${JSON.stringify(id)};
+    })()`);
+    // + Fixture: on the second wash.
+    await a.click("#addBtn");
+    await pick("placeDlg", "placeType", "placeExisting", washes[1].id);
+    await a.click("#placeForm button[type='submit']");
+    await a.click("#plan");
+    const placed = async () => (await stage(a)).fixtures.filter((f) => f.selected);
+    assert.deepEqual((await placed()).map((f) => f.console), [washes[1].name]);
+    const solo = (await placed())[0].name;
+    // + Truss: a 3-fixture line from the second wash links to it and the two after it.
+    await a.click("#trussBtn");
+    await a.evaluate(`(() => {
+      const type = document.getElementById("trussType"); type.value = "line"; type.dispatchEvent(new Event("change", { bubbles: true }));
+      document.getElementById("trussCount").value = "3";
+    })()`);
+    await pick("trussDlg", "trussConsoleType", "trussExisting", washes[1].id);
+    await a.click("#trussPlace");
+    await a.click("#plan");
+    const line = await placed();
+    assert.deepEqual(line.map((f) => f.console), washes.slice(1).map((w) => w.name));
+    assert.equal((await consoleFixtures()).length, before, "no new console fixtures");
+    // Deleting the second wash in the console removes the fixture and the truss member on it; the line keeps 2.
+    await a.hooks(({ c }, id) => c.deleteFixtures([id]), washes[1].id);
+    await a.waitFor(`!window.stageChat.stage().fixtures.some((f) => f.name === ${JSON.stringify(solo)})`, "the stage fixture on the deleted console fixture going");
+    const left = (await stage(a)).fixtures.filter((f) => f.truss === line[0].truss);
+    assert.deepEqual(left.map((f) => f.console), washes.slice(2).map((w) => w.name));
+    assert.equal((await stage(a)).trusses.find((t) => t.name === line[0].truss)?.count, 2);
+    await a.hooks(({ c, s }, undoShow, undoStage) => { c.restoreEdits(undoShow); s.restoreEdits(undoStage); }, undoShow, undoStage);
+    assert.deepEqual(a.errors, []);
+  });
+
+  test("double-clicking a truss's fixture selects the truss; with ⇧ or ⌘ it adds the truss to the selection", async () => {
     const undo = await a.hooks(({ s }) => s.editSnapshot().data);
-    await a.hooks(({ s }) => s.addFixtures([{ x: -3, y: 4, z: 0, name: "Lone spot" }], "none"));
-    await a.hooks(({ s }) => s.addRig({ type: "line", x: 2, y: 4, z: 0, count: 3, consoleType: "none", name: "Test line" }));
+    await a.hooks(({ s }) => s.addFixtures([{ x: -3, y: 4, z: 0, name: "Lone spot" }], "movable/multi"));
+    await a.hooks(({ s }) => s.addTruss({ type: "line", x: 2, y: 4, z: 0, count: 3, consoleType: "movable/multi", name: "Test line" }));
     const fixtures = () => a.hooks(({ s }) => s.stage().fixtures);
     const row = async (name: string) => `#list .item:nth-child(${(await fixtures()).findIndex((f) => f.name === name) + 1})`;
     const selected = async () => (await fixtures()).filter((f) => f.selected).map((f) => f.name);
-    const line = (await fixtures()).filter((f) => f.rig === "Test line").map((f) => f.name);
+    const line = (await fixtures()).filter((f) => f.truss === "Test line").map((f) => f.name);
     assert.equal(line.length, 3);
     await a.click(`[data-list-tab="fixtures"]`);
     await a.waitFor(`document.querySelectorAll("#list .item").length === ${(await fixtures()).length}`, "the fixture list");
     await a.click(await row("Lone spot"));
     assert.deepEqual(await selected(), ["Lone spot"]);
     await a.click(await row(line[1]), { count: 2 });
-    assert.deepEqual(await selected(), line, "a plain double-click: just the rig");
+    assert.deepEqual(await selected(), line, "a plain double-click: just the truss");
     // ⇧ / ⌘ with two fixtures already selected (so the inspector, and with it the list, stays put between the two clicks).
     for (const mod of [{ shift: true }, { meta: true }]) {
       await a.click(await row("Lone spot"));
       await a.click(await row(line[0]), mod);
       assert.deepEqual(await selected(), ["Lone spot", line[0]]);
       await a.click(await row(line[2]), { count: 2, ...mod });
-      assert.deepEqual(await selected(), ["Lone spot", ...line], `${mod.shift ? "⇧" : "⌘"}: the rig added`);
+      assert.deepEqual(await selected(), ["Lone spot", ...line], `${mod.shift ? "⇧" : "⌘"}: the truss added`);
     }
     await a.hooks(({ s }, undo) => s.restoreEdits(undo), undo);
     assert.deepEqual(a.errors, []);
@@ -206,10 +250,11 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
   test("the chat's stage value, settings, duplicate and select hooks, and the whole patch, on the real stage and console", async () => {
     const undoShow = await a.hooks(({ c }) => c.editSnapshot());
     const undoStage = await a.hooks(({ s }) => s.editSnapshot().data);
-    await a.hooks(({ s }) => s.addFixtures([{ x: 0, y: 4, z: 1, name: "Solo" }], "none"));
+    await a.hooks(({ s }) => s.addFixtures([{ x: 0, y: 4, z: 1, name: "Solo" }], "movable/multi"));
+    await a.waitFor(`window.stageChat.stage().fixtures.find((f) => f.name === "Solo")?.console === "Solo"`, "Solo's console fixture");
     const solo = async () => (await a.hooks(({ s }) => s.stage().fixtures)).find((f) => f.name === "Solo")!;
     const id = (await solo()).id;
-    // Values: a stage-only fixture (no console fixture) can be lit.
+    // Values: the fixture is lit (its console fixture's faders follow).
     const [v] = await a.hooks(({ s }, id) => s.setValues([id], { levels: { dimmer: 128, zoom: 40 }, color: "#00ff00" }), id);
     assert.deepEqual([v.dimmer, v.zoom, v.red, v.green, v.blue], [128, 40, 0, 255, 0]);
     // Settings: ranges, beam, curve (the beam's ends kept in order), and its zero.

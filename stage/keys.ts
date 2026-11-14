@@ -21,7 +21,7 @@ import {
   undoDelete,
   redoDelete,
 } from "./actions.ts";
-import { settingsDlg, rigDlg, placeDlg, togglePlaceFixture } from "./dialogs.ts";
+import { settingsDlg, trussDlg, placeDlg, togglePlaceFixture } from "./dialogs.ts";
 import { elById } from "../shared/query.ts";
 
 // ---------------------------------------------------------------------
@@ -76,7 +76,7 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   // ⌘Z undoes a delete; ⇧⌘Z (or ⌘Y) does it again.
-  const cmd = (e.metaKey || e.ctrlKey) && !e.altKey && !settingsDlg.open && !rigDlg.open && !placeDlg.open;
+  const cmd = (e.metaKey || e.ctrlKey) && !e.altKey && !settingsDlg.open && !trussDlg.open && !placeDlg.open;
   if (cmd && e.code === "KeyZ" && !e.shiftKey) {
     e.preventDefault();
     undoDelete();
@@ -88,7 +88,7 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.metaKey || e.ctrlKey) return;
-  if (settingsDlg.open || rigDlg.open || placeDlg.open) return;
+  if (settingsDlg.open || trussDlg.open || placeDlg.open) return;
 
   if (e.key === "Escape") {
     if (!ctxMenu.hidden) closeContextMenu();
@@ -137,7 +137,7 @@ window.addEventListener("keydown", (e) => {
   let handled = true;
   switch (e.code) {
     case "KeyH": sel.forEach(homeFixture); break;
-    case "KeyZ": sel.filter((i) => !i.rigId).forEach(setZeroHere); break;
+    case "KeyZ": sel.filter((i) => !i.trussId).forEach(setZeroHere); break;
     default: handled = false;
   }
   if (handled) { e.preventDefault(); changed(); }

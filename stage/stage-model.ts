@@ -64,7 +64,7 @@ export type Fixture = {
   dimmerCurve: DimmerCurve;
   link: Link;
   color: string; pan: number; tilt: number; intensity: number; beam: number;
-  rigId: string | null; rigIndex: number;
+  trussId: string | null; trussIndex: number;
   /**
    * Following a named position (fixtures the console doesn't drive: for
    * those, cues hold the aim): the pan / tilt it was last aimed with. It
@@ -159,23 +159,31 @@ export const LAYOUT_PRESETS: Record<string, DmxAttr[]> = {
   "movable/multi": ["dimmer", "pan", "tilt", "red", "green", "blue", "zoom"],
 };
 
-/** Console types offered when placing ("none" = stage only). */
+/** Console types offered when placing. */
 export const CONSOLE_TYPES = [
   { key: "movable/multi", label: "Movable · Multi-color · 7 ch" },
   { key: "movable/single", label: "Movable · Single color · 4 ch" },
   { key: "fixed/multi", label: "Fixed · Multi-color · 4 ch" },
   { key: "fixed/single", label: "Fixed · Single color · 1 ch" },
-  { key: "none", label: "Stage only (not in the console)" },
 ];
 
-/** "movable/multi" → { mount, color }; "none" / unknown → null. */
-export function consoleTypeFromKey(key: string): ConsoleType | null {
+/** The default console type: a moving light with color. */
+export const DEFAULT_CONSOLE_TYPE: ConsoleType = { mount: "movable", color: "multi" };
+
+/** "movable/multi" → { mount, color }; unknown → null. */
+function parseConsoleType(key: string): ConsoleType | null {
   const [mount, color] = String(key).split("/");
   if (!LAYOUT_PRESETS[key] || (mount !== "fixed" && mount !== "movable") || (color !== "single" && color !== "multi")) return null;
   return { mount, color };
 }
 
-const consoleTypeKey = (t: ConsoleType | null | undefined) => (t ? `${t.mount}/${t.color}` : "none");
+/** "movable/multi" → { mount, color }; unknown → the default. */
+export const consoleTypeFromKey = (key: string): ConsoleType => parseConsoleType(key) ?? DEFAULT_CONSOLE_TYPE;
+
+/** The console type of anything with a mount and color (a library profile, a console fixture). */
+export const consoleTypeOfMode = (x: ConsoleType): ConsoleType => ({ mount: x.mount, color: x.color });
+
+const consoleTypeKey = (t: ConsoleType) => `${t.mount}/${t.color}`;
 
 /** Preset layout for a console fixture, fitted to its channel count. */
 export function layoutFor(mount: string, color: string, count: number): (DmxAttr | null)[] {
@@ -194,7 +202,7 @@ export function followerChannels(fixture: Fixture): { channel: Channel; attr: Dm
   return profile.channels.flatMap((c, k) => (c.also ? [{ channel: asChannel(start + k), attr: c.also }] : []));
 }
 
-/** [{ channel, attr }] a fixture listens on / sends to (none if unlinked). */
+/** [{ channel, attr }] a fixture listens on / sends to (none while waiting for its console fixture). */
 export function linkChannels(fixture: Fixture): { channel: Channel; attr: DmxAttr }[] {
   const { start, layout } = fixture.link;
   if (!start) return [];
@@ -348,7 +356,7 @@ export function createFixture(x: number, y: number, z: number, n: number, box: B
     panLimit: 270, tiltLimit: 135, zoomMin: 5, zoomMax: 60,
     dimmerCurve: "linear",
     link: { consoleId: null, start: null, layout: [] },
-    rigId: null, rigIndex: 0, follow: null,
+    trussId: null, trussIndex: 0, follow: null,
     // Derived (set by deriveFromDmx just below).
     color: "#ffffff", pan: 0, tilt: 0, intensity: 1, beam: 0,
   };
@@ -364,7 +372,7 @@ const fields = (v: unknown): Record<string, unknown> => (isRecord(v) ? v : {});
 const universeFrom = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 8 ? v : null);
 
 function normalizeType(saved: unknown): ConsoleType | null {
-  return isRecord(saved) ? consoleTypeFromKey(`${saved.mount}/${saved.color}`) : null;
+  return isRecord(saved) ? parseConsoleType(`${saved.mount}/${saved.color}`) : null;
 }
 
 function normalizeLink(saved: unknown): Link {
@@ -393,12 +401,12 @@ function normalizeLink(saved: unknown): Link {
 }
 
 /** Channel layout (attribute per channel) a link registers with. */
-export function registerLayout(link: Link, type: ConsoleType | null | undefined): (DmxAttr | null)[] {
+export function registerLayout(link: Link, type: ConsoleType): (DmxAttr | null)[] {
   return link.fixture ? link.fixture.channels.map((c) => c.attr) : [...LAYOUT_PRESETS[consoleTypeKey(type)]];
 }
 
 /** Console fader name suffix per channel ("Dim", or the fixture's channel name). */
-export function registerLabels(link: Link, type: ConsoleType | null | undefined): string[] {
+export function registerLabels(link: Link, type: ConsoleType): string[] {
   return link.fixture ? link.fixture.channels.map((c) => c.name) : LAYOUT_PRESETS[consoleTypeKey(type)].map((a) => DMX_SHORT[a]);
 }
 
@@ -435,8 +443,8 @@ export function normalizeFixture(saved: unknown, i: number): Fixture {
     panLimit, tiltLimit, zoomMin, zoomMax,
     dimmerCurve: isOneOf(DIMMER_CURVES, raw.dimmerCurve) ? raw.dimmerCurve : "linear",
     link: normalizeLink(raw.link),
-    rigId: typeof raw.rigId === "string" ? raw.rigId : null,
-    rigIndex: typeof raw.rigIndex === "number" && Number.isInteger(raw.rigIndex) ? raw.rigIndex : 0,
+    trussId: typeof raw.trussId === "string" ? raw.trussId : null,
+    trussIndex: typeof raw.trussIndex === "number" && Number.isInteger(raw.trussIndex) ? raw.trussIndex : 0,
     follow: normalizeFollow(raw.follow),
     // Derived (set by deriveFromDmx just below).
     color: "#ffffff", pan: 0, tilt: 0, intensity: 0, beam: 0,
@@ -459,36 +467,36 @@ function serializeFixture(fixture: Fixture) {
 }
 
 // ---------------------------------------------------------------------
-// Rigs: a group of fixtures with fixed placement relative to the rig.
-// Members carry `rigId` / `rigIndex`; their position and zero frame come
-// from the rig and are recomputed whenever the rig changes. Pan / tilt,
+// Trusses: a group of fixtures with fixed placement relative to the truss.
+// Members carry `trussId` / `trussIndex`; their position and zero frame come
+// from the truss and are recomputed whenever the truss changes. Pan / tilt,
 // intensity, color and beam stay per fixture.
 // ---------------------------------------------------------------------
 
-export const RIG_TYPE_KEYS = ["circle", "square", "line"] as const;
-export type RigType = (typeof RIG_TYPE_KEYS)[number];
-export type Rig = {
-  id: string; name: string; type: RigType;
+export const TRUSS_TYPE_KEYS = ["circle", "square", "line"] as const;
+export type TrussType = (typeof TRUSS_TYPE_KEYS)[number];
+export type Truss = {
+  id: string; name: string; type: TrussType;
   x: number; y: number; z: number;
   yaw: number; tilt: number;
   size: number; count: number;
-  /** Console type its members are registered as (null = stage only). */
-  consoleType: ConsoleType | null;
+  /** Console type its members are registered as. */
+  consoleType: ConsoleType;
   /** Real fixture its members are (null = generic). */
   fixture: FixtureProfile | null;
   /** Universe its members register in (null = first with room). */
   universe: number | null;
 };
 
-/** What a rig's outline depends on (a rig, or the settings of one being placed). */
-export type RigShape = Pick<Rig, "type" | "x" | "y" | "z" | "yaw" | "tilt" | "size">;
+/** What a truss's outline depends on (a truss, or the settings of one being placed). */
+export type TrussShape = Pick<Truss, "type" | "x" | "y" | "z" | "yaw" | "tilt" | "size">;
 
 /**
- * Rig types. `size` is the circle's diameter, the square's side or the
+ * Truss types. `size` is the circle's diameter, the square's side or the
  * line's length. `aim` says where members' zeros point: "center" (circle,
  * square) or "parallel" (line: all the same way, straight down when flat).
  */
-export const RIG_TYPES: Record<RigType, {
+export const TRUSS_TYPES: Record<TrussType, {
   name: string;
   prefix: string;
   sizeLabel: string;
@@ -499,7 +507,7 @@ export const RIG_TYPES: Record<RigType, {
   circle: {
     name: "Circle", prefix: "Ring", sizeLabel: "Diameter", aim: "center",
     defaults: { size: 4, count: 8, tilt: 0, yaw: 0 },
-    help: "Fixtures evenly spaced around the ring, each one's zero pointing at the center of the rig. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
+    help: "Fixtures evenly spaced around the ring, each one's zero pointing at the center of the truss. Tilt 0 = flat (a hanging ring); 90 = upright, facing the audience. Yaw turns it about the vertical.",
   },
   square: {
     name: "Square", prefix: "Square", sizeLabel: "Side", aim: "center",
@@ -514,21 +522,21 @@ export const RIG_TYPES: Record<RigType, {
 };
 
 /**
- * The rig's orientation. Its shape lies in the local x–z plane with its
+ * The truss's orientation. Its shape lies in the local x–z plane with its
  * axis along local +y; tilt rotates it about x (0 = flat, 90 = upright
  * facing the audience), then yaw turns it about the vertical.
  */
-function rigQuat(rig: Pick<Rig, "yaw" | "tilt">): Quat {
-  return quatFromEuler(rig.tilt * DEG, rig.yaw * DEG, 0);
+function trussQuat(truss: Pick<Truss, "yaw" | "tilt">): Quat {
+  return quatFromEuler(truss.tilt * DEG, truss.yaw * DEG, 0);
 }
 
-/** Member `i`'s position in the rig's own (unrotated) frame. */
-function localSlot(rig: Rig, i: number): Vec {
-  const n = rig.count, s = rig.size;
-  if (rig.type === "line") {
+/** Member `i`'s position in the truss's own (unrotated) frame. */
+function localSlot(truss: Truss, i: number): Vec {
+  const n = truss.count, s = truss.size;
+  if (truss.type === "line") {
     return vec(n === 1 ? 0 : -s / 2 + (s * i) / (n - 1), 0, 0);
   }
-  if (rig.type === "square") {
+  if (truss.type === "square") {
     // Walk the perimeter (upstage edge first, left to right, then clockwise
     // from above), one member every 4s/n, half a step in from the corner.
     const h = s / 2;
@@ -544,21 +552,21 @@ function localSlot(rig: Rig, i: number): Vec {
 
 /**
  * Position and zero frame of member `i`.
- *   circle / square: zero points at the center; "up" is the rig's axis
- *     (so tilt moves the beam out of the rig's plane).
+ *   circle / square: zero points at the center; "up" is the truss's axis
+ *     (so tilt moves the beam out of the truss's plane).
  *   line: zero points along −axis (straight down when flat); "up" is local
  *     +z (towards the audience when flat), so pan swings along the line.
  */
-function rigSlot(rig: Rig, i: number): Xyz & { base: Frame } {
-  const q = rigQuat(rig);
-  const pos = add(rotate(localSlot(rig, i), q), rig);
+function trussSlot(truss: Truss, i: number): Xyz & { base: Frame } {
+  const q = trussQuat(truss);
+  const pos = add(rotate(localSlot(truss, i), q), truss);
   const axis = rotate(vec(0, 1, 0), q);
   let back: Vec, up: Vec; // local +Z (opposite the beam) and local +Y
-  if (RIG_TYPES[rig.type].aim === "parallel") {
+  if (TRUSS_TYPES[truss.type].aim === "parallel") {
     back = axis;
     up = rotate(vec(0, 0, 1), q);
   } else {
-    back = normalize(sub(pos, rig)); // away from the center
+    back = normalize(sub(pos, truss)); // away from the center
     up = normalize(sub(axis, scale(back, dot(axis, back))));
   }
   return {
@@ -568,50 +576,51 @@ function rigSlot(rig: Rig, i: number): Xyz & { base: Frame } {
 }
 
 /** Put each member back in its slot (members' pan / tilt etc. are kept). */
-export function applyRig(rig: Rig, members: Fixture[]) {
+export function applyTruss(truss: Truss, members: Fixture[]) {
   for (const fixture of members) {
-    const slot = rigSlot(rig, fixture.rigIndex);
+    const slot = trussSlot(truss, fixture.trussIndex);
     fixture.x = slot.x; fixture.y = slot.y; fixture.z = slot.z;
     fixture.base = slot.base;
   }
 }
 
 /**
- * The rig's shape in world space, for drawing: a polyline (closed for
+ * The truss's shape in world space, for drawing: a polyline (closed for
  * circle / square).
  */
-export function rigOutline(rig: RigShape): Vec[] {
-  const q = rigQuat(rig);
-  const h = rig.size / 2;
+export function trussOutline(truss: TrussShape): Vec[] {
+  const q = trussQuat(truss);
+  const h = truss.size / 2;
   let local: Vec[];
-  if (rig.type === "line") local = [vec(-h, 0, 0), vec(h, 0, 0)];
-  else if (rig.type === "square") local = [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].map(([x, z]) => vec(x, 0, z));
+  if (truss.type === "line") local = [vec(-h, 0, 0), vec(h, 0, 0)];
+  else if (truss.type === "square") local = [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].map(([x, z]) => vec(x, 0, z));
   else local = Array.from({ length: 65 }, (_, k) => { const t = (2 * Math.PI * k) / 64; return vec(h * Math.sin(t), 0, -h * Math.cos(t)); });
-  return local.map((p) => add(rotate(p, q), { x: rig.x, y: rig.y, z: rig.z }));
+  return local.map((p) => add(rotate(p, q), { x: truss.x, y: truss.y, z: truss.z }));
 }
 
-/** Lowest point of the rig, so it can be kept off the floor. */
-export function rigLowestY(rig: RigShape): number {
-  return Math.min(...rigOutline(rig).map((p) => p.y));
+/** Lowest point of the truss, so it can be kept off the floor. */
+export function trussLowestY(truss: TrussShape): number {
+  return Math.min(...trussOutline(truss).map((p) => p.y));
 }
 
-export function normalizeRig(saved: unknown, i: number): Rig {
+export function normalizeTruss(saved: unknown, i: number): Truss {
   const raw = fields(saved);
   // Missing or empty (a cleared dialog field) → the default.
   const num = (v: unknown, fb: number) => numberFrom(v) ?? fb;
-  const type: RigType = isOneOf(RIG_TYPE_KEYS, raw.type) ? raw.type : "circle";
-  const d = RIG_TYPES[type].defaults;
+  const type: TrussType = isOneOf(TRUSS_TYPE_KEYS, raw.type) ? raw.type : "circle";
+  const d = TRUSS_TYPES[type].defaults;
+  const profile = normalizeProfile(raw?.fixture);
   return {
-    id: typeof raw?.id === "string" ? raw.id : newId("rig"),
-    name: typeof raw?.name === "string" ? raw.name : `${RIG_TYPES[type].prefix} ${i + 1}`,
+    id: typeof raw?.id === "string" ? raw.id : newId("truss"),
+    name: typeof raw?.name === "string" ? raw.name : `${TRUSS_TYPES[type].prefix} ${i + 1}`,
     type,
     x: num(raw?.x, 0), y: num(raw?.y, 5), z: num(raw?.z, 0),
     yaw: num(raw?.yaw, d.yaw),
     tilt: clamp(num(raw?.tilt, d.tilt), -90, 90),
     size: clamp(num(raw?.size, d.size), 0.5, 50),
     count: clamp(Math.round(num(raw?.count, d.count)), 2, MAX_FIXTURES),
-    consoleType: normalizeType(raw?.consoleType),
-    fixture: normalizeProfile(raw?.fixture),
+    consoleType: normalizeType(raw?.consoleType) ?? (profile ? consoleTypeOfMode(profile) : DEFAULT_CONSOLE_TYPE),
+    fixture: profile,
     universe: universeFrom(raw?.universe),
   };
 }
@@ -669,8 +678,38 @@ export function normalizePosition(saved: unknown, i: number): StagePosition {
   };
 }
 
-/** Parse saved/imported JSON into a clean `{ box, fixtures, transparent, rigs, positions, risers }`. */
-export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; transparent: Transparent; rigs: Rig[]; positions: StagePosition[]; risers: Riser[] } {
+/**
+ * Fit trusses to the members they actually have (after loading, or after
+ * some were removed): each keeps that count, its members renumbered and
+ * re-laid-out; one with fewer than 2 goes, and a member whose truss is gone
+ * becomes a free fixture. Returns the trusses kept.
+ */
+export function fitTrusses(trusses: Truss[], fixtures: Fixture[]): Truss[] {
+  const byTruss = new Map<string, Fixture[]>();
+  for (const fixture of fixtures) {
+    if (!fixture.trussId) continue;
+    const list = byTruss.get(fixture.trussId);
+    if (list) list.push(fixture);
+    else byTruss.set(fixture.trussId, [fixture]);
+  }
+  const kept = trusses.filter((truss) => {
+    const members = (byTruss.get(truss.id) ?? []).sort((a, b) => a.trussIndex - b.trussIndex);
+    byTruss.delete(truss.id);
+    if (members.length < 2) { members.forEach((m) => { m.trussId = null; }); return false; }
+    members.forEach((m, k) => { m.trussIndex = k; });
+    truss.count = members.length;
+    applyTruss(truss, members);
+    return true;
+  });
+  for (const orphans of byTruss.values()) orphans.forEach((m) => { m.trussId = null; });
+  return kept;
+}
+
+/**
+ * Parse saved/imported JSON into a clean `{ box, fixtures, transparent, trusses, positions, risers }`.
+ * `linkedOnly` (loading a show): drop fixtures that aren't console fixtures.
+ */
+export function parseStage(saved: unknown, { linkedOnly = false } = {}): { box: Box; fixtures: Fixture[]; transparent: Transparent; trusses: Truss[]; positions: StagePosition[]; risers: Riser[] } {
   const data = fields(saved);
   const raw = fields(data.box);
   const box: Box = {
@@ -679,34 +718,26 @@ export function parseStage(saved: unknown): { box: Box; fixtures: Fixture[]; tra
     h: clamp(Number(raw.h) || 6, 1, 50),
   };
   const list = Array.isArray(data?.fixtures) ? data.fixtures : [];
-  const fixtures = list.slice(0, MAX_FIXTURES).map(normalizeFixture);
-  const rigs = (Array.isArray(data?.rigs) ? data.rigs : []).map(normalizeRig);
-  // A member whose rig is gone becomes a free fixture; a rig keeps the
-  // count of members it actually has, and they're re-laid-out to match.
-  for (const fixture of fixtures) if (fixture.rigId && !rigs.some((r) => r.id === fixture.rigId)) fixture.rigId = null;
-  const kept = rigs.filter((rig) => {
-    const members = fixtures.filter((i) => i.rigId === rig.id).sort((a, b) => a.rigIndex - b.rigIndex);
-    if (members.length < 2) { members.forEach((m) => { m.rigId = null; }); return false; }
-    members.forEach((m, k) => { m.rigIndex = k; });
-    rig.count = members.length;
-    applyRig(rig, members);
-    return true;
-  });
+  // Every stage fixture is a console fixture: with `linkedOnly`, one saved
+  // without a link (stage only, or driven from a DMX address) is dropped.
+  const fixtures = list.slice(0, MAX_FIXTURES).map(normalizeFixture).filter((f) => !linkedOnly || f.link.consoleId || f.link.register);
+  const trusses = (Array.isArray(data?.trusses) ? data.trusses : []).map(normalizeTruss);
+  const kept = fitTrusses(trusses, fixtures);
   const savedPositions = data?.positions ?? data?.points; // "points" before the rename
   const positions = (Array.isArray(savedPositions) ? savedPositions : []).slice(0, MAX_POSITIONS).map(normalizePosition);
   const risers = (Array.isArray(data?.risers) ? data.risers : []).slice(0, MAX_RISERS).map(normalizeRiser);
-  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), rigs: kept, positions, risers };
+  return { box, fixtures, transparent: normalizeTransparent(data?.transparent), trusses: kept, positions, risers };
 }
 
 /** The stage as saved (with the show, and in the browser). */
 export type SavedStage = ReturnType<typeof serializeStage>;
 
-export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, rigs: Rig[], positions: StagePosition[] = [], risers: Riser[] = []) {
-  return { box, transparent, rigs, positions, risers, fixtures: fixtures.map(serializeFixture) };
+export function serializeStage(box: Box, fixtures: Fixture[], transparent: Transparent, trusses: Truss[], positions: StagePosition[] = [], risers: Riser[] = []) {
+  return { box, transparent, trusses, positions, risers, fixtures: fixtures.map(serializeFixture) };
 }
 
 /** The stage of a new show: the default box, nothing in it. */
 export function blankStage(): SavedStage {
-  const { box, fixtures, transparent, rigs, positions, risers } = parseStage({});
-  return serializeStage(box, fixtures, transparent, rigs, positions, risers);
+  const { box, fixtures, transparent, trusses, positions, risers } = parseStage({});
+  return serializeStage(box, fixtures, transparent, trusses, positions, risers);
 }
