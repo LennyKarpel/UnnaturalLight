@@ -9,7 +9,10 @@ g.sessionStorage = { getItem: () => null };
 let goes = 0;
 g.window = {
   consoleChat: {
-    go: () => (goes++, true),
+    go: () => {
+      goes++;
+      return true;
+    },
     show: () => ({ serverConnected: true, playing: { upNext: { label: "Cue 2" }, transition: "running" } }),
   },
 };
@@ -35,7 +38,10 @@ function view() {
     view: {
       text: () => {},
       reply: () => {},
-      tool: (_c: unknown, d: string) => (shown.push(d), { done: () => {} }),
+      tool: (_c: unknown, d: string) => {
+        shown.push(d);
+        return { done: () => {} };
+      },
     },
   };
 }

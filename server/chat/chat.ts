@@ -95,15 +95,18 @@ export async function handleChatSummary(req: http.IncomingMessage, res: http.Ser
     res.writeHead(405, { Allow: "POST" }).end("POST only");
     return;
   }
-  let messages: ChatMessage[];
+  let body: unknown;
   try {
-    const body: unknown = JSON.parse(await readBody(req));
-    if (!isRecord(body) || !Array.isArray(body.messages) || !body.messages.length || !body.messages.every(isMessage)) throw new Error("Bad summary request");
-    messages = body.messages;
+    body = JSON.parse(await readBody(req));
   } catch (err) {
     res.writeHead(400).end(errorMessage(err, "Bad summary request"));
     return;
   }
+  if (!isRecord(body) || !Array.isArray(body.messages) || !body.messages.length || !body.messages.every(isMessage)) {
+    res.writeHead(400).end("Bad summary request");
+    return;
+  }
+  const messages: ChatMessage[] = body.messages;
   const abort = new AbortController();
   res.on("close", () => abort.abort());
   try {
@@ -116,8 +119,8 @@ export async function handleChatSummary(req: http.IncomingMessage, res: http.Ser
       signal: abort.signal,
     });
     const out: ChatSummary = { summary: reply.text.trim() };
-    if (!out.summary) throw new Error("Empty summary");
-    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(out));
+    if (out.summary) res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(out));
+    else res.writeHead(502).end("Empty summary");
   } catch (err) {
     if (!abort.signal.aborted) res.writeHead(502).end(errorMessage(err, "Summary failed"));
   }

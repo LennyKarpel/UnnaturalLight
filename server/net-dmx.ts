@@ -347,7 +347,10 @@ export function createNetDmx({ dataDir, maxUniverses, onChange }: { dataDir: str
         .map((n) => ({ ...n, ports: n.ports.sort((a, b) => a.port - b.port) }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.ip.localeCompare(b.ip));
     },
-    /** @param byChannel continuous channel numbers (513 = universe 2/1) */
+    /**
+     * @param byChannel continuous channel numbers (513 = universe 2/1)
+     * @param universeCount how many universes the show uses
+     */
     write(byChannel: Map<number, number>, universeCount: number) {
       if (!socket || !outputs.size) return;
       fillFrames(frames, byChannel, universeCount);

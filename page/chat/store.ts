@@ -35,12 +35,14 @@ const waiting = new Map<string, { timer: number; chat: SavedChat }>();
 
 /** `keepalive`: the request outlives the page (it's closing). */
 async function put(chat: SavedChat, keepalive = false) {
+  let problem = "";
   try {
     const res = await fetch(url(chat.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(chat), keepalive });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    if (!res.ok) problem = `${res.status} ${await res.text()}`;
   } catch (err) {
-    console.warn(`Chat: couldn't save "${chat.name}" on the show server (${err}); trying again with the next change`);
+    problem = String(err);
   }
+  if (problem) console.warn(`Chat: couldn't save "${chat.name}" on the show server (${problem}); trying again with the next change`);
 }
 
 /** Save a chat on the server soon (the same object: what it holds then is sent). */

@@ -157,13 +157,30 @@ input[type="range"] {
   text-overflow: ellipsis;
 }
 
+/* A tick on a crossfader where one of UP NEXT's steps lands (the console's and
+   the 3D view's GO bar's: console/live.ts, stage/go-bar.ts), inside a
+   positioned box lined up with the thumb's center. */
+.step-tick {
+  --at: 0; /* where the step lands, 0–1 (set on each tick) */
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--at) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.7;
+}
+
 /* A fixture's color (--rgb), under its color faders / values; click to pick one. */
 .rgb-bar {
+  --rgb: #000; /* the fixture's color (set on each: console/faders.ts, stage/sidebar.ts) */
   position: relative;
   display: block;
   border-radius: 3px;
   border: 1px solid var(--line);
-  background: var(--rgb, #000);
+  background: var(--rgb);
   cursor: pointer;
 }
 
@@ -342,7 +359,7 @@ dialog.ask form {
 }
 dialog.ask h2 {
   margin: 0;
-  font-family: var(--display);
+  font-family: var(--display), sans-serif;
   font-size: var(--text-2xl);
 }
 dialog.ask p {
@@ -431,7 +448,7 @@ dialog.color-pop::backdrop { background: transparent; }
 .trace-pop .t-h { color: var(--accent); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
 .trace-pop .t-row { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
 .trace-pop .t-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trace-pop .t-val { font-family: var(--mono); text-align: right; }
+.trace-pop .t-val { font-family: var(--mono), monospace; text-align: right; }
 .trace-pop .t-note { grid-column: 1 / -1; color: var(--muted); font-size: var(--text-xs); margin-top: -1px; }
 .trace-pop .on .t-val { color: var(--ok); }
 .trace-pop .muted { color: var(--faint); }

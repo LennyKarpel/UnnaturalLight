@@ -4,7 +4,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font);
+  font-family: var(--font), sans-serif;
   font-size: var(--text-md);
 }
 .bar {

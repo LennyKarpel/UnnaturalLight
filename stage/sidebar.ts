@@ -54,7 +54,7 @@ import {
 } from "./actions.ts";
 import { linkSectionHtml, rigLinkHtml, bindLinkControls, syncDmxRows, inspectorAttrs } from "./link.ts";
 import { showTrace } from "./stage.ts";
-import { elById } from "../shared/query.ts";
+import { $, elById } from "../shared/query.ts";
 import { readStored, store } from "../shared/storage.ts";
 
 // ---------------------------------------------------------------------
@@ -137,8 +137,10 @@ export function renderList() {
     row.innerHTML = `
       <span class="swatch" style="background:${fixture.color}"></span>
       <span></span>
-      <div class="bar"><div style="width:${Math.round(fixture.intensity * 100)}%"></div></div>
+      <div class="bar"><div></div></div>
       <span class="pct" title="Dimmer (0–255)">${fixture.dmx.dimmer}</span>`;
+    // The dimmer bar's fill (set here, not in the HTML string above).
+    $(row, ".bar > div").style.width = `${Math.round(fixture.intensity * 100)}%`;
     const follows = followingOf(fixture);
     row.children[1].textContent = fixture.name + (follows ? `  → ${follows.name}` : "") + (isInside(fixture, state.box) ? "" : "  ·  outside");
     row.addEventListener("click", (e) => {

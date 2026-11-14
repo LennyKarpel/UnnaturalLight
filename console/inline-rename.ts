@@ -52,7 +52,10 @@ export function inlineRename(opts: {
     input.removeEventListener("blur", onBlur);
     opts.done(save ? input.value.trim() : null, (el) => (input.isConnected ? input.replaceWith(el) : parent.prepend(el)));
   };
-  const cancel = () => finish(false);
+  // A function (not an arrow): finish, above, checks it's still the current one.
+  function cancel() {
+    finish(false);
+  }
   endCurrent = cancel;
 
   const onKeydown = (event: KeyboardEvent) => {

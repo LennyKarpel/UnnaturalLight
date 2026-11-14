@@ -1156,19 +1156,6 @@
     pointer-events: none;
   }
 
-  .cross-tick {
-    --at: 0; /* where the step lands, 0–1 (set on each tick: live.ts) */
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: calc(var(--at) * 100%);
-    width: 2px;
-    margin-left: -1px;
-    border-radius: 1px;
-    background: var(--ink);
-    opacity: 0.7;
-  }
-
   .go-btn.is-running {
     border-color: var(--select);
     background: color-mix(in srgb, var(--select) 55%, var(--panel));

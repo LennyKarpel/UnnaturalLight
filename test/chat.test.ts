@@ -61,7 +61,7 @@ test("summaries: accepted in requests, sent to Claude as context, written out pl
     { role: "tool", results: [{ id: "a", result: "x".repeat(1000) }] },
     { role: "assistant", text: "Song 2 is LIVE.", toolCalls: [] },
   ]);
-  assert.match(text, /^Summary of what came before: before\nOperator: play song 2\nAssistant used select_song \{"song":"2"\}\nTool result: x+…\nAssistant: Song 2 is LIVE\.$/);
+  assert.match(text, /^Summary of what came before: before\nOperator: play song 2\nAssistant used select_song \{"song":"2"}\nTool result: x+…\nAssistant: Song 2 is LIVE\.$/);
   assert.ok(text.length < 600, "long tool results are cut short");
 });
 

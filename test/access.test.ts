@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { freePort } from "./browser/harness.ts";
 import { accessProblem, BASE_HEADERS, CONNECT_ORIGINS, contentSecurityPolicy, isToken, LOOPBACK_NAMES, publicFile } from "../server/access.ts";
 
 // --- the check -----------------------------------------------------------------
@@ -119,16 +119,6 @@ let server: ChildProcess;
 let tmp: string;
 let port: number;
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address() as net.AddressInfo;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
-}
 
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "unnaturallight-access-"));

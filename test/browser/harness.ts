@@ -29,7 +29,8 @@ export const chromePath = (): string | null => [process.env.CHROME_PATH, ...CHRO
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function freePort(): Promise<number> {
+/** A port nothing is listening on (for a test server). */
+export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
     srv.listen(0, "127.0.0.1", () => {

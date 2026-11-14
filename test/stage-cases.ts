@@ -22,8 +22,7 @@ const BOX = { w: 12, d: 8, h: 6 };
 const pt = (p: { x: number; y: number; z: number }) => [p.x, p.y, p.z];
 
 function fixtureAt(m: M, at: { x: number; y: number; z: number }, base: { yaw: number; pitch: number; roll: number }, [pan, tilt]: number[]) {
-  const f = m.parseStage({ fixtures: [{ id: "f", name: "F", x: at.x, y: at.y, z: at.z, base, dmx: { pan, tilt, dimmer: 255 }, panLimit: 270, tiltLimit: 135 }] }).fixtures[0];
-  return f;
+  return m.parseStage({ fixtures: [{ id: "f", name: "F", x: at.x, y: at.y, z: at.z, base, dmx: { pan, tilt, dimmer: 255 }, panLimit: 270, tiltLimit: 135 }] }).fixtures[0];
 }
 
 export function runCases(m: M) {

@@ -294,7 +294,7 @@ export function refreshCueSelects() {
   }
   // Tick marks where each step lands (not the last look, at the end).
   crossTicks.replaceChildren(...(go?.path ? stepArrivals(go.path).slice(0, -1) : []).map((at) => {
-    const tick = el("span", "cross-tick");
+    const tick = el("span", "step-tick");
     tick.style.setProperty("--at", String(at / 100));
     return tick;
   }));

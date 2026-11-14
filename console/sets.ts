@@ -177,6 +177,7 @@ export function goTarget(play: Playback & { liveStep: number; toCue: number }, s
  * Levels of the cues GO can fade between: the active song's, plus the next
  * set song's first cue at the end (the same arrays, so edits land in the
  * songs).
+ * @param play the show's playback (its set, songs and active song)
  * @param cueLevels the active song's
  */
 export function playbackLevels(play: Playback, cueLevels: number[][]) {

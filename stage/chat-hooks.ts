@@ -213,7 +213,8 @@ const stageChat = {
   aimFixtures(ids: string[], at: { x: number; y: number; z: number } | null) {
     const fixtures = ids.map(fixtureOrThrow);
     stopFollowing(fixtures);
-    const missed = at ? fixtures.filter((f) => !aimAt(f, new THREE.Vector3(at.x, at.y, at.z))) : (fixtures.forEach(homeFixture), []);
+    if (!at) fixtures.forEach(homeFixture);
+    const missed = at ? fixtures.filter((f) => !aimAt(f, new THREE.Vector3(at.x, at.y, at.z))) : [];
     showChanged(fixtures.map((f) => f.id));
     return { aimed: fixtures.map((f) => ({ name: f.name, pan: round(f.pan, 1), tilt: round(f.tilt, 1) })), outOfRange: missed.map((f) => f.name) };
   },

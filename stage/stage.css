@@ -114,12 +114,6 @@
   #stageGoCross:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--select); }
   /* Lined up with the thumb's center (7px in from each end). */
   .stage-go-ticks { position: absolute; inset: 3px 7px; pointer-events: none; }
-  .stage-go-tick {
-    --at: 0; /* where it lands, 0–1 (set on each tick: go-bar.ts) */
-    position: absolute; top: 0; bottom: 0; left: calc(var(--at) * 100%);
-    width: 2px; margin-left: -1px; border-radius: 1px;
-    background: var(--ink); opacity: 0.7;
-  }
   input[type="number"], input[type="text"] {
     font-family: var(--mono), monospace;
     width: 64px;

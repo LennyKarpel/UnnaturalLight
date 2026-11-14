@@ -40,7 +40,9 @@ async function listDevices(): Promise<Device[]> {
 /**
  * Split continuous channel levels into one 512-channel frame per universe
  * (also used by the network output, server/net-dmx.ts).
+ * @param frames one per universe, filled in place
  * @param byChannel continuous channel numbers (513 = universe 2/1)
+ * @param universeCount how many universes the show uses (channels past them are dropped)
  */
 export function fillFrames(frames: Uint8Array[], byChannel: Map<number, number>, universeCount: number) {
   for (const f of frames) f.fill(0);
@@ -236,7 +238,10 @@ export function createDmx({ dataDir, maxUniverses, fake = false, onChange }: { d
   return {
     connect,
     disconnect,
-    /** @param byChannel continuous channel numbers (513 = universe 2/1) */
+    /**
+     * @param byChannel continuous channel numbers (513 = universe 2/1)
+     * @param universeCount how many universes the show uses
+     */
     write(byChannel: Map<number, number>, universeCount: number) {
       fillFrames(universes.map((u) => u.frame), byChannel, universeCount);
       for (const u of universes) u.send();

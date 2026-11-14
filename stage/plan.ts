@@ -380,7 +380,7 @@ export function drawPlan() {
     const hover = hovered === position;
     const r = hover ? 9 : on ? 7 : 5;
     ctx.fillStyle = POSITION_COLOR;
-    ctx.beginPath(); ctx.moveTo(px, py - r); ctx.lineTo(px + r, py); ctx.lineTo(px, py + r); ctx.lineTo(px - r, py); ctx.closePath(); ctx.fill();
+    fillDiamond(ctx, px, py, r);
     if (on || hover) { ctx.strokeStyle = "#e8e4dc"; ctx.lineWidth = 1.5; ctx.stroke(); }
     ctx.fillStyle = on || hover ? "#e8e4dc" : POSITION_COLOR;
     ctx.textAlign = "left";
@@ -453,7 +453,7 @@ export function drawPlan() {
     ctx.setLineDash([]);
     const r = 7;
     ctx.fillStyle = POSITION_COLOR;
-    if (ui.placingPosition) { ctx.beginPath(); ctx.moveTo(px, py - r); ctx.lineTo(px + r, py); ctx.lineTo(px, py + r); ctx.lineTo(px - r, py); ctx.closePath(); ctx.fill(); }
+    if (ui.placingPosition) fillDiamond(ctx, px, py, r);
     ctx.font = "11px system-ui, sans-serif";
     const text = describeSpot(positionHover);
     const tw = ctx.measureText(text).width;
@@ -487,6 +487,11 @@ export function setPlanView(name: string | undefined) {
 document.querySelectorAll<HTMLElement>("[data-plan-view]").forEach((b) => {
   b.addEventListener("click", () => { setPlanView(b.dataset.planView); b.blur(); });
 });
+
+/** A named position's mark: a filled diamond of radius `r` at (px, py), in the current fill. */
+function fillDiamond(ctx: CanvasRenderingContext2D, px: number, py: number, r: number) {
+  ctx.beginPath(); ctx.moveTo(px, py - r); ctx.lineTo(px + r, py); ctx.lineTo(px, py + r); ctx.lineTo(px - r, py); ctx.closePath(); ctx.fill();
+}
 
 function planPosition(e: MouseEvent): [number, number] {
   const r = plan.getBoundingClientRect();

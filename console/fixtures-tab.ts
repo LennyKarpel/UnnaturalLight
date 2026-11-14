@@ -631,8 +631,7 @@ function renderFixtureGroupCard({
 
 export function renderFixtures() {
   fixtureList.replaceChildren();
-  const hasContent = state.fixtures.length > 0 || state.fixtureGroups.length > 0;
-  fixtureEmpty.hidden = hasContent;
+  fixtureEmpty.hidden = state.fixtures.length > 0 || state.fixtureGroups.length > 0;
 
   // Always render every group card, including empty ones.
   for (const group of state.fixtureGroups) {

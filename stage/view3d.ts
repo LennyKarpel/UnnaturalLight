@@ -896,7 +896,8 @@ function placePosition(outside: boolean) {
 export function updateGhost(e: PointerEvent | null) {
   if (ui.placingRiser) {
     ghost.visible = ghostStem.visible = rigGhost.visible = false;
-    const p = e ? (rayFromEvent(e), riserSpot()) : null;
+    if (e) rayFromEvent(e);
+    const p = e ? riserSpot() : null;
     riserGhost.visible = !!p;
     if (p) riserGhost.position.copy(p);
     requestRender();
@@ -906,12 +907,14 @@ export function updateGhost(e: PointerEvent | null) {
   // A position goes on the surface under the pointer, like an aim: show the target ring there.
   if (ui.placingPosition) {
     ghost.visible = ghostStem.visible = rigGhost.visible = false;
-    const t = e ? (rayFromEvent(e), positionTarget()) : null;
+    if (e) rayFromEvent(e);
+    const t = e ? positionTarget() : null;
     showPositionPreview(t?.p ?? null, t?.surface ?? null);
     return;
   }
   if (positionPreview.visible) { positionPreview.visible = false; requestRender(); }
-  const p = ui.placing && e ? (rayFromEvent(e), placePosition(e.altKey)) : null;
+  if (ui.placing && e) rayFromEvent(e);
+  const p = ui.placing && e ? placePosition(e.altKey) : null;
   ghost.visible = ghostStem.visible = !!p;
   rigGhost.visible = !!p && !!ui.placingRig;
   if (!p) return;

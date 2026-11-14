@@ -135,7 +135,7 @@ body.chat-resizing { cursor: col-resize; user-select: none; }
   padding: 4px 8px;
   border-left: 2px solid var(--line-strong);
 }
-.chat-tool::before { font-family: var(--mono); width: 1em; }
+.chat-tool::before { font-family: var(--mono), monospace; width: 1em; }
 .chat-tool[data-state="wait"]::before { content: "…"; }
 .chat-tool[data-state="ok"]::before { content: "✓"; color: var(--ok); }
 .chat-tool[data-state="fail"]::before { content: "✗"; color: var(--warn); }

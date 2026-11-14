@@ -72,7 +72,7 @@ consoleLink.onGo((g) => {
     ticksKey = key;
     ticks.replaceChildren(...g.ticks.map((at) => {
       const tick = document.createElement("span");
-      tick.className = "stage-go-tick";
+      tick.className = "step-tick";
       tick.style.setProperty("--at", String(at));
       return tick;
     }));
