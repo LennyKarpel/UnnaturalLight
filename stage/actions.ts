@@ -546,18 +546,21 @@ window.addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !(e.targe
 window.addEventListener("blur", closeContextMenu);
 window.addEventListener("resize", closeContextMenu);
 
-/**
- * Copy every selected fixture (all settings, 0.5 m to stage left) and
- * select the copies. Stops at the fixture limit.
- */
+/** Copy every selected fixture (see duplicateFixtures); the banner says if the fixture limit stopped it. */
 function duplicateSelected() {
   const wanted = selectedFixtures();
+  const copies = duplicateFixtures(wanted);
+  if (copies.length < wanted.length) setBanner(copies.length ? `Fixture limit reached (${MAX_FIXTURES}): copied ${copies.length} of ${wanted.length}` : `Fixture limit reached (${MAX_FIXTURES})`, copies.length ? 3000 : 2500);
+}
+
+/**
+ * Copy fixtures (all settings, 0.5 m to stage left) and select the copies.
+ * Stops at the fixture limit. Returns the copies.
+ */
+export function duplicateFixtures(wanted: Fixture[]): Fixture[] {
   const room = MAX_FIXTURES - state.fixtures.length;
   const src = wanted.slice(0, Math.max(0, room));
-  if (!src.length) {
-    if (wanted.length) setBanner(`Fixture limit reached (${MAX_FIXTURES})`, 2500);
-    return;
-  }
+  if (!src.length) return [];
   // Copies are free fixtures, even when copied from a rig.
   const copies = src.map((fixture) => ({
     ...structuredClone(fixture), id: newId("fixture"), name: `${fixture.name} copy`, x: round(fixture.x + 0.5),
@@ -570,7 +573,7 @@ function duplicateSelected() {
   renderInspector();
   changed();
   requestRegistrations();
-  if (src.length < wanted.length) setBanner(`Fixture limit reached (${MAX_FIXTURES}): copied ${src.length} of ${wanted.length}`, 3000);
+  return copies;
 }
 
 /**

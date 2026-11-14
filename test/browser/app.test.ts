@@ -203,6 +203,34 @@ describe("the app in a browser", { skip: chromePath() ? false : "no Chrome (set 
     assert.deepEqual(a.errors, []);
   });
 
+  test("the chat's stage value, settings, duplicate and select hooks, and the whole patch, on the real stage and console", async () => {
+    const undoShow = await a.hooks(({ c }) => c.editSnapshot());
+    const undoStage = await a.hooks(({ s }) => s.editSnapshot().data);
+    await a.hooks(({ s }) => s.addFixtures([{ x: 0, y: 4, z: 1, name: "Solo" }], "none"));
+    const solo = async () => (await a.hooks(({ s }) => s.stage().fixtures)).find((f) => f.name === "Solo")!;
+    const id = (await solo()).id;
+    // Values: a stage-only fixture (no console fixture) can be lit.
+    const [v] = await a.hooks(({ s }, id) => s.setValues([id], { levels: { dimmer: 128, zoom: 40 }, color: "#00ff00" }), id);
+    assert.deepEqual([v.dimmer, v.zoom, v.red, v.green, v.blue], [128, 40, 0, 255, 0]);
+    // Settings: ranges, beam, curve (the beam's ends kept in order), and its zero.
+    const set = await a.hooks(({ s }, id) => s.editSettings([id], { panRange: 270, tiltRange: 135, beamMin: 60, beamMax: 30, dimmerCurve: "square", zero: "stage" }), id);
+    assert.deepEqual(set.fixtures[0], { name: "Solo", panRange: 270, tiltRange: 135, beamMin: 30, beamMax: 60, dimmerCurve: "square" });
+    await assert.rejects(a.hooks(({ s }, id) => s.editSettings([id], { dimmerCurve: "cubic" }), id), /dimmer_curve must be one of/);
+    // Duplicate: the copy is selected, with the same values.
+    assert.deepEqual(await a.hooks(({ s }, id) => s.duplicateFixtures([id]), id), { copies: ["Solo copy"] });
+    assert.deepEqual((await a.hooks(({ s }) => s.stage().fixtures)).filter((f) => f.selected).map((f) => f.name), ["Solo copy"]);
+    // Select, and none.
+    assert.deepEqual(await a.hooks(({ s }, id) => s.select([id]), id), ["Solo"]);
+    assert.deepEqual(await a.hooks(({ s }) => s.select([])), []);
+    // The whole patch: 1:1, then none.
+    assert.equal(await a.hooks(({ c }) => c.resetPatch(false)), 256);
+    assert.deepEqual((await a.hooks(({ c }) => c.faders())).slice(0, 2).map((f) => f.patched), [true, true]);
+    assert.equal(await a.hooks(({ c }) => c.resetPatch(true)), 0);
+    await a.hooks(({ c, s }, undoShow, undoStage) => { c.restoreEdits(undoShow); s.restoreEdits(undoStage); }, undoShow, undoStage);
+    assert.equal((await a.hooks(({ s }) => s.stage().fixtures)).some((f) => f.name.startsWith("Solo")), false);
+    assert.deepEqual(a.errors, []);
+  });
+
   test("the stage is saved on the server (a new window gets it)", async () => {
     const c = await app.page();
     await c.waitFor(`(({ risers, positions }) => risers.map((r) => r.name).join() === "Drum riser" && positions.map((p) => p.name).join() === "DSC")(window.stageChat.stage())`, "the stage in a new window");
@@ -523,12 +551,112 @@ describe("the chat's settings in a browser", { skip: chromePath() ? false : "no 
     assert.deepEqual(p.errors, []);
   });
 
+  test("/usage says the chat's size and tokens; /list (and /help) lists the commands; neither is sent", async () => {
+    const sent = await p.evaluate<number>("window.sentModels.length");
+    const lastHint = () => p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`);
+    await p.click(".chat-input textarea");
+    await p.type("/usage");
+    await p.key("Enter");
+    // The last test's request: two model calls, each 900 new + 5000 cached in, 40 out.
+    assert.equal(await lastHint(), [
+      "This chat: 1 prompt kept (past 10 the oldest 5 are summed up; /compact sums up all now).",
+      "Each model call sends about 5.9k tokens now (the last one: 5.0k from the cache, 900 new); a request makes one call, plus one per tool round.",
+      "Its 2 model calls so far: 12k tokens in (10k from the cache, a tenth of the price), 80 out.",
+    ].join("\n"));
+    for (const cmd of ["/list", "/help"]) {
+      await p.type(cmd);
+      await p.key("Enter");
+      assert.match(await lastHint(), /^Commands \(type one, then Enter; they're never sent to the model\):\n\/clear: empty this chat\n\/compact: .*\n\/usage: .*\n\/list: these commands\n\/help: the same as \/list$/);
+    }
+    assert.equal(await p.evaluate("window.sentModels.length"), sent);
+    assert.deepEqual(p.errors, []);
+  });
+
+  test("typing / lists the matching commands: ↑ / ↓ pick, Tab or Enter fills one in (Enter runs the only match), Esc hides them", async () => {
+    const sent = await p.evaluate<number>("window.sentModels.length");
+    const box = () => p.evaluate<string>(`document.querySelector(".chat-input textarea").value`);
+    const listed = () => p.evaluate<string[]>(`document.querySelector(".chat-suggest").hidden ? [] : [...document.querySelectorAll(".chat-suggest-row")].map((r) => (r.classList.contains("is-picked") ? "*" : "") + r.querySelector(".chat-suggest-name").textContent)`);
+    const hints = () => p.evaluate<number>(`document.querySelectorAll(".chat-msg.is-hint").length`);
+    await p.click(".chat-input textarea");
+    await p.type("/");
+    assert.deepEqual(await listed(), ["*/clear", "/compact", "/usage", "/list", "/help"]);
+    await p.type("c");
+    assert.deepEqual(await listed(), ["*/clear", "/compact"]);
+    await p.key("ArrowDown");
+    assert.deepEqual(await listed(), ["/clear", "*/compact"]);
+    await p.key("ArrowDown");
+    assert.deepEqual(await listed(), ["*/clear", "/compact"], "↓ wraps round");
+    await p.key("ArrowUp");
+    await p.key("Tab");
+    assert.equal(await box(), "/compact");
+    assert.deepEqual(await listed(), [], "a whole command: no list");
+    // With several matching, Enter fills in the picked one and runs nothing; the next Enter runs it.
+    await p.evaluate(`(() => { const t = document.querySelector(".chat-input textarea"); t.value = ""; t.dispatchEvent(new Event("input")); })()`);
+    await p.type("/c");
+    const before = await hints();
+    await p.key("ArrowDown");
+    await p.key("ArrowUp");
+    await p.key("Enter");
+    assert.equal(await box(), "/clear");
+    assert.equal(await hints(), before, "nothing run yet");
+    await p.evaluate(`(() => { const t = document.querySelector(".chat-input textarea"); t.value = ""; t.dispatchEvent(new Event("input")); })()`);
+    // With one matching, Enter runs it.
+    await p.type("/us");
+    await p.key("Enter");
+    assert.match(await p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`), /^This chat:/);
+    assert.equal(await box(), "");
+    // Esc hides the list (the panel stays open); not a command: no list.
+    await p.type("/l");
+    assert.deepEqual(await listed(), ["*/list"]);
+    await p.key("Escape");
+    assert.deepEqual(await listed(), []);
+    assert.equal(await p.evaluate(`!!document.querySelector("#chatPanel .chat-input textarea").offsetParent`), true, "the panel is still open");
+    await p.evaluate(`(() => { const t = document.querySelector(".chat-input textarea"); t.value = "/x y"; t.dispatchEvent(new Event("input")); })()`);
+    assert.deepEqual(await listed(), []);
+    await p.evaluate(`(() => { const t = document.querySelector(".chat-input textarea"); t.value = ""; t.dispatchEvent(new Event("input")); })()`);
+    assert.equal(await p.evaluate("window.sentModels.length"), sent);
+    assert.deepEqual(p.errors, []);
+  });
+
+  test("/compact sums up the open chat: the summary takes its place, here and on the server", async () => {
+    // The show server's /chat/summary, answered here (no model is called).
+    await p.evaluate(`(() => {
+      const real = window.fetch;
+      window.summaries = [];
+      window.fetch = (url, init) => {
+        if (!String(url).endsWith("/chat/summary")) return real(url, init);
+        window.summaries.push(JSON.parse(init.body).messages.length);
+        return Promise.resolve(new Response(JSON.stringify({ summary: "The person pressed GO once." })));
+      };
+    })()`);
+    const before = await p.evaluate<number>(`document.querySelectorAll(".chat-msg.is-user").length`);
+    assert.ok(before > 0, "the last test's prompt is in the chat");
+    await p.click(".chat-input textarea");
+    await p.type("/compact");
+    await p.key("Enter");
+    await p.waitFor(`[...document.querySelectorAll(".chat-msg.is-hint")].some((h) => h.textContent.startsWith("Compacted"))`, "the compacted note");
+    assert.deepEqual(await p.evaluate("window.summaries"), [4], "the whole chat (prompt, GO call, its result, the reply) sent to sum up");
+    assert.equal(await p.evaluate(`document.querySelectorAll(".chat-msg.is-user, .chat-tool").length`), 0);
+    assert.equal(await p.evaluate(`document.querySelector(".chat-summary-text").textContent`), "The person pressed GO once.");
+    const id = await p.evaluate<string>(`JSON.parse(localStorage.getItem("unnaturallight.chat")).current`);
+    await waitFor(async () => {
+      const res = await fetch(`${new URL(app.url).origin}/chat/chats`);
+      const { chats } = (await res.json()) as { chats: { id: string; history: { role: string }[] }[] };
+      return chats.find((x) => x.id === id)?.history.map((m) => m.role).join() === "summary";
+    }, "the compacted chat saved on the server");
+    // Nothing left to sum up.
+    await p.type("/compact");
+    await p.key("Enter");
+    assert.equal(await p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`), "Nothing to compact yet.");
+    assert.deepEqual(p.errors, []);
+  });
+
   test("/clear empties the open chat, on the server too; another /word is no command and isn't sent", async () => {
     const sent = await p.evaluate<number>("window.sentModels.length");
     await p.click(".chat-input textarea");
     await p.type("/nope");
     await p.key("Enter");
-    assert.match(await p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`), /No command \/nope\. Commands: \/clear/);
+    assert.match(await p.evaluate<string>(`[...document.querySelectorAll(".chat-msg.is-hint")].at(-1).textContent`), /^No command \/nope\. Commands:\n\/clear: empty this chat\n\/compact/);
     assert.equal(await p.evaluate("window.sentModels.length"), sent);
     await p.type("/clear");
     await p.key("Enter");

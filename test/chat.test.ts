@@ -452,3 +452,49 @@ test("Anthropic adapter: tool searches are read out of a reply (what was looked 
     { name: "tool_search_tool_bm25", input: "zzz", result: "nothing found" },
   ]);
 });
+
+test("stage fixture values, settings, duplicate, select and the whole patch: what they pass on", () => {
+  const calls: unknown[][] = [];
+  const stageFake: Fake<StageChat> = {
+    stage: () => ({ fixtures: [
+      { id: "a", name: "Spot L", rig: null, selected: true },
+      { id: "b", name: "Spot R", rig: null, selected: false },
+      { id: "r1", name: "Ring 1 · 1", rig: "Ring 1", selected: false },
+    ] }),
+    setValues: (...a) => { calls.push(["values", ...a]); return []; },
+    editSettings: (...a) => { calls.push(["settings", ...a]); return {}; },
+    duplicateFixtures: (...a) => { calls.push(["dup", ...a]); return {}; },
+    select: (...a) => { calls.push(["select", ...a]); return []; },
+  };
+  const consoleFake: Fake<ConsoleChat> = {
+    resetPatch: (clear) => { calls.push(["patch", clear]); return clear ? 0 : 256; },
+  };
+  (globalThis as { window?: unknown }).window = { stageChat: stageFake, consoleChat: consoleFake };
+  try {
+    const run = (name: string, args: Record<string, unknown>) => toolByName.get(name)!.run(args);
+    run("set_stage_fixtures", { fixtures: ["Spot L", "Spot R"], dimmer: 50, color: "#ff0000", zoom: 200, channels: { amber: 10 } });
+    run("edit_stage_fixtures", { fixtures: ["Ring 1"], pan_range: 270, beam_min: 10, beam_max: 40, dimmer_curve: "square", zero: "stage" });
+    run("duplicate_fixtures", { fixtures: ["selected"] });
+    run("select_fixtures", { fixtures: ["Ring 1", "Spot R"] });
+    run("select_fixtures", { fixtures: ["none"] });
+    run("reset_patch", { mode: "one_to_one" });
+    run("reset_patch", { mode: "clear" });
+    assert.deepEqual(calls, [
+      ["values", ["a", "b"], { levels: { dimmer: 128, zoom: 200, amber: 10 }, color: "#ff0000" }],
+      ["settings", ["r1"], { panRange: 270, tiltRange: undefined, beamMin: 10, beamMax: 40, dimmerCurve: "square", zero: "stage" }],
+      ["dup", ["a"]],
+      ["select", ["b", "r1"]],
+      ["select", []],
+      ["patch", false],
+      ["patch", true],
+    ]);
+    assert.throws(() => run("set_stage_fixtures", { fixtures: ["Spot L"] }), /Nothing to set/);
+    assert.throws(() => run("set_stage_fixtures", { fixtures: ["Spot L"], channels: { laser: 3 } }), /Unknown channel "laser"/);
+    assert.throws(() => run("set_stage_fixtures", { fixtures: ["Spot L"], dimmer: 150 }), /dimmer must be 0–100/);
+    assert.throws(() => run("edit_stage_fixtures", { fixtures: ["Spot L"] }), /Nothing to change/);
+    assert.throws(() => run("edit_stage_fixtures", { fixtures: ["Spot L"], zero: "there" }), /zero must be here or stage/);
+    assert.throws(() => run("reset_patch", { mode: "half" }), /mode must be/);
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});

@@ -35,11 +35,15 @@ import { cancelSaves, deleteChat, fetchChats, flushChats, listenChats, saveChat 
 import { openChatSettings, updateChatSettings, type ChatSettings } from "./settings.ts";
 
 const KEY = "unnaturallight.chat";
-/** Past this many prompts, the oldest SUMMED are summed up (between turns). */
-const MAX_PROMPTS = 20;
-const SUMMED = 10;
+/**
+ * Past this many prompts, the oldest SUMMED are summed up (between turns).
+ * Every model call sends the whole conversation, so this is most of a
+ * request's size; /compact sums up all of it at once.
+ */
+const MAX_PROMPTS = 10;
+const SUMMED = 5;
 /** If summing up keeps failing (e.g. offline), the oldest are dropped past this many. */
-const HARD_MAX = 40;
+const HARD_MAX = 20;
 
 /** The panel's width (px): DEFAULT_WIDTH to start with, double-click its divider to go back to it. */
 const DEFAULT_WIDTH = 340;
@@ -135,19 +139,31 @@ let summing = false;
  */
 async function sumUpOld() {
   const c = chat();
-  const h = c.history;
-  const cut = summaryCut(h, MAX_PROMPTS, SUMMED);
+  const cut = summaryCut(c.history, MAX_PROMPTS, SUMMED);
   if (summing || !cut) return;
+  try {
+    await sumUp(c, cut);
+  } catch (err) {
+    console.warn(`Chat: couldn't sum up older messages (${errorMessage(err)}); trying again after the next prompt`);
+  }
+}
+
+/**
+ * Sum up `c`'s first `cut` messages and put the summary in their place.
+ * False if the conversation changed meanwhile (then it's left as it is);
+ * throws if the model couldn't sum up.
+ */
+async function sumUp(c: Chat, cut: number): Promise<boolean> {
+  const h = c.history;
   summing = true;
   const part = h.slice(0, cut);
   try {
     const text = await summarize(part, undefined, prefs.model);
-    if (!chats.includes(c) || c.history !== h || !part.every((m, i) => h[i] === m)) return;
+    if (!chats.includes(c) || c.history !== h || !part.every((m, i) => h[i] === m)) return false;
     h.splice(0, cut, { role: "summary", text });
     keep(c);
     if (!running && chat() === c) renderHistory();
-  } catch (err) {
-    console.warn(`Chat: couldn't sum up older messages (${errorMessage(err)}); trying again after the next prompt`);
+    return true;
   } finally {
     summing = false;
   }
@@ -170,8 +186,9 @@ panel.innerHTML = `
   <div class="chat-list thin-scroll" id="chatList" hidden></div>
   <div class="chat-log thin-scroll" aria-live="polite"></div>
   <form class="chat-form">
+    <div class="chat-suggest" id="chatSuggest" role="listbox" aria-label="Commands" hidden></div>
     <div class="chat-input">
-      <textarea rows="2" placeholder="Ask… (Enter sends, ⇧Enter new line, ↑ earlier prompts)" aria-label="Message" spellcheck="false"></textarea>
+      <textarea rows="2" placeholder="Ask… (Enter sends, ⇧Enter new line, ↑ earlier prompts, / commands)" aria-label="Message" spellcheck="false"></textarea>
       <button type="submit" class="primary">Send</button>
     </div>
   </form>`;
@@ -185,6 +202,7 @@ const log = q<HTMLElement>(".chat-log");
 const form = q<HTMLFormElement>(".chat-form");
 const input = q<HTMLTextAreaElement>("textarea");
 const sendBtn = q<HTMLButtonElement>('button[type="submit"]');
+const suggestEl = q<HTMLElement>(".chat-suggest");
 
 // --- width: drag the divider on the panel's left edge -----------------------------
 
@@ -346,7 +364,7 @@ function renderHistory() {
   nameEl.textContent = chatName(chat());
   const h = chat().history;
   if (!h.length) {
-    bubble("hint", "Ask in words: “play song 2”, “what’s up next?”, “master to 60%”, “GO”. /clear empties the chat.");
+    bubble("hint", "Ask in words: “play song 2”, “what’s up next?”, “master to 60%”, “GO”. /list shows the commands.");
   }
   // Each request's footer: its replies' usage, put after its last line.
   let usages: ChatUsage[] = [];
@@ -550,7 +568,49 @@ async function send(text: string) {
 /** What each command does, for the "no such command" note. */
 const COMMANDS: Record<string, { help: string; run: () => void }> = {
   clear: { help: "empty this chat", run: clearChat },
+  compact: { help: "sum up this chat so far, to keep its requests small", run: () => void compactChat() },
+  usage: { help: "this chat's size and tokens", run: showUsage },
+  list: { help: "these commands", run: listCommands },
+  help: { help: "the same as /list", run: listCommands },
 };
+
+const commandList = () => Object.entries(COMMANDS).map(([n, c]) => `/${n}: ${c.help}`).join("\n");
+
+/** /list (and /help): every command, one a line. */
+function listCommands() {
+  log.querySelector(".is-hint")?.remove();
+  bubble("hint", `Commands (type one, then Enter; they're never sent to the model):\n${commandList()}`);
+}
+
+/**
+ * /usage: how big the open chat is (what each request sends now: the last
+ * model call's tokens) and the tokens of the model calls still in it
+ * (summed-up ones are gone, with their messages).
+ */
+function showUsage() {
+  log.querySelector(".is-hint")?.remove();
+  const h = chat().history;
+  const usages = h.flatMap((m) => (m.role === "assistant" && m.usage ? [m.usage] : []));
+  const prompts = promptCount(h);
+  const summed = h[0]?.role === "summary";
+  const kept = `${prompts} prompt${prompts === 1 ? "" : "s"} kept${summed ? ", earlier ones summed up" : ""} (past ${MAX_PROMPTS} the oldest ${SUMMED} are summed up; /compact sums up all now)`;
+  const last = usages.at(-1);
+  if (!last) {
+    bubble("hint", `This chat: ${kept}. No model calls in it yet.`);
+    return;
+  }
+  const sum = (k: "input" | "output" | "cacheRead" | "cacheWrite") => usages.reduce((n, u) => n + u[k], 0);
+  const size = last.input + last.cacheRead + last.cacheWrite;
+  const read = sum("input") + sum("cacheRead") + sum("cacheWrite");
+  bubble(
+    "hint",
+    [
+      `This chat: ${kept}.`,
+      `Each model call sends about ${tokens(size)} tokens now (the last one: ${tokens(last.cacheRead)} from the cache, ${tokens(last.input + last.cacheWrite)} new); a request makes one call, plus one per tool round.`,
+      `Its ${usages.length} model call${usages.length === 1 ? "" : "s"} so far: ${tokens(read)} tokens in (${tokens(sum("cacheRead"))} from the cache, a tenth of the price), ${tokens(sum("output"))} out.`,
+    ].join("\n"),
+  );
+}
 
 /** A command (`/clear`), or null when the text is a prompt. */
 const commandIn = (text: string) => /^\/([a-z]+)$/i.exec(text)?.[1]?.toLowerCase() ?? null;
@@ -562,7 +622,7 @@ function runCommand(name: string) {
     return;
   }
   log.querySelector(".is-hint")?.remove();
-  bubble("hint", `No command /${name}. Commands: ${Object.entries(COMMANDS).map(([n, c]) => `/${n} (${c.help})`).join(", ")}.`);
+  bubble("hint", `No command /${name}. Commands:\n${commandList()}`);
 }
 
 /**
@@ -587,6 +647,29 @@ function clearChat() {
   input.focus();
 }
 
+/**
+ * /compact: sum up the whole open chat now (as long chats are, past
+ * MAX_PROMPTS), so the next requests send a few lines instead of it all.
+ * Not while a request runs in it.
+ */
+async function compactChat() {
+  log.querySelector(".is-hint")?.remove();
+  const c = chat();
+  const prompts = promptCount(c.history);
+  if (running) { bubble("hint", "Wait for the reply (or Stop it), then /compact."); return; }
+  if (summing) { bubble("hint", "Already summing up this chat: a moment."); return; }
+  if (!prompts) { bubble("hint", "Nothing to compact yet."); return; }
+  const note = bubble("pending", `Summing up ${prompts} prompt${prompts === 1 ? "" : "s"}…`);
+  try {
+    const done = await sumUp(c, c.history.length);
+    note.remove();
+    if (chat() === c) bubble("hint", done ? "Compacted: the chat goes on from the summary above." : "The chat changed while summing up: not compacted. Try /compact again.");
+  } catch (err) {
+    note.remove();
+    bubble("error", `Couldn't compact: ${errorMessage(err)}`);
+  }
+}
+
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   if (running) {
@@ -597,6 +680,7 @@ form.addEventListener("submit", (e) => {
   // Until the chats are in from the show server (a moment), the text waits in the box.
   if (!text || !loaded) return;
   input.value = "";
+  suggest();
   remember(text);
   const command = commandIn(text);
   if (command) runCommand(command);
@@ -627,7 +711,66 @@ function stepRecall(by: -1 | 1): boolean {
   return true;
 }
 
+// --- command suggestions: typing "/" lists the commands that match --------------
+
+/** The commands matching what's typed (a "/" and letters, nothing else), and the one picked (↑ / ↓). */
+let suggestions: string[] = [];
+let suggested = 0;
+
+/** List the commands that start with what's typed; hidden when it's not a command or is one already in full. */
+function suggest() {
+  const typed = /^\/([a-z]*)$/i.exec(input.value)?.[1]?.toLowerCase();
+  const names = Object.keys(COMMANDS);
+  suggestions = typed == null || names.includes(typed) ? [] : names.filter((n) => n.startsWith(typed));
+  suggested = Math.min(suggested, Math.max(0, suggestions.length - 1));
+  suggestEl.hidden = !suggestions.length;
+  input.setAttribute("aria-expanded", String(!!suggestions.length));
+  suggestEl.replaceChildren(...suggestions.map((n, i) => {
+    const row = el("div", `chat-suggest-row${i === suggested ? " is-picked" : ""}`);
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(i === suggested));
+    row.append(el("span", "chat-suggest-name", `/${n}`), el("span", "chat-suggest-help", COMMANDS[n].help));
+    // Mousedown, not click: the box keeps the focus.
+    row.addEventListener("mousedown", (e) => { e.preventDefault(); complete(n); });
+    return row;
+  }));
+}
+
+/** Put the command in the box (Enter then runs it). */
+function complete(name: string) {
+  input.value = `/${name}`;
+  input.setSelectionRange(input.value.length, input.value.length);
+  suggested = 0;
+  suggest();
+}
+
+input.addEventListener("input", () => { suggested = 0; suggest(); });
+
 input.addEventListener("keydown", (e) => {
+  // With commands listed: ↑ / ↓ pick one, Tab or Enter puts it in the box (Enter runs it when it's
+  // the only one that matches), Esc hides them.
+  if (suggestions.length && !e.isComposing) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      suggested = (suggested + (e.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length;
+      suggest();
+      return;
+    }
+    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+      e.preventDefault();
+      const only = suggestions.length === 1;
+      complete(suggestions[suggested]);
+      // While it's working, Enter waits, as for a prompt (sending now would be Stop).
+      if (e.key === "Enter" && only && !running) form.requestSubmit();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      suggestions = [];
+      suggestEl.hidden = true;
+      return;
+    }
+  }
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     // While it's working, Enter waits (Stop is a click), so it never stops a turn by surprise.

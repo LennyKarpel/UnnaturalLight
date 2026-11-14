@@ -104,7 +104,7 @@ async function openPage(debugPort: number, url: string) {
   const KEYS: Record<string, { code: string; vk: number }> = {
     Delete: { code: "Delete", vk: 46 }, Backspace: { code: "Backspace", vk: 8 }, Escape: { code: "Escape", vk: 27 },
     Enter: { code: "Enter", vk: 13 }, z: { code: "KeyZ", vk: 90 },
-    Tab: { code: "Tab", vk: 9 }, "-": { code: "Minus", vk: 189 }, "=": { code: "Equal", vk: 187 },
+    Tab: { code: "Tab", vk: 9 }, ArrowUp: { code: "ArrowUp", vk: 38 }, ArrowDown: { code: "ArrowDown", vk: 40 }, "-": { code: "Minus", vk: 189 }, "=": { code: "Equal", vk: 187 },
   };
 
   /** Keys and clicks only reach the tab in front, as with a person's: bring this one there first. */

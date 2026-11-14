@@ -368,11 +368,14 @@ addCueBtn.addEventListener("click", async () => {
   persistSession();
 });
 
-identityBtn.addEventListener("click", () => {
-  state.patch = identityPatch();
+/** The Patch tab's 1:1 (fader N → channel N, full) or Unpatch all (`clear`; no asking: the button asks first). */
+export function resetPatch(clear: boolean) {
+  state.patch = clear ? defaultPatch() : identityPatch();
   persistAndRefresh();
   renderPatchTable();
-});
+}
+
+identityBtn.addEventListener("click", () => resetPatch(false));
 
 clearPatchBtn.addEventListener("click", async () => {
   const ok = await confirmAction({
@@ -380,10 +383,7 @@ clearPatchBtn.addEventListener("click", async () => {
     message: "Clear every fader’s channel assignments?",
     confirmLabel: "Unpatch all",
   });
-  if (!ok) return;
-  state.patch = defaultPatch();
-  persistAndRefresh();
-  renderPatchTable();
+  if (ok) resetPatch(true);
 });
 
 /**

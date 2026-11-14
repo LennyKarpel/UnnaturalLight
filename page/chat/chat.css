@@ -224,6 +224,14 @@ dialog.chat-settings p.chat-settings-note { margin: 0.35rem 0.5rem 0; color: var
   border-top: 1px solid var(--track);
 }
 .chat-input { display: flex; gap: 6px; align-items: flex-end; }
+
+/* Commands matching what's typed after "/": ↑ / ↓ pick, Tab or Enter fills it in. */
+.chat-suggest { display: flex; flex-direction: column; gap: 1px; }
+.chat-suggest[hidden] { display: none; }
+.chat-suggest-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 7px; border-radius: 4px; cursor: pointer; }
+.chat-suggest-row.is-picked, .chat-suggest-row:hover { background: var(--panel-2); }
+.chat-suggest-name { color: var(--accent); font-weight: 600; }
+.chat-suggest-help { color: var(--muted); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-input textarea {
   flex: 1;
   resize: none;

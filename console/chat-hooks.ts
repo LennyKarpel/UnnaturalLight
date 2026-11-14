@@ -71,6 +71,7 @@ import {
   noteFile,
   registerFromStage,
   renderOutputs,
+  resetPatch,
   setUniverses,
   syncMasterUi,
   universesInUse,
@@ -334,6 +335,11 @@ export const consoleChat = {
   deleteSet: (setId: string | null) => removeSet(chatSet(setId)),
   // --- patch and console fixtures -------------------------------------------------
 
+  /** Patch 1:1 (fader N → channel N, full) or unpatch every fader (`clear`). Returns how many faders are patched now. */
+  resetPatch(clear: boolean) {
+    resetPatch(clear);
+    return state.patch.filter((t) => !isUnpatched(t)).length;
+  },
   /**
    * Patch fader `index` (0-based) to these DMX addresses ("45", or "2/45" =
    * universe 2; [] = none), each with the level it gets at full (`max`

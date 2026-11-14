@@ -1,9 +1,9 @@
 // What the chat panel (../page/chat/) can see and do on the stage
 // (window.stageChat): the same functions as the stage's own controls, so its
 // edits are saved and shared the usual way. Fixtures and rigs are passed by id.
-import { MAX_FIXTURES, RIG_TYPES, aimAt, homeFixture, consoleTypeFromKey, createFixture, round, linkChannels, type RigType } from "./stage-model.ts";
+import { MAX_FIXTURES, RIG_TYPES, DIMMER_CURVES, aimAt, aimZeroAt, defaultTarget, deriveFromDmx, setColorHex, setDmx, setZeroHere, homeFixture, type DimmerCurve, type Fixture, consoleTypeFromKey, createFixture, round, linkChannels, type RigType } from "./stage-model.ts";
 import { state, byId, positionById, riserById, rigById, rigOf, rigMembers, moveFixture, addRigAt, setRigField, serialize, save, RIG_FIELDS, type RigField } from "./state.ts";
-import { changed, deleteSelected, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser } from "./actions.ts";
+import { changed, deleteSelected, duplicateFixtures, addPositionAt, deletePosition, setActivePosition, addRiserAt, deleteRiser, setActiveRiser } from "./actions.ts";
 import { setRiserField, RISER_FIELDS, type Riser, type RiserField } from "./risers.ts";
 import { renderInspector } from "./sidebar.ts";
 import { updateBox } from "./view3d.ts";
@@ -42,6 +42,12 @@ function showChanged(ids: string[]) {
   renderInspector();
   changed();
 }
+
+/** A fixture's values as the chat sees them (0–255; color as #rrggbb, what it shows). */
+const fixtureValues = (f: Fixture) => ({ name: f.name, ...f.dmx, color: f.color });
+
+/** A fixture's own settings as the chat sees them. */
+const fixtureSettings = (f: Fixture) => ({ name: f.name, panRange: f.panLimit, tiltRange: f.tiltLimit, beamMin: f.zoomMin, beamMax: f.zoomMax, dimmerCurve: f.dimmerCurve });
 
 /** A riser as the chat sees it (meters, yaw in degrees). */
 const riserInfo = (r: Riser) => ({ name: r.name, x: r.x, z: r.z, width: r.w, depth: r.d, height: r.h, yaw: r.yaw });
@@ -313,6 +319,73 @@ const stageChat = {
     f.name = n;
     showChanged([f.id]);
     return n;
+  },
+
+  /**
+   * Set fixtures' values (0–255 each, as the inspector's sliders and keys
+   * do) and / or color (#rrggbb, mixed onto the color channels each is linked
+   * with). For a fixture the console drives, the values go to its channels
+   * on the console, as the inspector's do. Setting pan or tilt stops following.
+   */
+  setValues(ids: string[], values: { levels?: Partial<Record<DmxAttr, number>>; color?: string | undefined }) {
+    const fixtures = ids.map(fixtureOrThrow);
+    const levels = Object.entries(values.levels ?? {}) as [DmxAttr, number][];
+    if (levels.some(([a]) => a === "pan" || a === "tilt")) stopFollowing(fixtures);
+    for (const f of fixtures) {
+      if (values.color != null) setColorHex(f, values.color);
+      for (const [a, v] of levels) setDmx(f, a, v);
+    }
+    showChanged(fixtures.map((f) => f.id));
+    return fixtures.map(fixtureValues);
+  },
+
+  /**
+   * A fixture's own settings, as the inspector's Ranges, Dimmer curve and
+   * zero frame: how far pan / tilt go (± degrees), the beam angle at zoom 0
+   * and 255, the dimmer curve, and `zero`: "here" (where it points now
+   * becomes pan / tilt 128) or "stage" (its zero aimed at the stage). A rig
+   * member's zero is its rig's, so `zero` skips them (listed in `skipped`).
+   */
+  editSettings(ids: string[], s: { panRange?: number | undefined; tiltRange?: number | undefined; beamMin?: number | undefined; beamMax?: number | undefined; dimmerCurve?: string | undefined; zero?: "here" | "stage" | undefined }) {
+    const fixtures = ids.map(fixtureOrThrow);
+    if (s.dimmerCurve != null && !DIMMER_CURVES.includes(s.dimmerCurve as DimmerCurve)) throw new Error(`dimmer_curve must be one of ${DIMMER_CURVES.join(", ")}`);
+    const skipped: string[] = [];
+    for (const f of fixtures) {
+      if (s.panRange != null) f.panLimit = clamp(s.panRange, 0, 360);
+      if (s.tiltRange != null) f.tiltLimit = clamp(s.tiltRange, 0, 180);
+      // Both given: the narrower is zoom 0's (whichever way round they came). One: kept within the other.
+      let min = s.beamMin == null ? null : clamp(s.beamMin, 1, 120);
+      let max = s.beamMax == null ? null : clamp(s.beamMax, 1, 120);
+      if (min != null && max != null && min > max) [min, max] = [max, min];
+      if (min != null && max != null) Object.assign(f, { zoomMin: min, zoomMax: max });
+      else if (min != null) f.zoomMin = Math.min(min, f.zoomMax);
+      else if (max != null) f.zoomMax = Math.max(max, f.zoomMin);
+      if (s.dimmerCurve != null) f.dimmerCurve = s.dimmerCurve as DimmerCurve;
+      deriveFromDmx(f);
+      if (s.zero) {
+        if (f.rigId) skipped.push(f.name);
+        else if (s.zero === "here") setZeroHere(f);
+        else aimZeroAt(f, defaultTarget(f, state.box));
+      }
+    }
+    if (s.zero) stopFollowing(fixtures.filter((f) => !f.rigId));
+    showChanged(fixtures.map((f) => f.id));
+    return { fixtures: fixtures.map(fixtureSettings), ...(skipped.length ? { skipped } : {}) };
+  },
+
+  /** Copy fixtures (0.5 m to stage left; each gets its own console fixture if the original came from the stage). Returns the copies' names. */
+  duplicateFixtures(ids: string[]) {
+    const fixtures = ids.map(fixtureOrThrow);
+    const copies = duplicateFixtures(fixtures);
+    if (!copies.length) throw new Error(`The stage has its maximum of ${MAX_FIXTURES} fixtures`);
+    return { copies: copies.map((f) => f.name), ...(copies.length < fixtures.length ? { note: `Fixture limit (${MAX_FIXTURES}): copied ${copies.length} of ${fixtures.length}` } : {}) };
+  },
+
+  /** Select fixtures on the stage (as clicking them would), so the person can carry on by hand. [] = none. */
+  select(ids: string[]) {
+    ids.forEach(fixtureOrThrow);
+    showChanged(ids);
+    return state.selected.map((id) => byId(id)?.name ?? id);
   },
 
   /** Delete fixtures (a rig member takes its whole rig with it). Returns what was deleted. */

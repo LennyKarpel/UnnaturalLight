@@ -152,17 +152,22 @@ const xyzText = (p: unknown) => {
 export const STAGE_TOOLS: ToolDef[] = [
   {
     name: "get_stage",
-    description: `The stage: the box's size, every rig (name, type, center, size, count, tilt, yaw), every fixture (name, position, rig, pan and tilt in degrees, whether it's in the console, whether it's selected), the named positions (spots to aim at, with the fixtures following each) and the risers (platforms standing on the floor: center x / z, width, depth, height, yaw). ${WHERE}`,
+    description: `The stage: the box's size, every rig (name, type, center, size, count, tilt, yaw; model: the library fixture its fixtures are), every fixture (name, position, rig, pan and tilt in degrees, console: the console fixture it's linked to, "manual <address>", or missing when it's only on the stage; selected; following: the named position it follows), the named positions (spots to aim at) and the risers (platforms standing on the floor: center x / z, width, depth, height, yaw). Fields that are empty, false or the rig's are left out. ${WHERE}`,
     schema: NO_ARGS,
     describe: () => "Looked at the stage",
     run: () => {
       const s = stage().stage();
+      // Kept short (the whole answer stays in the conversation): no ids, nothing empty or false, a rig's model said once.
+      const rigModel = new Map(s.rigs.map((r) => [r.name, s.fixtures.find((f) => f.rig === r.name)?.model]));
       return {
         ...s,
-        rigs: s.rigs.map(({ id: _id, ...r }) => r),
+        rigs: s.rigs.map(({ id: _id, ...r }) => ({ ...r, ...(rigModel.get(r.name) ? { model: rigModel.get(r.name) } : {}) })),
         positions: s.positions.map(({ id: _id, ...p }) => p),
         risers: s.risers.map(({ id: _id, ...r }) => r),
-        fixtures: s.fixtures.map(({ id: _id, ...f }) => f),
+        fixtures: s.fixtures.map(({ id: _id, inConsole, ...f }) => {
+          const kept = Object.fromEntries(Object.entries(f).filter(([k, v]) => v != null && v !== false && !(k === "model" && f.rig && v === rigModel.get(f.rig))));
+          return inConsole && !f.console ? { ...kept, console: "registering" } : kept;
+        }),
       };
     },
   },
@@ -400,6 +405,98 @@ export const STAGE_TOOLS: ToolDef[] = [
     schema: { type: "object", properties: { riser: { type: "string" } }, required: ["riser"], additionalProperties: false },
     describe: (a) => `Delete riser ${a.riser}`,
     run: (a) => ({ deleted: stage().deleteRiser(findRiser(a.riser).id) }),
+  },
+  {
+    name: "set_stage_fixtures",
+    description:
+      "Set what stage fixtures show, as the inspector's sliders do: dimmer (%), color (#rrggbb, mixed onto the color channels each has), pan / tilt / zoom or any channel (0–255; pan / tilt 128 = straight ahead from its zero). Works on every stage fixture, including ones only on the stage (not in the console), which set_fixture can't reach. For fixtures in the console the values go to their channels in the cue on stage, as the inspector's do; to change another cue, use set_fixture. Setting pan or tilt stops following a position (to aim at a spot, aim_fixtures is easier).",
+    schema: {
+      type: "object",
+      properties: {
+        fixtures: FIXTURES,
+        dimmer: { type: "number", minimum: 0, maximum: 100, description: "Percent" },
+        color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+        pan: { type: "integer", minimum: 0, maximum: 255 },
+        tilt: { type: "integer", minimum: 0, maximum: 255 },
+        zoom: { type: "integer", minimum: 0, maximum: 255, description: "0 = narrowest, 255 = widest" },
+        channels: { type: "object", description: `Any channel by what it does (${DMX_ATTRS.join(", ")}): 0–255`, additionalProperties: { type: "integer", minimum: 0, maximum: 255 } },
+      },
+      required: ["fixtures"],
+      additionalProperties: false,
+    },
+    describe: (a) => `Set ${who(a)}: ${[a.dimmer != null ? `dimmer ${a.dimmer}%` : "", a.color ? `color ${a.color}` : "", ...(["pan", "tilt", "zoom"] as const).filter((k) => a[k] != null).map((k) => `${k} ${a[k]}`), ...Object.entries((a.channels ?? {}) as Args).map(([k, v]) => `${k} ${v}`)].filter(Boolean).join(", ")}`,
+    run: (a) => {
+      const levels: Partial<Record<DmxAttr, number>> = {};
+      if (a.dimmer != null) {
+        const pct = num(a.dimmer, "dimmer");
+        if (pct < 0 || pct > 100) throw new Error("dimmer must be 0–100 (%)");
+        levels.dimmer = Math.round((pct * 255) / 100);
+      }
+      const byte = (v: unknown, what: string) => {
+        const n = num(v, what);
+        if (n < 0 || n > 255) throw new Error(`${what} must be 0–255`);
+        return Math.round(n);
+      };
+      for (const k of ["pan", "tilt", "zoom"] as const) if (a[k] != null) levels[k] = byte(a[k], k);
+      if (a.channels != null && typeof a.channels === "object") {
+        for (const [k, v] of Object.entries(a.channels as Args)) {
+          if (!isDmxAttr(k)) throw new Error(`Unknown channel "${k}" (use: ${DMX_ATTRS.join(", ")})`);
+          levels[k] = byte(v, k);
+        }
+      }
+      let color: string | undefined;
+      if (a.color != null) {
+        color = String(a.color);
+        if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error("color must be #rrggbb");
+      }
+      if (!Object.keys(levels).length && color == null) throw new Error("Nothing to set: give dimmer, color, pan, tilt, zoom or channels");
+      return stage().setValues(stageFixtures(a.fixtures).map((f) => f.id), { levels, color });
+    },
+  },
+  {
+    name: "edit_stage_fixtures",
+    description:
+      "Change stage fixtures' own settings, as the inspector's Ranges, Dimmer curve and zero do. pan_range / tilt_range: how far the real fixture turns each way from its zero (± degrees; a 540° pan is ±270). beam_min / beam_max: its beam angle (degrees) at zoom 0 and 255 (the same for both on a fixture without zoom). dimmer_curve: as set in the real fixture's menu (it only changes how bright the stage draws it). zero: \"here\" makes where it points now its zero (pan / tilt 128), \"stage\" points its zero at the stage (for a rig's fixtures the rig sets their zero: skipped). These don't change the DMX sent.",
+    schema: {
+      type: "object",
+      properties: {
+        fixtures: FIXTURES,
+        pan_range: { type: "number", minimum: 0, maximum: 360 },
+        tilt_range: { type: "number", minimum: 0, maximum: 180 },
+        beam_min: { type: "number", minimum: 1, maximum: 120 },
+        beam_max: { type: "number", minimum: 1, maximum: 120 },
+        dimmer_curve: { type: "string", enum: ["linear", "square", "inverse-square", "s-curve"], description: "square = square law (low values stay dim; common on LEDs)" },
+        zero: { type: "string", enum: ["here", "stage"] },
+      },
+      required: ["fixtures"],
+      additionalProperties: false,
+    },
+    describe: (a) => `Change ${who(a)}'s settings`,
+    run: (a) => {
+      const opt = (k: string) => (a[k] == null ? undefined : num(a[k], k));
+      if (a.zero != null && a.zero !== "here" && a.zero !== "stage") throw new Error("zero must be here or stage");
+      const zero: "here" | "stage" | undefined = a.zero === "here" || a.zero === "stage" ? a.zero : undefined;
+      const settings = { panRange: opt("pan_range"), tiltRange: opt("tilt_range"), beamMin: opt("beam_min"), beamMax: opt("beam_max"), dimmerCurve: a.dimmer_curve == null ? undefined : String(a.dimmer_curve), zero };
+      if (Object.values(settings).every((v) => v == null)) throw new Error("Nothing to change");
+      return stage().editSettings(stageFixtures(a.fixtures).map((f) => f.id), settings);
+    },
+  },
+  {
+    name: "duplicate_fixtures",
+    description: "Copy stage fixtures, with all their settings, 0.5 m to stage left (copies of a rig's fixtures are free fixtures). Each copy of a fixture the stage set up in the console gets its own console fixture and faders.",
+    schema: { type: "object", properties: { fixtures: FIXTURES }, required: ["fixtures"], additionalProperties: false },
+    describe: (a) => `Duplicate ${who(a)}`,
+    run: (a) => stage().duplicateFixtures(stageFixtures(a.fixtures).map((f) => f.id)),
+  },
+  {
+    name: "select_fixtures",
+    description: "Select fixtures on the stage, as clicking them would, so the person can carry on by hand (the inspector shows them, the console highlights their faders). Replaces the selection; [\"none\"] clears it. Other tools already select what they change.",
+    schema: { type: "object", properties: { fixtures: { ...FIXTURES, description: `${FIXTURES.description}, or "none"` } }, required: ["fixtures"], additionalProperties: false },
+    describe: (a) => `Select ${who(a)}`,
+    run: (a) => {
+      const none = Array.isArray(a.fixtures) && a.fixtures.length === 1 && String(a.fixtures[0]).toLowerCase() === "none";
+      return { selected: stage().select(none ? [] : stageFixtures(a.fixtures).map((f) => f.id)) };
+    },
   },
   {
     name: "rename_stage_fixture",

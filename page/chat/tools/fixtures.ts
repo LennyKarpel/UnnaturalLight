@@ -72,23 +72,22 @@ export const FIXTURE_TOOLS: ToolDef[] = [
   {
     name: "list_fixtures",
     description:
-      "Every fixture: its name, group, and which faders drive what (dimmer, pan, tilt, red, green, blue, white, amber, zoom, …; fader numbers). Unknown channels are listed by fader number and name.",
+      'Every fixture, one line each: its name, (its group), and the faders that drive what, by fader number, e.g. "Par 1 (Floor): dimmer 1, red 2, green 3, blue 4". Channels with no known role are listed as F<number> "<fader name, without the fixture\'s name>".',
     schema: NO_ARGS,
     describe: () => "Looked at the fixtures",
     run: () => {
       const names = api().faders();
       const faderName = (n: number) => names[n - 1]?.name ?? "";
-      return api().fixtures().map((f) => {
+      const lines = api().fixtures().map((f) => {
         const roles = fixtureRoles(f, faderName);
         const known = new Set([...roles.values()].flat());
-        const other = f.channels.flatMap((c) => c.faders.filter((n) => !known.has(n)).map((n) => `F${n} "${faderName(n)}"`));
-        return {
-          name: f.name,
-          group: f.group,
-          faders: Object.fromEntries([...roles].map(([r, list]) => [r, list])),
-          ...(other.length ? { other } : {}),
-        };
+        // A fixture's faders are named after it ("Ring 1 · 1 Strobe"): only the rest is news.
+        const own = (n: number) => faderName(n).replace(f.name, "").trim() || faderName(n);
+        const other = f.channels.flatMap((c) => c.faders.filter((n) => !known.has(n)).map((n) => `F${n} "${own(n)}"`));
+        const parts = [...[...roles].map(([r, list]) => `${r} ${list.join("+")}`), ...other];
+        return `${f.name}${f.group ? ` (${f.group})` : ""}: ${parts.join(", ") || "no faders"}`;
       });
+      return lines.length ? lines.join("\n") : "No fixtures in the console";
     },
   },
   {
@@ -143,6 +142,17 @@ export const FIXTURE_TOOLS: ToolDef[] = [
       const step = stepArg(a, songId, index);
       api().setCueLevels(songId, index, [...all].map(([f, v]) => [f - 1, v]), step);
       return { song: songName(songId), cue: index + 1, ...(step != null ? { step: step + 1 } : {}), fixtures: report };
+    },
+  },
+  {
+    name: "reset_patch",
+    description:
+      "The Patch tab's buttons, for every fader at once: one_to_one patches fader 1 to channel 1, fader 2 to channel 2, … fader 256 to channel 256 (each at full), replacing the whole patch; clear unpatches every fader. Fixtures' faders lose their channels too (their names stay). For one fader, use patch_fader.",
+    schema: { type: "object", properties: { mode: { type: "string", enum: ["one_to_one", "clear"] } }, required: ["mode"], additionalProperties: false },
+    describe: (a) => (a.mode === "clear" ? "Unpatch every fader" : "Patch 1:1"),
+    run: (a) => {
+      if (a.mode !== "one_to_one" && a.mode !== "clear") throw new Error("mode must be one_to_one or clear");
+      return { patchedFaders: api().resetPatch(a.mode === "clear") };
     },
   },
   {

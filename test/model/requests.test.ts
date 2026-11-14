@@ -57,6 +57,7 @@ function fakeShow() {
       songs: show.songs.map((s, i) => ({ number: i + 1, name: s.name, cues: s.cues.map((c, j) => ({ number: j + 1, name: c.name, fadeSeconds: c.fadeSeconds })) })),
     }),
     songs: () => show.songs.map((s) => ({ id: s.id, name: s.name, cues: s.cues.length })),
+    resetPatch: (clear: boolean) => (clear ? 0 : 256),
     sets: () => show.sets.map((s) => ({ id: s.id, name: s.name, running: s.id === show.running, songs: s.songs.map((id) => ({ id, name: songName(id) })) })),
     cue: (id: string | null, i: number) => song(id).cues[i] ?? assert.fail(`no cue ${i}`),
     faders: () => Array.from({ length: 256 }, (_, i) => ({ fader: i + 1, name: `${i + 1}`, patched: i < 24 })),
@@ -129,6 +130,10 @@ function fakeShow() {
       for (const id of ids) fixture(id).aimedAt = positionId;
       return aimed(ids);
     },
+    setValues: (ids: string[]) => ids.map((id) => ({ name: fixture(id).name })),
+    editSettings: (ids: string[]) => ({ fixtures: ids.map((id) => ({ name: fixture(id).name })) }),
+    duplicateFixtures: (ids: string[]) => ({ copies: ids.map((id) => `${fixture(id).name} copy`) }),
+    select: (ids: string[]) => ids.map((id) => fixture(id).name),
     aimFixtures: (ids: string[], at: { x: number; y: number; z: number } | null) => {
       for (const id of ids) fixture(id).aimedAt = at ?? "home";
       return aimed(ids);
@@ -288,5 +293,58 @@ describe("the chat model picks the right tools", { skip: process.env.ANTHROPIC_A
       assert.ok(Math.abs(t.x - 1) < 0.6 && Math.abs(t.z + 2) < 0.6 && t.y >= 0.6 && t.y < 2.5, `at the riser's top: ${JSON.stringify(t)}`);
     }
     assert.ok(r.edits.every((e) => e === "addPosition" || e === "aimAtPosition" || e === "aimFixtures"), `only aims: ${r.edits.join(", ")}`);
+  });
+
+  /** Two spots only on the stage (not in the console) and a 6-fixture ring. */
+  const rigged = ({ stageState }: ReturnType<typeof fakeShow>) => {
+    stageState.rigs.push({ id: "rig1", name: "Ring 1", type: "ring", x: 0, y: 5, z: 0, size: 3, count: 6 });
+    for (let i = 1; i <= 6; i++) stageState.fixtures.push({ id: `r${i}`, name: `Ring 1 · ${i}`, x: 0, y: 5, z: 0, rig: "Ring 1" });
+    stageState.fixtures.push({ id: "sl", name: "Spot L", x: -4, y: 5, z: 2, rig: null }, { id: "sr", name: "Spot R", x: 4, y: 5, z: 2, rig: null });
+  };
+  const args = (r: Awaited<ReturnType<typeof ask>>, hook: string) => r.calls.filter((c) => c.hook === hook).map((c) => c.args);
+  const RING = ["r1", "r2", "r3", "r4", "r5", "r6"];
+
+  test("lights stage-only fixtures", async () => {
+    const r = await ask("Make Spot L and Spot R blue at 70%.", rigged);
+    const sets = args(r, "setValues") as [string[], { levels?: { dimmer?: number }; color?: string }][];
+    assert.ok(sets.length, `tools used: ${r.used.join(", ")}`);
+    assert.deepEqual(sets.flatMap(([ids]) => ids).sort(), ["sl", "sr"]);
+    for (const [, v] of sets) {
+      if (v.color) assert.match(v.color, /^#0000ff$/i);
+      if (v.levels?.dimmer != null) assert.ok(Math.abs(v.levels.dimmer - 179) <= 1, `70% ≈ 179: ${v.levels.dimmer}`);
+    }
+    assert.ok(sets.some(([, v]) => v.color) && sets.some(([, v]) => v.levels?.dimmer != null), "both color and dimmer set");
+    assert.deepEqual(r.edits, ["setValues"]);
+  });
+
+  test("sets a real fixture's ranges from its spec sheet", async () => {
+    const r = await ask("The ring's fixtures pan 540 degrees and tilt 270, with a fixed 16 degree beam. Set them up to match.", rigged);
+    const edits = args(r, "editSettings") as [string[], { panRange?: number; tiltRange?: number; beamMin?: number; beamMax?: number }][];
+    assert.ok(edits.length, `tools used: ${r.used.join(", ")}`);
+    const ids = [...new Set(edits.flatMap(([ids]) => ids))].sort();
+    const merged = Object.assign({}, ...edits.map(([, v]) => v));
+    assert.deepEqual(ids, RING);
+    assert.deepEqual([merged.panRange, merged.tiltRange, merged.beamMin, merged.beamMax], [270, 135, 16, 16]);
+    assert.deepEqual(r.edits, ["editSettings"]);
+  });
+
+  test("duplicates a fixture", async () => {
+    const r = await ask("Duplicate Spot L.", rigged);
+    assert.deepEqual(args(r, "duplicateFixtures"), [[["sl"]]]);
+    assert.deepEqual(r.edits, ["duplicateFixtures"]);
+  });
+
+  test("selects fixtures to work on by hand", async () => {
+    const r = await ask("Select the ring and Spot R so I can adjust them.", rigged);
+    const picks = args(r, "select") as [string[]][];
+    assert.ok(picks.length, `tools used: ${r.used.join(", ")}`);
+    assert.deepEqual([...picks.at(-1)![0]].sort(), [...RING, "sr"].sort());
+    assert.deepEqual(r.edits, ["select"]);
+  });
+
+  test("patches 1:1 in one go", async () => {
+    const r = await ask("Patch the console 1:1.");
+    assert.deepEqual(args(r, "resetPatch"), [[false]]);
+    assert.deepEqual(r.edits, ["resetPatch"]);
   });
 });
