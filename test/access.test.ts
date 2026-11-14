@@ -112,6 +112,14 @@ test("the pages have no inline script but their import map (the policy runs no o
   }
 });
 
+test("three.js and its types are pinned to the same version (they must be upgraded together)", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  assert.match(pkg.dependencies.three, /^\d+\.\d+\.\d+$/, "three is an exact version");
+  assert.equal(pkg.devDependencies["@types/three"], pkg.dependencies.three);
+  const installed = JSON.parse(fs.readFileSync(path.join(ROOT, "node_modules/three/package.json"), "utf8"));
+  assert.equal(installed.version, pkg.dependencies.three, "node_modules matches package.json (run npm install)");
+});
+
 test("the policy lets the page reach every address the fixture library uses", () => {
   const source = fs.readFileSync(path.join(ROOT, "stage/fixture-library.ts"), "utf8");
   const used = new Set([...source.matchAll(/"(https:\/\/[^"/]+)/g)].map((m) => m[1]));

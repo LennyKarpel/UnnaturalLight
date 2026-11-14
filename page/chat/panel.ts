@@ -665,7 +665,7 @@ function renderList() {
   }
 }
 
-pickBtn.addEventListener("click", () => showList(list.hidden));
+pickBtn.addEventListener("click", () => showList(list.hidden !== false)); // hidden may also be "until-found"
 
 q<HTMLButtonElement>(".chat-new").addEventListener("click", () => {
   running?.abort();
@@ -684,7 +684,7 @@ q<HTMLButtonElement>(".chat-new").addEventListener("click", () => {
   openChat(chat());
 });
 q<HTMLButtonElement>(".chat-close").addEventListener("click", () => setOpen(false));
-chatBtn.addEventListener("click", () => setOpen(panel.hidden));
+chatBtn.addEventListener("click", () => setOpen(panel.hidden !== false));
 
 renderHistory();
 setOpen(prefs.open);

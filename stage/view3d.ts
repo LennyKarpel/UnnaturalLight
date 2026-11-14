@@ -180,14 +180,11 @@ const fragmentShader = /* glsl */ `
 //   inner, transparent sides (View settings): blended, faint
 //   outer shell (near walls seen from outside): always faint so you can see in
 // Light patches add opacity, so beams stay visible on see-through surfaces.
-const passMaterial = (pass: number, opts: THREE.ShaderMaterialParameters) => {
-  const m = new THREE.ShaderMaterial({
-    uniforms: { ...uniforms, uPass: { value: pass } },
-    vertexShader, fragmentShader, ...opts,
-  });
-  m.extensions.derivatives = true;
-  return m;
-};
+// (The shaders' derivatives, dFdx / dFdy, are built into WebGL 2: nothing to switch on.)
+const passMaterial = (pass: number, opts: THREE.ShaderMaterialParameters) => new THREE.ShaderMaterial({
+  uniforms: { ...uniforms, uPass: { value: pass } },
+  vertexShader, fragmentShader, ...opts,
+});
 const innerMat = passMaterial(0, { side: THREE.BackSide });
 const innerSeeMat = passMaterial(1, { side: THREE.BackSide, transparent: true, depthWrite: false });
 const outerMat = passMaterial(2, { side: THREE.FrontSide, transparent: true, depthWrite: false });
@@ -364,7 +361,6 @@ const riserMat = new THREE.ShaderMaterial({
   uniforms: { ...uniforms, uPass: { value: 0 }, uFaceAlpha: { value: new Float32Array(6).fill(1) }, uBase: { value: new THREE.Vector3(0.12, 0.11, 0.1) } },
   vertexShader, fragmentShader, side: THREE.FrontSide,
 });
-riserMat.extensions.derivatives = true;
 type RiserVisual = { group: THREE.Group; mesh: THREE.Mesh; edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>; label: THREE.Sprite; text: string };
 const riserVisuals = new Map<string, RiserVisual>();
 
